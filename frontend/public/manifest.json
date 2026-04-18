@@ -1,0 +1,60 @@
+{
+  "name": "SHARECOM",
+  "short_name": "SHARECOM",
+  "theme_color": "#020617",
+  "background_color": "#020617",
+  "display": "standalone",
+  "orientation": "portrait",
+  "id": "/sharecom-pwa",
+  "scope": "/",
+  "start_url": "/?utm_source=pwa",
+  "icons": [
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "1024x1024",
+      "type": "image/jpeg",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icon-192x192.png",
+      "sizes": "1024x1024",
+      "type": "image/jpeg",
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512x512.png",
+      "sizes": "1024x1024",
+      "type": "image/jpeg",
+      "purpose": "any"
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/screenshot-desktop.png",
+      "sizes": "1339x997",
+      "type": "image/png",
+      "form_factor": "wide"
+    },
+    {
+      "src": "/screenshot-mobile.png",
+      "sizes": "500x699",
+      "type": "image/png"
+    }
+  ],
+  "share_target": {
+    "action": "/api/share",
+    "method": "POST",
+    "enctype": "multipart/form-data",
+    "params": {
+      "title": "título",
+      "text": "texto",
+      "url": "link",
+      "files": [
+        {
+          "name": "receipt",
+          "accept": ["image/*", "application/pdf", ".pdf"]
+        }
+      ]
+    }
+  }
+}

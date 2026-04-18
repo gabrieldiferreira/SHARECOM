@@ -1,0 +1,22 @@
+from sqlalchemy import Column, Integer, String, Float, DateTime
+from database import Base
+import datetime
+
+class Expense(Base):
+    __tablename__ = "expenses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    date = Column(DateTime, default=datetime.datetime.utcnow) # Represents temporal timestamp
+    amount = Column(Float, nullable=False)
+    category = Column(String, index=True)
+    merchant = Column(String, index=True) # Also acts as recipient_name
+    description = Column(String)
+    receipt = Column(String, nullable=True) # The hash
+    
+    # New fields for intelligence
+    transaction_type = Column(String, default="Outflow")
+    payment_method = Column(String)
+    destination_institution = Column(String)
+    transaction_id = Column(String, unique=True, index=True)
+    masked_cpf = Column(String)
+    note = Column(String, nullable=True) # User provided notes

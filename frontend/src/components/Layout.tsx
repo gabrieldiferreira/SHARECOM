@@ -1,0 +1,464 @@
+"use client";
+
+import React, { useState, useRef } from "react";
+import Link from "next/link";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera } from "lucide-react";
+import { usePathname } from "next/navigation";
+import { getApiUrl } from "../lib/api";
+import { authenticatedFetch } from "../lib/auth";
+import { useTransactionStore } from "../store/useTransactionStore";
+import { TransactionEntity } from "../lib/db";
+import { auth } from "@/lib/firebase";
+import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { addTransaction, pendingNote, setPendingNote } = useTransactionStore();
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [showModal, setShowModal] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [isDark, setIsDark] = useState(false);
+  const isLoginPage = pathname === "/login";
+
+  React.useEffect(() => {
+    if (!auth) return;
+    return onAuthStateChanged(auth, (u) => {
+      setUser(u);
+    });
+  }, []);
+
+  React.useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
+
+  const getGreeting = () => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Bom dia";
+    if (hour < 18) return "Boa tarde";
+    return "Boa noite";
+  };
+
+  React.useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+
+    if (process.env.NODE_ENV !== "production") {
+      navigator.serviceWorker
+        .getRegistrations()
+        .then((registrations) => {
+          registrations.forEach((registration) => {
+            registration.unregister();
+          });
+        })
+        .catch((err) => {
+          console.log("Service Worker cleanup failed: ", err);
+        });
+      return;
+    }
+
+    navigator.serviceWorker.register('/sw.js').then(
+      function (registration) {
+        console.log("Service Worker registration successful with scope: ", registration.scope);
+      },
+      function (err) {
+        console.log("Service Worker registration failed: ", err);
+      }
+    );
+  }, []);
+
+  const handleFileSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSelectedFile(file);
+    setShowModal(true);
+  };
+
+  const executeUpload = async () => {
+    if (!selectedFile) return;
+    
+    setShowModal(false);
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("received_file", selectedFile, selectedFile.name);
+    if (pendingNote) {
+      formData.append("note", pendingNote);
+    }
+    
+    try {
+      const response = await authenticatedFetch(getApiUrl("/process-ata"), {
+        method: "POST",
+        body: formData,
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const ai = data.ai_data || {};
+        
+        const newTx: TransactionEntity = {
+          total_amount: ai.total_amount || 0,
+          merchant_name: ai.merchant_name || 'Desconhecido',
+          category: ai.smart_category || 'Outros',
+          currency: 'BRL',
+          transaction_date: ai.transaction_date || new Date().toISOString(),
+          transaction_type: ai.transaction_type || 'Outflow',
+          payment_method: ai.payment_method || 'Comprovante',
+          destination_institution: ai.destination_institution || undefined,
+          transaction_id: ai.transaction_id || undefined,
+          masked_cpf: ai.masked_cpf || undefined,
+          needs_manual_review: false,
+          receipt_hash: data.filename || undefined,
+          is_synced: false,
+          note: data.note || undefined
+        };
+
+        if (ai.merchant_name && ai.merchant_name.includes("Check API Key")) {
+          alert("O backend está rodando, mas a GEMINI_API_KEY está ausente ou inválida. Por favor, configure o arquivo backend/.env");
+          return;
+        }
+        if (ai.merchant_name && ai.merchant_name.includes("Limite Gemini atingido")) {
+          alert("Limite de uso da API Gemini atingido. Aguarde o reset da cota ou troque para um plano com mais capacidade.");
+          return;
+        }
+
+        await addTransaction(newTx);
+        setUploadSuccess(true);
+        setTimeout(() => setUploadSuccess(false), 3000);
+      } else {
+        if (response.status === 401) {
+          alert("Sua sessão expirou. Faça login novamente para continuar.");
+          return;
+        }
+        const errorText = await response.text();
+        let errorMsg = errorText || "Falha no servidor.";
+        try {
+          const errObj = JSON.parse(errorText);
+          if (errObj.detail) errorMsg = errObj.detail;
+        } catch (e) {}
+        alert(`Erro ao processar: ${errorMsg}`);
+      }
+    } catch (e) {
+      console.error("Fetch error:", e);
+      if (e instanceof DOMException && e.name === "ConstraintError") {
+        alert("Este recibo já foi registrado localmente.");
+        return;
+      }
+      if (e instanceof Error && e.message === "AUTH_REQUIRED") {
+        alert("Você precisa estar autenticado para enviar recibos.");
+        return;
+      }
+      alert("Erro de conexão com o servidor de IA. Verifique se o backend está ativo na URL configurada (NEXT_PUBLIC_API_BASE_URL).");
+    } finally {
+      setIsUploading(false);
+      setSelectedFile(null);
+      setPendingNote("");
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const navItems = [
+    { name: "Painel", href: "/", icon: LayoutDashboard },
+    { name: "Histórico", href: "/timeline", icon: History },
+    { name: "Scanner", href: "/scanner", icon: ScanLine },
+    { name: "Relatórios", href: "/reports", icon: PieChart },
+    { name: "Ajustes", href: "/settings", icon: Settings },
+  ];
+
+  const handleLogout = async () => {
+    if (!auth) {
+      alert("Firebase Auth não está configurado.");
+      return;
+    }
+
+    try {
+      await signOut(auth);
+    } catch (error) {
+      console.error("Logout failed:", error);
+      alert("Não foi possível encerrar sua sessão.");
+    }
+  };
+
+  if (isLoginPage) {
+    return <>{children}</>;
+  }
+
+  return (
+    <div className="flex h-screen flex-col md:flex-row" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+      {/* Mobile Header */}
+      <header className="md:hidden flex items-center justify-between p-4 sticky top-0 z-50" style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '0.5px solid var(--ds-border)' }}>
+        <div className="flex items-center gap-2">
+          {user?.photoURL ? (
+            <img 
+              src={user.photoURL} 
+              alt={user.displayName || "Perfil"} 
+              className="w-8 h-8 rounded-full"
+              style={{ border: '0.5px solid var(--ds-border)' }}
+            />
+          ) : (
+            <div className="w-8 h-8 rounded-full flex items-center justify-center font-medium text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
+              {user?.displayName?.[0] || "U"}
+            </div>
+          )}
+        </div>
+
+        <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
+
+        <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
+          {isDark ? <Sun size={18} /> : <Moon size={18} />}
+        </button>
+      </header>
+
+      {/* Sidebar - Desktop */}
+      <aside className="hidden md:flex flex-col w-60 p-4 space-y-6 overflow-y-auto no-scrollbar h-screen sticky top-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '0.5px solid var(--ds-border)' }}>
+        <div className="flex items-center justify-between px-2 pt-2">
+          <h1 className="text-xl font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
+          <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
+            {isDark ? <Sun size={16} /> : <Moon size={16} />}
+          </button>
+        </div>
+
+        {/* User Profile Info */}
+        {user && (
+          <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+             {user.photoURL ? (
+                <img 
+                  src={user.photoURL} 
+                  alt={user.displayName || "Perfil"} 
+                  className="w-10 h-10 rounded-full"
+                  style={{ border: '0.5px solid var(--ds-border)' }}
+                />
+             ) : (
+                <div className="w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
+                   {user.displayName?.[0] || "U"}
+                </div>
+             )}
+             <div className="overflow-hidden">
+                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>{getGreeting()}</p>
+                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{user.displayName}</p>
+             </div>
+          </div>
+        )}
+        
+        <nav className="flex-1 space-y-1">
+          {navItems.map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200"
+                style={{
+                  backgroundColor: isActive ? '#3B82F6' : 'transparent',
+                  color: isActive ? '#FFFFFF' : 'var(--text-secondary)',
+                }}
+              >
+                <Icon size={20} />
+                <span className="font-medium text-sm">{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="space-y-3 pt-4" style={{ borderTop: '0.5px solid var(--ds-border)' }}>
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={isUploading}
+            className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-md font-medium text-sm transition-all active:scale-[0.97] disabled:opacity-50"
+            style={{
+              backgroundColor: uploadSuccess ? '#10B981' : '#3B82F6',
+              color: '#FFFFFF',
+              borderRadius: '6px',
+            }}
+          >
+            {isUploading ? (
+              <Loader2 size={18} className="animate-spin" />
+            ) : uploadSuccess ? (
+              <CheckCircle2 size={18} />
+            ) : (
+              <Plus size={18} strokeWidth={2.5} />
+            )}
+            <span>{uploadSuccess ? "Enviado!" : "Enviar Comprovante"}</span>
+          </button>
+
+          <button
+            onClick={handleLogout}
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all"
+            style={{ color: 'var(--text-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '6px' }}
+          >
+            <LogOut size={16} />
+            <span>Sair</span>
+          </button>
+        </div>
+      </aside>
+
+      <input 
+        type="file" 
+        ref={fileInputRef} 
+        onChange={handleFileSelection} 
+        className="hidden" 
+        accept="image/*,application/pdf"
+      />
+      <input 
+        type="file" 
+        ref={cameraInputRef} 
+        onChange={handleFileSelection} 
+        className="hidden" 
+        accept="image/*"
+        capture="environment"
+      />
+
+      {/* Note Confirmation Modal */}
+      {showModal && (
+        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowModal(false)} />
+          <div className="w-full max-w-sm rounded-lg relative z-10 overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)', border: '0.5px solid var(--ds-border)', borderRadius: '8px' }}>
+            <div className="p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>Confirmar Envio</h3>
+                <button onClick={() => setShowModal(false)} style={{ color: 'var(--text-tertiary)' }}>
+                  <Plus size={18} className="rotate-45" />
+                </button>
+              </div>
+              
+              <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                 <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)', color: '#3B82F6' }}>
+                    <Plus size={18} />
+                 </div>
+                 <div className="overflow-hidden">
+                    <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Arquivo Selecionado</p>
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{selectedFile?.name}</p>
+                 </div>
+              </div>
+
+              <div>
+                <label className="text-label block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Deseja adicionar um comentário?</label>
+                <textarea 
+                  autoFocus
+                  value={pendingNote}
+                  onChange={(e) => setPendingNote(e.target.value)}
+                  placeholder="Ex: Almoço com cliente, treino de futebol..."
+                  className="w-full rounded-md p-3 text-sm focus:outline-none transition-colors h-24 resize-none"
+                  style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', color: 'var(--text-primary)', borderRadius: '6px' }}
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-1">
+                <button 
+                  onClick={() => setShowModal(false)}
+                  className="px-4 py-2.5 rounded-md text-sm font-medium transition-colors"
+                  style={{ border: '0.5px solid var(--ds-border)', color: 'var(--text-secondary)', borderRadius: '6px' }}
+                >
+                  Cancelar
+                </button>
+                <button 
+                  onClick={executeUpload}
+                  className="px-4 py-2.5 rounded-md text-sm font-medium text-white transition-all"
+                  style={{ backgroundColor: '#3B82F6', borderRadius: '6px' }}
+                >
+                  Enviar Agora
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content Area */}
+      <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Global Loading Bar */}
+        <div className={`fixed top-0 left-0 w-full h-1 z-[100] transition-opacity duration-300 ${(isUploading || uploadSuccess) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+          <div 
+            className="h-full transition-all ease-out"
+            style={{ 
+              backgroundColor: '#10B981',
+              width: uploadSuccess ? '100%' : (isUploading ? '90%' : '0%'),
+              transitionDuration: isUploading ? '15s' : '0.5s'
+            }}
+          ></div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
+          <div className="max-w-7xl mx-auto w-full">
+            {children}
+          </div>
+        </div>
+
+        {/* Bottom Nav - Mobile */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 px-4 flex items-center justify-around z-50" style={{ backgroundColor: 'var(--bg-secondary)', borderTop: '0.5px solid var(--ds-border)' }}>
+          {navItems.slice(0, 2).map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex flex-col items-center space-y-0.5 transition-colors"
+                style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
+              >
+                <Icon size={20} />
+                <span className="text-[10px] font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+
+          {/* Central Scan Button - opens camera on mobile */}
+          <div className="relative -top-4 flex flex-col items-center">
+            <button
+              onClick={() => cameraInputRef.current?.click()}
+              disabled={isUploading}
+              className="w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-all text-white"
+              style={{
+                backgroundColor: uploadSuccess ? '#10B981' : '#3B82F6',
+                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+              }}
+            >
+              {isUploading ? (
+                <Loader2 size={24} className="animate-spin" />
+              ) : uploadSuccess ? (
+                <CheckCircle2 size={24} />
+              ) : (
+                <Camera size={24} strokeWidth={2} />
+              )}
+            </button>
+            <span className="text-[10px] font-medium mt-0.5" style={{ color: '#3B82F6' }}>Scan</span>
+          </div>
+
+          {[navItems[3], navItems[4]].map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className="flex flex-col items-center space-y-0.5 transition-colors"
+                style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
+              >
+                <Icon size={20} />
+                <span className="text-[10px] font-medium">{item.name}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </main>
+    </div>
+  );
+}

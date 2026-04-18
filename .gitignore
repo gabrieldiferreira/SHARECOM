@@ -1,0 +1,65 @@
+# 🚨 SEGURANÇA - NUNCA REMOVER ESTAS LINHAS 🚨
+.env
+.env.local
+.env.*
+*.env
+backend/.env
+frontend/.env
+*.json
+!frontend/public/manifest.json
+
+# Bancos de Dados e Dados Sensíveis
+backend/expenses.db
+backend/uploads/
+*.db
+*.sqlite
+
+# Firebase Admin SDK (Chaves Privadas)
+backend/unidoc-*-firebase-adminsdk-*.json
+unidoc-*-firebase-adminsdk-*.json
+
+# IDE e Sistema Operacional
+.vscode/
+.idea/
+.DS_Store
+*.swp
+Thumbs.db
+*.pem
+
+# Dependências
+node_modules/
+frontend/node_modules/
+venv/
+backend/venv/
+.pnp
+.pnp.*
+.yarn/
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Build e Cache
+.next/
+frontend/.next/
+out/
+build/
+dist/
+.vercel
+__pycache__/
+backend/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+tsconfig.tsbuildinfo
+*.tsbuildinfo
+next-env.d.ts
+coverage/
+
+# Debug e Logs
+*.log
+backend/server.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
