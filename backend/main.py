@@ -28,15 +28,15 @@ def read_root():
 # os.makedirs("uploads", exist_ok=True)
 # app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads") # Removed for Read-and-Delete privacy policy
 
-# Configure CORS - Restrict this in production!
-frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+# Configure CORS
+frontend_url = os.getenv("FRONTEND_URL", "*")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[frontend_url] if frontend_url != "*" else ["*"],
-    allow_credentials=True,
-    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_credentials=True if frontend_url != "*" else False, # Credentials cannot be true with '*'
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 # Security Headers Middleware
