@@ -119,8 +119,32 @@ async def process_ata(
         content = await received_file.read()
         sha256_hash = hashlib.sha256(content).hexdigest()
         ext = os.path.splitext(filename)[1] or ".jpg"
+    elif note and note.startswith("http"):
+        # Tenta baixar o conteúdo se for um link direto de imagem/pdf
+        import httpx
+        try:
+            print(f"DEBUG: Detectado link direto. Tentando baixar: {note}", flush=True)
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                download_resp = await client.get(note)
+                if download_resp.status_code == 200:
+                    content = download_resp.content
+                    sha256_hash = hashlib.sha256(content).hexdigest()
+                    # Tenta descobrir a extensão pelo link
+                    if ".pdf" in note.lower(): ext = ".pdf"
+                    elif ".png" in note.lower(): ext = ".png"
+                    else: ext = ".jpg"
+                    filename = note.split("/")[-1] or "downloaded_file.jpg"
+                    print(f"DEBUG: Download concluído com sucesso ({len(content)} bytes).", flush=True)
+                else:
+                    # Se falhar o download, trata como texto
+                    content = note.encode('utf-8')
+                    sha256_hash = hashlib.sha256(content).hexdigest()
+        except Exception as e:
+            print(f"DEBUG: Falha ao baixar link: {e}. Tratando como texto.", flush=True)
+            content = note.encode('utf-8')
+            sha256_hash = hashlib.sha256(content).hexdigest()
     elif note:
-        # Se não tem arquivo, mas tem nota, usamos a nota como fonte
+        # Se não tem arquivo, mas tem nota (texto puro), usamos a nota como fonte
         content = note.encode('utf-8')
         sha256_hash = hashlib.sha256(content).hexdigest()
         filename = "link_comprovante.txt"
@@ -152,20 +176,21 @@ async def process_ata(
     raw_text = note or ""
     structural_map = ""
 
-    if received_file:
-        extracted_data, raw_text = await run_in_threadpool(ocr_processor.extract_transaction_data, content, ext)
-        structural_map = generate_structural_map(raw_text)
+    # Extração via OCR Local (Reforço)
+    import ocr_processor
+    ocr_fallback_data, raw_text = ocr_processor.extract_transaction_data(content, ext)
     
-    # Call AI (The Scout)
-    import ai_processor
-    # Se for apenas texto (link), a IA vai analisar o texto da nota
-    ai_data, ai_error = await ai_processor.analyze_receipt_with_ai(content, ext)
+    # 3. Análise IA (Vision) com apoio do OCR
+    from ai_processor import analyze_receipt_with_ai
+    extracted_data, ai_error = await analyze_receipt_with_ai(content, ext, ocr_text=raw_text)
     
-    if ai_data:
-        extracted_data.update(ai_data)
-    else:
-        if not received_file:
-             extracted_data["merchant_name"] = f"Erro no Link: {ai_error}"
+    if extracted_data is None:
+        # Se a IA falhou, usamos o OCR puro como fallback (plano B)
+        extracted_data = ocr_fallback_data
+        print(f"DEBUG: IA falhou ({ai_error}). Usando OCR de fallback.", flush=True)
+    
+    if not extracted_data:
+        extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
 
     # Save to database
     import json

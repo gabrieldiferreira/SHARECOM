@@ -13,7 +13,7 @@ MODEL_LIST = [
     "google/gemini-2.0-pro-exp-02-05:free"
 ]
 
-async def analyze_receipt_with_ai(image_content: bytes, extension: str):
+async def analyze_receipt_with_ai(image_content: bytes, extension: str, ocr_text: str = None):
     """
     Envia a imagem para o OpenRouter tentando vários modelos de visão
     Envia a imagem ou texto para o OpenRouter tentando vários modelos de visão
@@ -49,6 +49,8 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str):
             "type": "image_url",
             "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}
         })
+        if ocr_text:
+            content_list[0]["text"] += f"\n\nTEXTO EXTRAÍDO VIA OCR (USE PARA CONFERIR VALORES E NOMES):\n{ocr_text}"
     else:
         text_content = image_content.decode('utf-8', errors='ignore')
         content_list[0]["text"] += f"\n\nCONTEÚDO PARA ANALISAR:\n{text_content}"
