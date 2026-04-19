@@ -23,7 +23,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showScanMenu, setShowScanMenu] = useState(false);
   const [pastedContent, setPastedContent] = useState("");
   const [pastedAt, setPastedAt] = useState<number | null>(null);
-  const [saveTokens, setSaveTokens] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -160,10 +159,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       formData.append("note", pendingNote.trim());
     } else if (selectedFile && !pendingNote.trim()) {
       // sem nota, não adiciona nada
-    }
-
-    if (saveTokens) {
-      formData.append("save_tokens", "true");
     }
 
     try {
@@ -548,19 +543,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   className="w-full rounded-md p-3 text-sm focus:outline-none transition-colors h-24 resize-none"
                   style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', color: 'var(--text-primary)', borderRadius: '6px' }}
                 />
-              </div>
-
-              <div className="flex items-center gap-2 mt-2">
-                <input 
-                  type="checkbox" 
-                  id="saveTokens" 
-                  checked={saveTokens} 
-                  onChange={(e) => setSaveTokens(e.target.checked)}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
-                />
-                <label htmlFor="saveTokens" className="text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
-                  Economia de Tokens (Extração Básica)
-                </label>
               </div>
 
               <div className="grid grid-cols-2 gap-3 pt-1">
