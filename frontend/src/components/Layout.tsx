@@ -58,32 +58,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return "Boa noite";
   };
 
-  React.useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-
-    if (process.env.NODE_ENV !== "production") {
-      navigator.serviceWorker
-        .getRegistrations()
-        .then((registrations) => {
-          registrations.forEach((registration) => {
-            registration.unregister();
-          });
-        })
-        .catch((err) => {
-          console.log("Service Worker cleanup failed: ", err);
-        });
-      return;
-    }
-
-    navigator.serviceWorker.register('/sw.js').then(
-      function (registration) {
-        console.log("Service Worker registration successful with scope: ", registration.scope);
-      },
-      function (err) {
-        console.log("Service Worker registration failed: ", err);
-      }
-    );
-  }, []);
 
   React.useEffect(() => {
     const handleShareTarget = async () => {
