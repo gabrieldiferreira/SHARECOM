@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState, useRef, useEffect } from "react";
+
 import Link from "next/link";
 import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera, Image, FileText, X, ClipboardPaste, Link2 } from "lucide-react";
 import { usePathname } from "next/navigation";
