@@ -224,12 +224,13 @@ function ExpenseTracker() {
   const lifestyleData = useMemo(() => {
     let day = 0, night = 0;
     transactions.forEach(tx => {
-       if(tx.transaction_type === 'Outflow' && tx.transaction_date) {
+       if(tx.transaction_date) {
           const date = new Date(tx.transaction_date);
           if (isNaN(date.getTime())) return;
           const hour = date.getHours();
-          if(hour >= 6 && hour < 18) day += tx.total_amount || 0;
-          else night += tx.total_amount || 0;
+          const val = Number(tx.total_amount) || 0;
+          if(hour >= 6 && hour < 18) day += val;
+          else night += val;
        }
     });
     return [{ name: 'Diurno (6h-18h)', value: day }, { name: 'Noturno (18h-6h)', value: night }];
@@ -239,7 +240,7 @@ function ExpenseTracker() {
     const map: Record<string, number> = {};
     transactions.forEach(tx => {
         if(tx.transaction_type === 'Outflow' && tx.total_amount) {
-            map[tx.category] = (map[tx.category] || 0) + (tx.total_amount || 0);
+            map[tx.category] = (map[tx.category] || 0) + (Number(tx.total_amount) || 0);
         }
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
@@ -248,12 +249,15 @@ function ExpenseTracker() {
   const institutionsData = useMemo(() => {
     const map: Record<string, number> = {};
     transactions.forEach(tx => {
-        if(tx.transaction_type === 'Outflow' && tx.total_amount) {
-            const inst = tx.destination_institution || 'Outros';
-            map[inst] = (map[inst] || 0) + (tx.total_amount || 0);
+        const val = Number(tx.total_amount) || 0;
+        if(val > 0) {
+            const inst = tx.destination_institution || tx.merchant_name || 'Outros';
+            map[inst] = (map[inst] || 0) + val;
         }
     });
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value).slice(0, 6);
+    const data = Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value).slice(0, 6);
+    if (data.length === 0) return [{ name: 'Sem dados', value: 1, isEmpty: true }];
+    return data;
   }, [transactions]);
 
   const topBeneficiary = useMemo(() => {
@@ -274,22 +278,28 @@ function ExpenseTracker() {
         .filter(tx => tx.transaction_date && !isNaN(new Date(tx.transaction_date).getTime()))
         .sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
      
-     return sorted.map(tx => {
-         current += (tx.transaction_type === 'Inflow' ? tx.total_amount : -tx.total_amount);
+     const data = sorted.map(tx => {
+         const val = Number(tx.total_amount) || 0;
+         current += (tx.transaction_type === 'Inflow' ? val : -val);
          const date = new Date(tx.transaction_date);
          return { 
             date: new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric' }).format(date), 
             capital: current 
          };
      });
+     if (data.length === 1) {
+         data.push({ date: 'Hoje', capital: data[0].capital });
+     }
+     return data;
   }, [transactions]);
 
   const notesAnalysis = useMemo(() => {
     const keywords: Record<string, number> = {};
     transactions.forEach(tx => {
        if (tx.note) {
+          const val = Number(tx.total_amount) || 0;
           const words = tx.note.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-          words.forEach(w => { keywords[w] = (keywords[w] || 0) + tx.total_amount; });
+          words.forEach(w => { keywords[w] = (keywords[w] || 0) + val; });
        }
     });
     return Object.entries(keywords).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
@@ -467,12 +477,12 @@ function ExpenseTracker() {
           )}
 
           {/* Portfolio Growth Chart */}
-          {growthData.length > 0 && (
-            <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp size={18} style={{ color: '#3B82F6' }} />
-                <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Evolução de Patrimônio</h2>
-              </div>
+          <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp size={18} style={{ color: '#3B82F6' }} />
+              <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Evolução de Patrimônio</h2>
+            </div>
+            {growthData.length > 0 ? (
               <div className="h-[220px] w-full select-none">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={growthData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
@@ -480,12 +490,16 @@ function ExpenseTracker() {
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dy={10} />
                     <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dx={-10} />
                     <Tooltip contentStyle={tooltipStyle} />
-                    <Line type="monotone" dataKey="capital" stroke="#3B82F6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                    <Line type="monotone" dataKey="capital" stroke="#3B82F6" strokeWidth={2} dot={growthData.length === 1} activeDot={{ r: 4 }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </div>
-          )}
+            ) : (
+              <div className="h-[220px] flex items-center justify-center">
+                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Sem transações registradas</p>
+              </div>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '12px' }}>
               {/* Institutional Exposure */}
@@ -494,31 +508,27 @@ function ExpenseTracker() {
                   <Landmark size={18} style={{ color: '#8B5CF6' }} />
                   <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Exposição Institucional</h2>
                 </div>
-                {institutionsData.length > 0 ? (
-                    <>
-                      <div className="h-[160px] select-none">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <PieChart>
-                            <Pie data={institutionsData} innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
-                              {institutionsData.map((entry, index) => (
-                                <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                              ))}
-                            </Pie>
-                            <Tooltip contentStyle={tooltipStyle} />
-                          </PieChart>
-                        </ResponsiveContainer>
-                      </div>
-                      <div className="flex justify-center flex-wrap mt-2" style={{ gap: '16px' }}>
-                          {institutionsData.map((entry, index) => (
-                              <div key={index} className="flex items-center gap-1.5 text-label" style={{ color: 'var(--text-secondary)' }}>
-                                  <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></div>
-                                  <span className="truncate max-w-[80px]">{entry.name}</span>
-                              </div>
-                          ))}
-                      </div>
-                    </>
-                ) : (
-                    <p className="text-label text-center py-8" style={{ color: 'var(--text-tertiary)' }}>Dados insuficientes</p>
+                <div className="h-[160px] select-none">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie data={institutionsData} innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
+                        {institutionsData.map((entry: any, index: number) => (
+                          <Cell key={`cell-${index}`} fill={entry.isEmpty ? 'var(--bg-tertiary)' : CHART_COLORS[index % CHART_COLORS.length]} />
+                        ))}
+                      </Pie>
+                      <Tooltip contentStyle={tooltipStyle} formatter={(val: number, name: string, props: any) => props.payload.isEmpty ? ['Sem Dados', 'Valor'] : [val, name]} />
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                {!institutionsData[0]?.isEmpty && (
+                  <div className="flex justify-center flex-wrap mt-2" style={{ gap: '16px' }}>
+                      {institutionsData.map((entry, index) => (
+                          <div key={index} className="flex items-center gap-1.5 text-label" style={{ color: 'var(--text-secondary)' }}>
+                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></div>
+                              <span className="truncate max-w-[80px]">{entry.name}</span>
+                          </div>
+                      ))}
+                  </div>
                 )}
               </div>
 
@@ -541,17 +551,19 @@ function ExpenseTracker() {
                         </ResponsiveContainer>
                     </div>
                 ) : (
-                    <p className="text-label text-center py-8" style={{ color: 'var(--text-tertiary)' }}>Nenhuma saída verificada</p>
+                    <div className="h-[160px] flex items-center justify-center">
+                      <p className="text-label text-center" style={{ color: 'var(--text-tertiary)' }}>Nenhum costume registrado</p>
+                    </div>
                 )}
               </div>
 
               {/* Notes Analysis */}
-              {notesAnalysis.length > 0 && (
-                <div className="p-4 rounded-lg md:col-span-2" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                  <div className="flex items-center gap-2 mb-4">
-                    <MessageSquare size={18} style={{ color: '#EC4899' }} />
-                    <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Dashboard de Notas</h2>
-                  </div>
+              <div className="p-4 rounded-lg md:col-span-2" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
+                <div className="flex items-center gap-2 mb-4">
+                  <MessageSquare size={18} style={{ color: '#EC4899' }} />
+                  <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Dashboard de Notas</h2>
+                </div>
+                {notesAnalysis.length > 0 ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
                     <div className="h-[180px] select-none">
                       <ResponsiveContainer width="100%" height="100%">
@@ -577,8 +589,13 @@ function ExpenseTracker() {
                        </div>
                     </div>
                   </div>
-                </div>
-              )}
+                ) : (
+                  <div className="p-6 text-center rounded-lg" style={{ backgroundColor: 'var(--bg-primary)', border: '1px dashed var(--ds-border)' }}>
+                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Nenhuma nota detectada nas suas transações.</p>
+                    <p className="text-label mt-1" style={{ color: 'var(--text-tertiary)' }}>Adicione notas ao enviar comprovantes para descobrir onde você mais gasta.</p>
+                  </div>
+                )}
+              </div>
           </div>
         </div>
 
