@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera, Image, FileText, X } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -18,8 +18,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [showScanMenu, setShowScanMenu] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
+  const galleryInputRef = useRef<HTMLInputElement>(null);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isDark, setIsDark] = useState(false);
   const isLoginPage = pathname === "/login";
@@ -334,12 +336,80 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       />
       <input 
         type="file" 
+        ref={galleryInputRef} 
+        onChange={handleFileSelection} 
+        className="hidden" 
+        accept="image/*"
+      />
+      <input 
+        type="file" 
         ref={cameraInputRef} 
         onChange={handleFileSelection} 
         className="hidden" 
         accept="image/*"
         capture="environment"
       />
+
+      {/* Mobile Scan Action Sheet */}
+      {showScanMenu && (
+        <div className="fixed inset-0 z-[250] md:hidden">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowScanMenu(false)} />
+          <div className="absolute bottom-0 left-0 right-0 animate-in slide-in-from-bottom duration-300">
+            <div 
+              className="mx-4 mb-8 rounded-2xl overflow-hidden shadow-2xl border"
+              style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--ds-border)' }}
+            >
+              <div className="p-4 border-b flex items-center justify-between" style={{ borderColor: 'var(--ds-border)' }}>
+                <h3 className="font-semibold text-sm">Escanear Comprovante</h3>
+                <button onClick={() => setShowScanMenu(false)} className="p-1 rounded-full hover:bg-black/5">
+                  <X size={18} />
+                </button>
+              </div>
+              
+              <div className="p-2 space-y-1">
+                <button 
+                  onClick={() => { setShowScanMenu(false); cameraInputRef.current?.click(); }}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center">
+                    <Camera size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium">Câmera</p>
+                    <p className="text-[10px] text-gray-500">Tirar foto agora</p>
+                  </div>
+                </button>
+
+                <button 
+                  onClick={() => { setShowScanMenu(false); galleryInputRef.current?.click(); }}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                    <Image size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium">Galeria</p>
+                    <p className="text-[10px] text-gray-500">Escolher das fotos</p>
+                  </div>
+                </button>
+
+                <button 
+                  onClick={() => { setShowScanMenu(false); fileInputRef.current?.click(); }}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center">
+                    <FileText size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium">Arquivos</p>
+                    <p className="text-[10px] text-gray-500">Escolher PDF ou documento</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Note Confirmation Modal */}
       {showModal && (
@@ -447,7 +517,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {/* Central Scan Button - opens camera on mobile */}
           <div className="relative -top-4 flex flex-col items-center">
             <button
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={() => setShowScanMenu(true)}
               disabled={isUploading}
               className="w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-all text-white"
               style={{
