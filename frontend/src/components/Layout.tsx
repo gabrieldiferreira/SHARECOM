@@ -138,7 +138,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
     
     try {
-      const response = await authenticatedFetch(getApiUrl("/process-ata"), {
+      const apiUrl = getApiUrl("/process-ata");
+      console.log("SHARECOM: Tentando enviar para:", apiUrl);
+      const response = await authenticatedFetch(apiUrl, {
         method: "POST",
         body: formData,
       });

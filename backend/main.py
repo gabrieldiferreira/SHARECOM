@@ -43,8 +43,8 @@ frontend_url = os.getenv("FRONTEND_URL", "*")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[frontend_url] if frontend_url != "*" else ["*"],
-    allow_credentials=True if frontend_url != "*" else False, # Credentials cannot be true with '*'
+    allow_origins=["*"],
+    allow_credentials=False, # Credentials cannot be true with '*'
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -177,12 +177,18 @@ async def process_ata(
         except:
             pass
 
+    # Determina se é um gasto real ou apenas informação
+    is_receipt = extracted_data.get("is_financial_receipt", True)
+    category = extracted_data.get("smart_category") or ("Informativo" if not is_receipt else "Outros")
+    amount = extracted_data.get("total_amount") if is_receipt and extracted_data.get("total_amount") is not None else 0.0
+    merchant = extracted_data.get("merchant_name") or ("Link Informativo" if not is_receipt else "Desconhecido")
+
     db_expense = models.Expense(
         date=date_obj,
-        amount=extracted_data.get("total_amount", 0),
-        category=extracted_data.get("smart_category", "Outros"),
-        merchant=extracted_data.get("merchant_name", "Desconhecido"),
-        description=f"Processado via {('Arquivo' if received_file else 'Link')}",
+        amount=amount,
+        category=category,
+        merchant=merchant,
+        description=extracted_data.get("description") or f"Processado via {('Arquivo' if received_file else 'Link')}",
         receipt=sha256_hash,
         transaction_type=extracted_data.get("transaction_type", "Outflow"),
         payment_method=extracted_data.get("payment_method", "Desconhecido"),

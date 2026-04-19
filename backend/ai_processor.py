@@ -25,17 +25,18 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str):
 
     # Configuração do conteúdo (Imagem ou Texto)
     prompt_base = """
-    Analise este comprovante financeiro e extraia os dados no formato JSON estrito:
+    Analise este conteúdo (imagem, link ou texto) e extraia os dados no formato JSON estrito:
     {
+        "is_financial_receipt": boolean, // true se for um comprovante de pagamento/transferência real
         "total_amount": float,
         "currency": "BRL",
         "transaction_date": "YYYY-MM-DDTHH:MM:SS",
         "merchant_name": "string",
-        "payment_method": "Pix|Boleto|Cartão|Depósito|Transferência",
+        "payment_method": "Pix|Boleto|Cartão|Depósito|Transferência|Link",
         "transaction_id": "string",
-        "masked_cpf": "string",
-        "description": "breve resumo"
+        "description": "breve resumo do que se trata o conteúdo"
     }
+    Se 'is_financial_receipt' for false, preencha apenas a description e merchant_name com o resumo do link.
     Retorne APENAS o JSON, sem explicações.
     """
     
