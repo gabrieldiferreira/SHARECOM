@@ -130,12 +130,18 @@ def get_cache_stats(_: dict = Depends(verify_firebase_token)):
 # app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads") # Removed for Read-and-Delete privacy policy
 
 # Configure CORS
-frontend_url = os.getenv("FRONTEND_URL", "*")
+frontend_url = os.getenv("FRONTEND_URL", "https://www.sharecom.com.br")
+origins = [
+    "http://localhost:3000",
+    "https://sharecom.com.br",
+    "https://www.sharecom.com.br",
+    frontend_url
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False, # Credentials cannot be true with '*'
+    allow_origins=origins if frontend_url != "*" else ["*"],
+    allow_credentials=True if frontend_url != "*" else False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

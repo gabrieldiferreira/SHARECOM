@@ -26,3 +26,7 @@ python-bidi==0.4.2
 pydantic
 requests
 typing-extensions
+httpx
+reportlab
+openpyxl
+numpy
