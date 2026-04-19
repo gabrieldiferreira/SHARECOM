@@ -48,15 +48,18 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
     return "image", file_bytes
 
 def _extract_text_easyocr(image_bytes: bytes) -> str:
-    print("Extracting text via EasyOCR...")
+    print("Iniciando extração via EasyOCR local...")
     reader = get_easyocr_reader()
     if not reader:
         return ""
     try:
         import numpy as np
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        result = reader.readtext(np.array(image), detail=0)
-        return "\n".join(result)
+        # Melhora o contraste da imagem antes de ler
+        img = Image.open(io.BytesIO(image_bytes)).convert("L") # Escala de cinza
+        result = reader.readtext(np.array(img), detail=0, paragraph=True)
+        text = "\n".join(result)
+        print(f"--- DEBUG OCR ---\n{text}\n-----------------")
+        return text
     except Exception as e:
         print(f"EasyOCR Failed: {e}")
         return ""
@@ -90,26 +93,37 @@ def extract_transaction_data(file_bytes: bytes, extension: str) -> dict:
 
         print("Using RegEx best effort on raw text.")
         
-        # 1. Valor (Amount)
-        val_match = re.search(r'(?:R\$|RS|R\s*\$|Valor:?)\s*([\d\.,]{3,})', raw_text, re.IGNORECASE)
+        print(f"Texto extraído (primeiros 200 caracteres):\n{raw_text[:200]}")
+
+        # 1. Valor (Amount) - Regex mais flexível
+        # Busca por padrões como: 50,00 | 1.250,00 | R$ 10.00 | RS 5,50
+        val_match = re.search(r'(?:R\$|RS|R\s*\$|Valor|Total|Pago|[\$])?[:\s]*(\d{1,3}(?:[\.,]\d{3})*[\.,]\d{2})', raw_text, re.IGNORECASE)
+
+        if not val_match:
+            # Tenta pegar qualquer número com duas casas decimais no final se o primeiro falhar
+            val_match = re.search(r'(\d+[\.,]\d{2})', raw_text)
+
         if val_match:
             try:
+                # Normaliza: remove pontos de milhar e troca vírgula por ponto
                 val_str = val_match.group(1).replace('.', '').replace(',', '.')
-                fallback_data["total_amount"] = float(val_str)
-                fallback_data["merchant_name"] = "Comprovante (Leitura Parcial)"
-            except:
-                pass
+                # Se após a limpeza o ponto sumiu ou ficou errado (ex: 5000), corrigimos
+                if '.' not in val_str and len(val_str) > 2:
+                    val_str = val_str[:-2] + "." + val_str[-2:]
                 
-        # 2. Data e Hora (Date and Time)
-        date_match = re.search(r'(\d{2})\s+([A-Za-z]{3})\.?\s+(\d{4})(?:[\s\-]*(\d{2}[:\.]\d{2}[:\.]\d{2}))?', raw_text, re.IGNORECASE)
+                amount = float(val_str)
+                if amount > 0:
+                    fallback_data["total_amount"] = amount
+                    fallback_data["merchant_name"] = "Comprovante Identificado"
+            except Exception as e:
+                print(f"Erro ao converter valor: {e}")
+
+        # 2. Data e Hora (Date and Time) - Regex mais abrangente
+        date_match = re.search(r'(\d{2})[/.-](\d{2})[/.-](\d{2,4})', raw_text)
         if date_match:
-            day, month_str, year = date_match.group(1), date_match.group(2).lower(), date_match.group(3)
-            time_str = date_match.group(4) or "12:00:00"
-            time_str = time_str.replace('.', ':')
-            months = {"jan": "01", "fev": "02", "mar": "03", "abr": "04", "mai": "05", "jun": "06", 
-                      "jul": "07", "ago": "08", "set": "09", "out": "10", "nov": "11", "dez": "12"}
-            month = months.get(month_str[:3], "01")
-            fallback_data["transaction_date"] = f"{year}-{month}-{day}T{time_str}"
+            day, month, year = date_match.groups()
+            if len(year) == 2: year = "20" + year
+            fallback_data["transaction_date"] = f"{year}-{month}-{day}T12:00:00"
             
         # 2.5 Método de Pagamento (Payment Method)
         method_match = re.search(r'(?:Tipo de transfer[êe]ncia|M[ée]todo|Pagamento|Forma|Tipo)[\s:]*(Pix|TED|DOC|Transfer[êe]ncia|Boleto|Cart[aã]o)', raw_text, re.IGNORECASE)

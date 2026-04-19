@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Layout from "@/components/Layout";
 import AuthGate from "@/components/AuthGate";
+import ErrorSentinel from "@/components/ErrorSentinel";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -40,9 +41,11 @@ export default function RootLayout({
   return (
     <html lang="pt-BR">
       <body className={`${inter.variable} font-sans`}>
-        <AuthGate>
-          <Layout>{children}</Layout>
-        </AuthGate>
+        <ErrorSentinel>
+          <AuthGate>
+            <Layout>{children}</Layout>
+          </AuthGate>
+        </ErrorSentinel>
       </body>
     </html>
   );

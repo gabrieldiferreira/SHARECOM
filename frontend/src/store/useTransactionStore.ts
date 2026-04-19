@@ -15,6 +15,7 @@ interface TransactionState {
   fetchTransactions: () => Promise<void>;
   addTransaction: (tx: TransactionEntity) => Promise<void>;
   deleteTransaction: (id: number) => Promise<void>;
+  clearAllData: () => Promise<void>;
   syncWithBackend: () => Promise<void>;
   setPendingNote: (note: string) => void;
 }
@@ -83,9 +84,36 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   deleteTransaction: async (id: number) => {
     const db = await getDB();
     if (!db) return;
+    
+    try {
+      // First try to delete from backend
+      await authenticatedFetch(getApiUrl(`/expenses/${id}`), {
+        method: 'DELETE'
+      });
+    } catch (e) {
+      console.warn("Could not delete from backend, it might be already gone.");
+    }
+
+    // Always delete locally
     await db.delete('transactions', id);
     set({ transactions: get().transactions.filter(t => t.id !== id) });
     get().fetchTransactions();
+  },
+
+  clearAllData: async () => {
+    try {
+      await authenticatedFetch(getApiUrl("/expenses/clear-all"), {
+        method: 'POST'
+      });
+    } catch (e) {
+      console.error("Failed to clear backend data");
+    }
+
+    const db = await getDB();
+    if (db) {
+      await db.clear('transactions');
+      get().fetchTransactions();
+    }
   },
 
   syncWithBackend: async () => {

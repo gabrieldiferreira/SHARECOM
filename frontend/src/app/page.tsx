@@ -29,7 +29,8 @@ function ExpenseTracker() {
     setPendingNote,
     fetchTransactions, 
     addTransaction, 
-    deleteTransaction,
+    deleteTransaction, 
+    clearAllData,
     syncWithBackend 
   } = useTransactionStore();
 
@@ -62,9 +63,12 @@ function ExpenseTracker() {
     syncWithBackend();
   }, [fetchTransactions, syncWithBackend]);
 
+  if (!mounted) return null;
+
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
-      const matchesSearch = tx.merchant_name.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      const merchant = tx.merchant_name || "Desconhecido";
+      const matchesSearch = merchant.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            (tx.note && tx.note.toLowerCase().includes(searchQuery.toLowerCase())) ||
                            (tx.destination_institution && tx.destination_institution.toLowerCase().includes(searchQuery.toLowerCase()));
       
@@ -143,6 +147,7 @@ function ExpenseTracker() {
         }
 
         const newTx: TransactionEntity = {
+          id: data.database_id, // Use the official ID from the backend
           total_amount: ai.total_amount || 0,
           merchant_name: ai.merchant_name || 'Desconhecido',
           category: ai.smart_category || 'Outros',
@@ -155,7 +160,7 @@ function ExpenseTracker() {
           masked_cpf: ai.masked_cpf || undefined,
           needs_manual_review: false,
           receipt_hash: data.filename || undefined,
-          is_synced: false,
+          is_synced: true, // It is already synced as it comes from the backend
           note: data.note || undefined
         };
 
@@ -176,15 +181,11 @@ function ExpenseTracker() {
       }
     } catch (e) {
       console.error("Upload error:", e);
-      if (e instanceof DOMException && e.name === "ConstraintError") {
-        alert("Este recibo já foi registrado localmente.");
-        return;
-      }
       if (e instanceof Error && e.message === "AUTH_REQUIRED") {
         alert("Você precisa estar autenticado para enviar recibos.");
-        return;
+      } else {
+        alert("Erro ao conectar com o servidor. Verifique sua internet.");
       }
-      alert("Erro de conexão ao servidor de IA.");
     } finally {
       setIsUploading(false);
       setSelectedFile(null);
@@ -201,10 +202,12 @@ function ExpenseTracker() {
   const lifestyleData = useMemo(() => {
     let day = 0, night = 0;
     transactions.forEach(tx => {
-       if(tx.transaction_type === 'Outflow') {
-          const hour = new Date(tx.transaction_date).getHours();
-          if(hour >= 6 && hour < 18) day += tx.total_amount;
-          else night += tx.total_amount;
+       if(tx.transaction_type === 'Outflow' && tx.transaction_date) {
+          const date = new Date(tx.transaction_date);
+          if (isNaN(date.getTime())) return;
+          const hour = date.getHours();
+          if(hour >= 6 && hour < 18) day += tx.total_amount || 0;
+          else night += tx.total_amount || 0;
        }
     });
     return [{ name: 'Diurno (6h-18h)', value: day }, { name: 'Noturno (18h-6h)', value: night }];
@@ -213,7 +216,7 @@ function ExpenseTracker() {
   const institutionsData = useMemo(() => {
     const map: Record<string, number> = {};
     transactions.forEach(tx => {
-        if(tx.transaction_type === 'Outflow') {
+        if(tx.transaction_type === 'Outflow' && tx.total_amount) {
             const inst = tx.destination_institution || 'Outros';
             map[inst] = (map[inst] || 0) + tx.total_amount;
         }
@@ -276,10 +279,18 @@ function ExpenseTracker() {
         <div className="h-full transition-all ease-out" style={{ backgroundColor: '#10B981', width: uploadSuccess ? '100%' : (isUploading ? '90%' : '0%'), transitionDuration: isUploading ? '15s' : '0.5s' }}></div>
       </div>
 
-      {/* Header */}
-      <div className="mb-2">
-         <h1 className="text-2xl font-medium" style={{ color: 'var(--text-primary)' }}>Visão Geral</h1>
-         <p className="text-label mt-1" style={{ color: 'var(--text-secondary)' }}>Resumo analítico de transações</p>
+      <div className="mb-2 flex items-center justify-between">
+         <div>
+            <h1 className="text-2xl font-medium" style={{ color: 'var(--text-primary)' }}>Visão Geral</h1>
+            <p className="text-label mt-1" style={{ color: 'var(--text-secondary)' }}>Resumo analítico de transações</p>
+         </div>
+         <button 
+           onClick={() => { if(confirm("Deseja apagar todos os dados do banco e recomeçar?")) clearAllData(); }}
+           className="px-3 py-1.5 text-label opacity-50 hover:opacity-100 transition-opacity"
+           style={{ border: '0.5px solid var(--ds-border)', borderRadius: '6px', color: '#EF4444' }}
+         >
+           Resetar Tudo
+         </button>
       </div>
 
       {/* Search & Filters */}
@@ -579,7 +590,7 @@ function ExpenseTracker() {
                       )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <p className="valor-financeiro text-val-sm" style={{ color: tx.transaction_type === 'Inflow' ? '#10B981' : '#EF4444' }}>
+                      <p className="valor-financeiro text-val-sm" style={{ color: tx.total_amount === 0 ? '#8B5CF6' : (tx.transaction_type === 'Inflow' ? '#10B981' : '#EF4444') }}>
                         {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', {minimumFractionDigits:2})}
                       </p>
                       <button 

@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from typing import List
 import os
 import uuid
-import ai_agent
+import ocr_processor
 import hashlib
+import re
 from auth import verify_firebase_token
 
 from database import engine, get_db, Base
@@ -61,6 +62,20 @@ async def add_security_headers(request, call_next):
     response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
     return response
 
+def generate_structural_map(text: str) -> str:
+    """
+    Converts text to a structural skeleton:
+    'R$ 1.680,00' -> 'XX 0.000,00'
+    '19/10/2017' -> '00/00/0000'
+    """
+    # Replace digits with 0
+    text = re.sub(r'\d', '0', text)
+    # Replace uppercase letters with X
+    text = re.sub(r'[A-ZÀ-Ú]', 'X', text)
+    # Replace lowercase letters with x
+    text = re.sub(r'[a-zà-ú]', 'x', text)
+    return text
+
 @app.get("/expenses", response_model=List[schemas.Expense])
 def read_expenses(
     skip: int = 0,
@@ -92,6 +107,7 @@ async def process_ata(
     db: Session = Depends(get_db),
     _: dict = Depends(verify_firebase_token),
 ):
+    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO DO ARQUIVO: {received_file.filename}", flush=True)
     """
     Absolute Privacy Processing: 
     Reads the file into memory, extracts data via AI, and destroys the buffer.
@@ -105,10 +121,12 @@ async def process_ata(
     
     # Calculate SHA-256 for idempotency (prevents duplicate 'Atas')
     sha256_hash = hashlib.sha256(content).hexdigest()
+    print(f"DEBUG: Hash do arquivo: {sha256_hash}", flush=True)
     
     # Check if this 'Ata' already exists
     existing_expense = db.query(models.Expense).filter(models.Expense.receipt == sha256_hash).first()
     if existing_expense:
+        print(f"DEBUG: BLOQUEIO - Arquivo já existe no banco (ID: {existing_expense.id}). Retornando dados antigos.", flush=True)
         # Clear sensitive bytes immediately
         del content
         return {
@@ -119,17 +137,47 @@ async def process_ata(
                 "smart_category": existing_expense.category,
                 "transaction_id": existing_expense.transaction_id,
                 "needs_manual_review": False
-            }
+            },
+            "database_id": existing_expense.id
         }
     
-    # Process the document via Local OCR (RegEx best effort)
+    # 2. Process File via OCR (The Scout)
     ext = os.path.splitext(received_file.filename)[1] or ".jpg"
-    extracted_data = await run_in_threadpool(ai_agent.extract_transaction_data, content, ext)
+    extracted_data, raw_text = await run_in_threadpool(ocr_processor.extract_transaction_data, content, ext)
+    structural_map = generate_structural_map(raw_text)
     
-    # If RegEx fails to find even the amount, we set a default
-    if extracted_data.get("total_amount", 0) == 0:
-        extracted_data["merchant_name"] = "Pendente (Não lido)"
-        extracted_data["needs_manual_review"] = True
+    # 3. Hybrid Logic: AI goes first for unknown places (patterns)
+    import ai_processor
+    # Check by structural map (layout) instead of file hash
+    pattern_exists = db.query(models.PatternLog).filter(models.PatternLog.structural_map == structural_map).first()
+    
+    if not pattern_exists:
+        print(f"DEBUG: Padrão NOVO detectado. IA batedora entrando em campo...", flush=True)
+        ai_data, ai_error = await ai_processor.analyze_receipt_with_ai(content, ext)
+        if ai_data:
+            extracted_data.update(ai_data)
+            extracted_data["needs_manual_review"] = False
+            print(f"DEBUG: IA mapeou o padrão com sucesso.", flush=True)
+        else:
+            print(f"DEBUG: IA indisponível ou erro: {ai_error}. Usando OCR local.", flush=True)
+    else:
+        print(f"DEBUG: Padrão CONHECIDO. OCR local assume a glória.", flush=True)
+
+    # 4. Save to Pattern Bank (only if this specific file hash is new)
+    import json
+    existing_log = db.query(models.PatternLog).filter(models.PatternLog.hash == sha256_hash).first()
+    if not existing_log:
+        new_pattern = models.PatternLog(
+            filename=received_file.filename,
+            raw_text=raw_text,
+            structural_map=structural_map,
+            extracted_json=json.dumps(extracted_data),
+            hash=sha256_hash
+        )
+        db.add(new_pattern)
+        db.commit()
+    else:
+        print(f"DEBUG: Padrão estrutural já existe no banco. Pulando salvamento.", flush=True)
     
     # Convert extracted date string to Python datetime object
     date_val = extracted_data.get("transaction_date")
@@ -171,3 +219,42 @@ async def process_ata(
         "note": note,
         "database_id": db_expense.id
     }
+
+@app.delete("/expenses/{expense_id}")
+def delete_expense(
+    expense_id: int,
+    db: Session = Depends(get_db),
+    _: dict = Depends(verify_firebase_token),
+):
+    print(f"DEBUG: TENTANDO DELETAR ID: {expense_id}", flush=True)
+    db_expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
+    if not db_expense:
+        print(f"DEBUG: ERRO - ID {expense_id} não encontrado no banco.", flush=True)
+        raise HTTPException(status_code=404, detail="Gasto não encontrado")
+    db.delete(db_expense)
+    db.commit()
+    print(f"DEBUG: ID {expense_id} DELETADO COM SUCESSO.", flush=True)
+    return {"message": "Deletado com sucesso"}
+
+@app.post("/expenses/clear-all")
+def clear_all_expenses(
+    db: Session = Depends(get_db),
+    _: dict = Depends(verify_firebase_token),
+):
+    print("DEBUG: >>> LIMPANDO TODO O BANCO DE DADOS <<<", flush=True)
+    try:
+        num_deleted = db.query(models.Expense).delete()
+        db.commit()
+        print(f"DEBUG: BANCO LIMPO. {num_deleted} registros removidos.", flush=True)
+        return {"message": "Banco de dados resetado com sucesso"}
+
+    except Exception as e:
+        print(f"DEBUG: ERRO AO LIMPAR BANCO: {e}", flush=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/patterns")
+def get_patterns(
+    db: Session = Depends(get_db),
+    _: dict = Depends(verify_firebase_token),
+):
+    return db.query(models.PatternLog).order_by(models.PatternLog.timestamp.desc()).all()

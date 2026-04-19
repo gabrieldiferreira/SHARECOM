@@ -66,7 +66,8 @@ export default function TimelinePage() {
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
-      const matchesSearch = tx.merchant_name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      const merchant = tx.merchant_name || "Desconhecido";
+      const matchesSearch = merchant.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (tx.note && tx.note.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (tx.destination_institution && tx.destination_institution.toLowerCase().includes(searchQuery.toLowerCase())) ||
         (tx.category && tx.category.toLowerCase().includes(searchQuery.toLowerCase()));

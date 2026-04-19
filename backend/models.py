@@ -20,3 +20,13 @@ class Expense(Base):
     transaction_id = Column(String, unique=True, index=True)
     masked_cpf = Column(String)
     note = Column(String, nullable=True) # User provided notes
+
+class PatternLog(Base):
+    __tablename__ = "pattern_logs"
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, default=datetime.datetime.utcnow)
+    filename = Column(String)
+    raw_text = Column(String)
+    structural_map = Column(String)
+    extracted_json = Column(String)
+    hash = Column(String, unique=True)
