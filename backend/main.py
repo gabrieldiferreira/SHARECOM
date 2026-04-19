@@ -21,40 +21,72 @@ import schemas
 Base.metadata.create_all(bind=engine)
 
 # =============================================================================
-# CACHE EM MEMÓRIA (chave-valor + TTL)
-# Padrão: cache hit -> retorna dados sem bater no DB
-#         cache miss -> busca no DB, armazena no cache
-#         invalidação -> ao inserir/deletar dados, limpa o cache do usuário
-# Ref: https://dev.to/reishenrique/cache-otimizando-desempenho-e-reduzindo-custos-na-sua-aplicacao-458o
+# CACHE EM MEMÓRIA — LRU + TTL + STATS + WARM-UP
+# Estratégias aplicadas (ref: FasterCapital + dev.to/reishenrique):
+#   - LRU (Least Recently Used): entradas mais antigas são removidas ao atingir max_size
+#   - TTL (Time-To-Live): dados expiram após 60s para garantir consistência
+#   - Invalidação por eventos: cada mutação (insert/delete) limpa o cache imediatamente
+#   - Warm-up (Eager Load): ao iniciar o servidor, pré-carrega o cache para eliminar latência inicial
+#   - Estatísticas: monitoramento de hits/misses em tempo real
 # =============================================================================
-CACHE_TTL_SECONDS = 60  # Dados ficam válidos por 60 segundos
+from collections import OrderedDict
 
-_expenses_cache: dict = {}  # { uid: { "data": [...], "expires_at": float } }
+CACHE_TTL_SECONDS = 60   # TTL: dados válidos por 60 segundos
+CACHE_MAX_SIZE    = 100  # LRU: máximo de entradas simultâneas na memória
 
-def cache_get(uid: str):
-    """Retorna dados do cache se ainda dentro do TTL (cache hit), ou None (cache miss)."""
-    entry = _expenses_cache.get(uid)
-    if entry and time.time() < entry["expires_at"]:
-        print(f"CACHE: HIT para uid={uid[:8]}... ({len(entry['data'])} registros)", flush=True)
-        return entry["data"]
-    print(f"CACHE: MISS para uid={uid[:8]}...", flush=True)
-    return None
+class LRUCache:
+    """Cache LRU com TTL e estatísticas de hit/miss."""
+    def __init__(self, max_size: int, ttl: int):
+        self.max_size = max_size
+        self.ttl = ttl
+        self._store: OrderedDict = OrderedDict()
+        self.hits = 0
+        self.misses = 0
 
-def cache_set(uid: str, data: list):
-    """Armazena dados no cache com TTL."""
-    _expenses_cache[uid] = {"data": data, "expires_at": time.time() + CACHE_TTL_SECONDS}
-    print(f"CACHE: SET para uid={uid[:8]}... TTL={CACHE_TTL_SECONDS}s", flush=True)
+    def get(self, key: str):
+        if key not in self._store:
+            self.misses += 1
+            print(f"CACHE MISS  | key={key[:16]} | hits={self.hits} misses={self.misses}", flush=True)
+            return None
+        data, expires_at = self._store[key]
+        if time.time() > expires_at:
+            del self._store[key]
+            self.misses += 1
+            print(f"CACHE EXPIR | key={key[:16]} (TTL expirado)", flush=True)
+            return None
+        # Move para o final (LRU: mais recente)
+        self._store.move_to_end(key)
+        self.hits += 1
+        print(f"CACHE HIT   | key={key[:16]} | {len(data)} registros | hits={self.hits}", flush=True)
+        return data
 
-def cache_invalidate(uid: str):
-    """Invalida o cache do usuário (chamado após qualquer mutação)."""
-    if uid in _expenses_cache:
-        del _expenses_cache[uid]
-        print(f"CACHE: INVALIDADO para uid={uid[:8]}...", flush=True)
+    def set(self, key: str, data):
+        if key in self._store:
+            self._store.move_to_end(key)
+        self._store[key] = (data, time.time() + self.ttl)
+        # LRU eviction: remove o mais antigo se ultrapassar o limite
+        if len(self._store) > self.max_size:
+            oldest_key, _ = self._store.popitem(last=False)
+            print(f"CACHE EVICT | LRU removeu key={oldest_key[:16]}", flush=True)
+        print(f"CACHE SET   | key={key[:16]} | TTL={self.ttl}s | size={len(self._store)}/{self.max_size}", flush=True)
 
-def cache_invalidate_all():
-    """Limpa todo o cache (usado no clear-all)."""
-    _expenses_cache.clear()
-    print("CACHE: TODOS OS REGISTROS INVALIDADOS", flush=True)
+    def invalidate_all(self):
+        count = len(self._store)
+        self._store.clear()
+        print(f"CACHE CLEAR | {count} entradas invalidadas", flush=True)
+
+    def stats(self):
+        total = self.hits + self.misses
+        ratio = (self.hits / total * 100) if total > 0 else 0
+        return {"hits": self.hits, "misses": self.misses, "hit_rate": f"{ratio:.1f}%", "size": len(self._store)}
+
+_cache = LRUCache(max_size=CACHE_MAX_SIZE, ttl=CACHE_TTL_SECONDS)
+
+# Atalhos para compatibilidade com o código existente
+def cache_get(key: str): return _cache.get(key)
+def cache_set(key: str, data): _cache.set(key, data)
+def cache_invalidate(key: str): _cache.invalidate_all()  # Simples: invalida tudo
+def cache_invalidate_all(): _cache.invalidate_all()
 
 app = FastAPI(
     title="SHARECOM API", 
@@ -62,6 +94,23 @@ app = FastAPI(
     redirect_slashes=True
 )
 app.include_router(export_router)
+
+@app.on_event("startup")
+async def warm_up_cache():
+    """
+    WARM-UP (Eager Load): pré-aquece o cache ao iniciar o servidor.
+    Elimina a penalidade de latência no primeiro acesso após reinicialização.
+    Estratégia: busca os 100 registros mais recentes e carrega no LRU cache.
+    """
+    try:
+        from database import SessionLocal
+        db = SessionLocal()
+        expenses = db.query(models.Expense).order_by(models.Expense.date.desc()).limit(100).all()
+        db.close()
+        cache_set("warmup:0:100", expenses)
+        print(f"CACHE WARM-UP | {len(expenses)} registros pré-carregados no LRU cache.", flush=True)
+    except Exception as e:
+        print(f"CACHE WARM-UP | Falhou (não crítico): {e}", flush=True)
 
 @app.middleware("http")
 async def log_requests(request, call_next):
@@ -71,6 +120,11 @@ async def log_requests(request, call_next):
 @app.get("/")
 def read_root():
     return {"status": "online", "message": "SHARECOM API is running successfully!", "debug": "v2-docker"}
+
+@app.get("/cache/stats")
+def get_cache_stats(_: dict = Depends(verify_firebase_token)):
+    """Retorna estatísticas do LRU cache (hit rate, misses, tamanho atual)."""
+    return _cache.stats()
 
 # os.makedirs("uploads", exist_ok=True)
 # app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads") # Removed for Read-and-Delete privacy policy
