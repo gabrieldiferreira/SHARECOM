@@ -9,6 +9,7 @@ import uuid
 import ocr_processor
 import hashlib
 import re
+import time
 from auth import verify_firebase_token
 
 from database import engine, get_db, Base
@@ -18,6 +19,42 @@ import schemas
 
 # Create tables
 Base.metadata.create_all(bind=engine)
+
+# =============================================================================
+# CACHE EM MEMÓRIA (chave-valor + TTL)
+# Padrão: cache hit -> retorna dados sem bater no DB
+#         cache miss -> busca no DB, armazena no cache
+#         invalidação -> ao inserir/deletar dados, limpa o cache do usuário
+# Ref: https://dev.to/reishenrique/cache-otimizando-desempenho-e-reduzindo-custos-na-sua-aplicacao-458o
+# =============================================================================
+CACHE_TTL_SECONDS = 60  # Dados ficam válidos por 60 segundos
+
+_expenses_cache: dict = {}  # { uid: { "data": [...], "expires_at": float } }
+
+def cache_get(uid: str):
+    """Retorna dados do cache se ainda dentro do TTL (cache hit), ou None (cache miss)."""
+    entry = _expenses_cache.get(uid)
+    if entry and time.time() < entry["expires_at"]:
+        print(f"CACHE: HIT para uid={uid[:8]}... ({len(entry['data'])} registros)", flush=True)
+        return entry["data"]
+    print(f"CACHE: MISS para uid={uid[:8]}...", flush=True)
+    return None
+
+def cache_set(uid: str, data: list):
+    """Armazena dados no cache com TTL."""
+    _expenses_cache[uid] = {"data": data, "expires_at": time.time() + CACHE_TTL_SECONDS}
+    print(f"CACHE: SET para uid={uid[:8]}... TTL={CACHE_TTL_SECONDS}s", flush=True)
+
+def cache_invalidate(uid: str):
+    """Invalida o cache do usuário (chamado após qualquer mutação)."""
+    if uid in _expenses_cache:
+        del _expenses_cache[uid]
+        print(f"CACHE: INVALIDADO para uid={uid[:8]}...", flush=True)
+
+def cache_invalidate_all():
+    """Limpa todo o cache (usado no clear-all)."""
+    _expenses_cache.clear()
+    print("CACHE: TODOS OS REGISTROS INVALIDADOS", flush=True)
 
 app = FastAPI(
     title="SHARECOM API", 
@@ -83,8 +120,17 @@ def read_expenses(
     db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
 ):
-    # Filter by user if multi-tenancy is implemented later
+    uid = user.get("uid", "anonymous")
+    cache_key = f"{uid}:{skip}:{limit}"
+
+    # CACHE HIT: retorna sem consultar o banco
+    cached = cache_get(cache_key)
+    if cached is not None:
+        return cached
+
+    # CACHE MISS: consulta o banco e armazena no cache
     expenses = db.query(models.Expense).order_by(models.Expense.date.desc()).offset(skip).limit(limit).all()
+    cache_set(cache_key, expenses)
     return expenses
 
 @app.post("/expenses", response_model=schemas.Expense)
@@ -323,6 +369,8 @@ async def process_ata(
     db.add(db_expense)
     db.commit()
     db.refresh(db_expense)
+    # Invalida cache pois um novo comprovante foi adicionado
+    cache_invalidate_all()
     
     return {
         "idempotent": False,
@@ -336,7 +384,7 @@ async def process_ata(
 def delete_expense(
     expense_id: int,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_firebase_token),
+    user: dict = Depends(verify_firebase_token),
 ):
     print(f"DEBUG: TENTANDO DELETAR ID: {expense_id}", flush=True)
     db_expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
@@ -345,6 +393,8 @@ def delete_expense(
         raise HTTPException(status_code=404, detail="Gasto não encontrado")
     db.delete(db_expense)
     db.commit()
+    # Invalida cache pois os dados mudaram
+    cache_invalidate_all()
     print(f"DEBUG: ID {expense_id} DELETADO COM SUCESSO.", flush=True)
     return {"message": "Deletado com sucesso"}
 
@@ -357,6 +407,8 @@ def clear_all_expenses(
     try:
         num_deleted = db.query(models.Expense).delete()
         db.commit()
+        # Invalida todo o cache
+        cache_invalidate_all()
         print(f"DEBUG: BANCO LIMPO. {num_deleted} registros removidos.", flush=True)
         return {"message": "Banco de dados resetado com sucesso"}
 
