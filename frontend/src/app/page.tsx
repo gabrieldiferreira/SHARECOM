@@ -213,12 +213,22 @@ function ExpenseTracker() {
     return [{ name: 'Diurno (6h-18h)', value: day }, { name: 'Noturno (18h-6h)', value: night }];
   }, [transactions]);
 
+  const categoriesData = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions.forEach(tx => {
+        if(tx.transaction_type === 'Outflow' && tx.total_amount) {
+            map[tx.category] = (map[tx.category] || 0) + (tx.total_amount || 0);
+        }
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
+  }, [transactions]);
+
   const institutionsData = useMemo(() => {
     const map: Record<string, number> = {};
     transactions.forEach(tx => {
         if(tx.transaction_type === 'Outflow' && tx.total_amount) {
             const inst = tx.destination_institution || 'Outros';
-            map[inst] = (map[inst] || 0) + tx.total_amount;
+            map[inst] = (map[inst] || 0) + (tx.total_amount || 0);
         }
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value).slice(0, 6);
@@ -227,7 +237,7 @@ function ExpenseTracker() {
   const topBeneficiary = useMemo(() => {
      const map: Record<string, number> = {};
      transactions.forEach(tx => {
-         if (tx.transaction_type === "Outflow") map[tx.merchant_name] = (map[tx.merchant_name] || 0) + 1;
+         if (tx.transaction_type === "Outflow" && tx.merchant_name) map[tx.merchant_name] = (map[tx.merchant_name] || 0) + 1;
      });
      let top = { name: "Nenhum", count: 0 };
      for(const [name, count] of Object.entries(map)) {
@@ -238,10 +248,17 @@ function ExpenseTracker() {
 
   const growthData = useMemo(() => {
      let current = 0;
-     const sorted = [...transactions].sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
+     const sorted = [...transactions]
+        .filter(tx => tx.transaction_date && !isNaN(new Date(tx.transaction_date).getTime()))
+        .sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
+     
      return sorted.map(tx => {
          current += (tx.transaction_type === 'Inflow' ? tx.total_amount : -tx.total_amount);
-         return { date: new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric' }).format(new Date(tx.transaction_date)), capital: current };
+         const date = new Date(tx.transaction_date);
+         return { 
+            date: new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric' }).format(date), 
+            capital: current 
+         };
      });
   }, [transactions]);
 
