@@ -18,12 +18,21 @@ import schemas
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-app = FastAPI(title="SHARECOM API", version="1.0.0")
+app = FastAPI(
+    title="SHARECOM API", 
+    version="1.0.0",
+    redirect_slashes=True
+)
 app.include_router(export_router)
+
+@app.middleware("http")
+async def log_requests(request, call_next):
+    print(f"DEBUG: Requisição recebida: {request.method} {request.url.path}")
+    return await call_next(request)
 
 @app.get("/")
 def read_root():
-    return {"status": "online", "message": "SHARECOM API is running successfully!"}
+    return {"status": "online", "message": "SHARECOM API is running successfully!", "debug": "v2-docker"}
 
 # os.makedirs("uploads", exist_ok=True)
 # app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads") # Removed for Read-and-Delete privacy policy
