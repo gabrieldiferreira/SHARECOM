@@ -521,7 +521,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                        <Link2 size={20} />
                     </div>
                     <div className="overflow-hidden flex-1">
-                       <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">Link Pronto para Processar</p>
+                       <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">Link Detectado</p>
                        <p className="text-[11px] font-mono truncate opacity-80" style={{ color: 'var(--text-primary)' }}>{pastedContent}</p>
                     </div>
                  </div>
