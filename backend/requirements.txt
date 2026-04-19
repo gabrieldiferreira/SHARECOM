@@ -78,7 +78,8 @@ PyJWT==2.12.1
 PyMuPDF==1.27.2.2
 pyparsing==3.3.2
 pytesseract==0.3.13
-python-bidi==0.6.7
+python-bidi==0.4.2
+psycopg2-binary==2.9.10
 python-dotenv==1.2.2
 python-multipart==0.0.26
 PyYAML==6.0.3
