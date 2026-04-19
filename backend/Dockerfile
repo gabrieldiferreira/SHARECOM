@@ -6,7 +6,7 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PORT=10000
 
-# Install system dependencies for OpenCV and EasyOCR
+# Install system dependencies for OpenCV, EasyOCR, and ReportLab
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     libgl1 \
@@ -14,6 +14,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libsm6 \
     libxext6 \
     libxrender1 \
+    libjpeg62-turbo \
+    zlib1g \
+    libfreetype6 \
     tesseract-ocr \
     tesseract-ocr-por \
     && apt-get clean \
