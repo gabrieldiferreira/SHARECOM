@@ -20,6 +20,22 @@ import schemas
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+# Auto-migration for Phase 3 columns (safely adds columns if they don't exist)
+try:
+    from sqlalchemy import text
+    with engine.begin() as conn:
+        try:
+            conn.execute(text("ALTER TABLE expenses ADD COLUMN is_deductible INTEGER DEFAULT 0"))
+        except Exception:
+            pass # column already exists
+        try:
+            conn.execute(text("ALTER TABLE expenses ADD COLUMN reimbursement_status VARCHAR DEFAULT 'None'"))
+        except Exception:
+            pass # column already exists
+        print("DEBUG: Auto-migration completed.", flush=True)
+except Exception as e:
+    print(f"DEBUG: Auto-migration error (ignored): {e}", flush=True)
+
 # =============================================================================
 # CACHE EM MEMÓRIA — LRU + TTL + STATS + WARM-UP
 # Estratégias aplicadas (ref: FasterCapital + dev.to/reishenrique):

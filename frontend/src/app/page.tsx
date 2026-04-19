@@ -317,6 +317,54 @@ function ExpenseTracker() {
      ].filter(w => w.value > 0 || w.name === 'Semana 1'); // Keep at least one
   }, [transactions]);
 
+  const taxesData = useMemo(() => {
+     let deductibleTotal = 0;
+     let deductibleCount = 0;
+     let potentialCount = 0;
+     
+     transactions.forEach(tx => {
+        if (tx.transaction_type === 'Outflow') {
+           if (tx.is_deductible) {
+              deductibleTotal += Number(tx.total_amount);
+              deductibleCount++;
+           } else if (tx.category === 'Saúde' || tx.category === 'Educação') {
+              potentialCount++;
+           }
+        }
+     });
+     return { total: deductibleTotal, count: deductibleCount, potential: potentialCount };
+  }, [transactions]);
+
+  const receivablesData = useMemo(() => {
+     let pending = 0;
+     let paid = 0;
+     let overdue = 0;
+
+     transactions.forEach(tx => {
+        if (tx.reimbursement_status === 'Pending') pending += Number(tx.total_amount);
+        else if (tx.reimbursement_status === 'Paid') paid += Number(tx.total_amount);
+        else if (tx.reimbursement_status === 'Overdue') overdue += Number(tx.total_amount);
+     });
+     return { pending, paid, overdue, total: pending + overdue };
+  }, [transactions]);
+
+  const aiInsights = useMemo(() => {
+      const insights = [];
+      if (categoriesData.length > 0) {
+         insights.push(`Sua maior despesa está sendo com ${categoriesData[0].name}. Uma redução de 20% aqui economizaria R$ ${(categoriesData[0].value * 0.2).toLocaleString('pt-BR', {minimumFractionDigits: 2})}.`);
+      }
+      if (receivablesData.total > 0) {
+         insights.push(`Você tem R$ ${receivablesData.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})} pendentes de reembolso. Lembre-se de cobrar!`);
+      }
+      if (taxesData.potential > 0) {
+         insights.push(`Existem ${taxesData.potential} comprovantes de Saúde/Educação que não estão marcados como dedutíveis para o IRPF.`);
+      }
+      if (insights.length === 0) {
+         insights.push("Continue registrando seus comprovantes para receber insights automáticos de economia.");
+      }
+      return insights;
+  }, [categoriesData, receivablesData, taxesData]);
+
   const CHART_COLORS = ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B', '#EC4899', '#6B7280'];
 
   const tooltipStyle = {
@@ -554,6 +602,24 @@ function ExpenseTracker() {
              </div>
              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{topBeneficiary.name}</p>
              <p className="text-label mt-0.5" style={{ color: 'var(--text-tertiary)' }}>{topBeneficiary.count} transferência(s)</p>
+          </div>
+
+          {/* AI Insights Card */}
+          <div className="p-4 rounded-lg border" style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)', borderColor: 'rgba(16, 185, 129, 0.2)' }}>
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-6 h-6 rounded-full flex items-center justify-center bg-emerald-500/20">
+                 <Award size={14} style={{ color: 'var(--accent-green)' }} />
+              </div>
+              <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>AI Insights</h2>
+            </div>
+            <ul className="space-y-2">
+               {aiInsights.map((insight, idx) => (
+                 <li key={idx} className="text-sm flex gap-2" style={{ color: 'var(--text-secondary)' }}>
+                    <span style={{ color: 'var(--accent-green)' }}>•</span>
+                    {insight}
+                 </li>
+               ))}
+            </ul>
           </div>
 
           <div className="flex items-center justify-between px-1">
@@ -803,14 +869,87 @@ function ExpenseTracker() {
         </div>
       )}
 
-      {/* Placeholders for future phases */}
-      {["taxes", "receivables"].includes(activeTab) && (
-        <div className="p-12 text-center rounded-xl border border-dashed" style={{ borderColor: 'var(--ds-border)', backgroundColor: 'var(--bg-secondary)' }}>
-           <Loader2 size={32} className="mx-auto mb-4 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-           <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--text-primary)' }}>Fase 3 em Desenvolvimento</h3>
-           <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
-             Este dashboard faz parte da Fase 3 do plano de implementação. Estamos finalizando as adaptações no banco de dados para suportar a lógica de deduções e contas a receber.
-           </p>
+      {activeTab === "taxes" && (
+        <div className="max-w-4xl mx-auto space-y-6">
+           <div className="flex items-center gap-2 mb-4">
+             <Landmark size={20} style={{ color: 'var(--accent-blue)' }} />
+             <h2 className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Imposto de Renda (IRPF)</h2>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="p-6 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', borderLeft: '4px solid var(--accent-blue)' }}>
+                 <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Despesas Dedutíveis (Total)</p>
+                 <p className="text-3xl font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>R$ {taxesData.total.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                 <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>{taxesData.count} comprovante(s) marcados.</p>
+              </div>
+
+              {taxesData.potential > 0 && (
+                <div className="p-6 rounded-lg" style={{ backgroundColor: 'rgba(245, 158, 11, 0.05)', border: '0.5px solid rgba(245, 158, 11, 0.2)' }}>
+                   <p className="text-sm font-medium mb-1" style={{ color: '#F59E0B' }}>Atenção: Deduções Pendentes</p>
+                   <p className="text-sm mt-2" style={{ color: 'var(--text-secondary)' }}>Você tem <strong>{taxesData.potential}</strong> comprovante(s) de Saúde ou Educação que não estão marcados como dedutíveis. Verifique e marque para não perder a dedução.</p>
+                </div>
+              )}
+           </div>
+
+           <div className="mt-8">
+             <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>Comprovantes Dedutíveis</h3>
+             <div className="space-y-2">
+                {transactions.filter(tx => tx.is_deductible).map(tx => (
+                   <div key={tx.id} className="p-3 rounded-lg flex justify-between items-center" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                     <div>
+                       <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{tx.merchant_name}</p>
+                       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{tx.category} • {formatDate(tx.transaction_date)}</p>
+                     </div>
+                     <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>R$ {tx.total_amount.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                   </div>
+                ))}
+                {taxesData.count === 0 && (
+                   <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Nenhum comprovante marcado como dedutível ainda.</p>
+                )}
+             </div>
+           </div>
+        </div>
+      )}
+
+      {activeTab === "receivables" && (
+        <div className="max-w-4xl mx-auto space-y-6">
+           <div className="flex items-center gap-2 mb-4">
+             <Clock size={20} style={{ color: 'var(--accent-green)' }} />
+             <h2 className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Reembolsos & Contas a Receber</h2>
+           </div>
+
+           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="p-5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                 <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Pendente</p>
+                 <p className="text-2xl font-bold tabular-nums" style={{ color: '#F59E0B' }}>R$ {receivablesData.pending.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+              </div>
+              <div className="p-5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                 <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Atrasado</p>
+                 <p className="text-2xl font-bold tabular-nums" style={{ color: '#EF4444' }}>R$ {receivablesData.overdue.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+              </div>
+              <div className="p-5 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                 <p className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Recebido</p>
+                 <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--accent-green)' }}>R$ {receivablesData.paid.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+              </div>
+           </div>
+
+           <div className="mt-8">
+             <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-primary)' }}>Registros de Reembolso</h3>
+             <div className="space-y-2">
+                {transactions.filter(tx => ['Pending', 'Paid', 'Overdue'].includes(tx.reimbursement_status || '')).map(tx => (
+                   <div key={tx.id} className="p-3 rounded-lg flex justify-between items-center" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                     <div>
+                       <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{tx.merchant_name}</p>
+                       <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{tx.reimbursement_status === 'Paid' ? 'Recebido' : (tx.reimbursement_status === 'Overdue' ? 'Atrasado' : 'Pendente')} • {formatDate(tx.transaction_date)}</p>
+                     </div>
+                     <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>R$ {tx.total_amount.toLocaleString('pt-BR', {minimumFractionDigits:2})}</p>
+                   </div>
+                ))}
+                {receivablesData.total === 0 && receivablesData.paid === 0 && (
+                   <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Nenhum reembolso ou conta a receber registrado.</p>
+                )}
+             </div>
+           </div>
         </div>
       )}
 

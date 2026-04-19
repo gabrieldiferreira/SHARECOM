@@ -20,6 +20,8 @@ class Expense(Base):
     transaction_id = Column(String, unique=True, index=True)
     masked_cpf = Column(String)
     note = Column(String, nullable=True) # User provided notes
+    is_deductible = Column(Integer, default=0) # 0 for False, 1 for True (SQLite/Postgres friendly)
+    reimbursement_status = Column(String, default="None") # "None", "Pending", "Paid", "Overdue"
 
 class PatternLog(Base):
     __tablename__ = "pattern_logs"

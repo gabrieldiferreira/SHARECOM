@@ -142,6 +142,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
                 masked_cpf: item.masked_cpf || undefined,
                 is_synced: true,
                 note: item.note || undefined,
+                is_deductible: item.is_deductible === 1 || item.is_deductible === true,
+                reimbursement_status: item.reimbursement_status || 'None',
               });
             }
             await txSet.done;
