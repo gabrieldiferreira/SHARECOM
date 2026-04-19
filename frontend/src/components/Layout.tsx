@@ -14,7 +14,7 @@ import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { addTransaction, pendingNote, setPendingNote } = useTransactionStore();
+  const { addTransaction, syncWithBackend, pendingNote, setPendingNote } = useTransactionStore();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [lastAdded, setLastAdded] = useState<{ amount: number, merchant: string } | null>(null);
@@ -200,6 +200,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
 
         await addTransaction(newTx);
+        await syncWithBackend(); // Força re-sync com o backend para atualizar os dashboards
         setLastAdded({ amount: newTx.total_amount, merchant: newTx.merchant_name });
         setUploadSuccess(true);
         setTimeout(() => {
