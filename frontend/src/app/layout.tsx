@@ -4,6 +4,7 @@ import "./globals.css";
 import Layout from "@/components/Layout";
 import AuthGate from "@/components/AuthGate";
 import ErrorSentinel from "@/components/ErrorSentinel";
+import InstallPrompt from "@/components/InstallPrompt";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
@@ -45,6 +46,7 @@ export default function RootLayout({
           <AuthGate>
             <Layout>{children}</Layout>
           </AuthGate>
+          <InstallPrompt />
         </ErrorSentinel>
       </body>
     </html>

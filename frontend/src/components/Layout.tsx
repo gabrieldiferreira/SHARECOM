@@ -85,6 +85,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }, []);
 
+  React.useEffect(() => {
+    const handleShareTarget = async () => {
+      const searchParams = new URLSearchParams(window.location.search);
+      if (searchParams.get("share-target")) {
+        try {
+          // Busca o arquivo no cache do Service Worker
+          const cache = await caches.open('shared-files');
+          const response = await cache.match('/api/shared-file-tmp');
+          
+          if (response) {
+            const blob = await response.blob();
+            const file = new File([blob], `shared-receipt-${Date.now()}.jpg`, { type: blob.type });
+            
+            // Define o arquivo e mostra o modal
+            setSelectedFile(file);
+            setShowModal(true);
+            
+            // Limpa o cache
+            await cache.delete('/api/shared-file-tmp');
+            
+            // Limpa a URL sem recarregar a página
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, '', newUrl);
+          }
+        } catch (err) {
+          console.error("Erro ao recuperar arquivo compartilhado:", err);
+        }
+      }
+    };
+
+    handleShareTarget();
+  }, [pathname]);
+
   const handleFileSelection = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
