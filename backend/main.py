@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List
 import os
 import uuid
-# import ai_agent # Removed as requested
+import ai_agent
 import hashlib
 from auth import verify_firebase_token
 
@@ -122,15 +122,24 @@ async def process_ata(
             }
         }
     
-    # AI Disabled: Return defaults for manual entry
-    extracted_data = {
-        "total_amount": 0.0,
-        "smart_category": "Outros",
-        "merchant_name": "Pendente",
-        "transaction_date": schemas.datetime.now().isoformat(),
-        "needs_manual_review": True
-    }
-    date_obj = schemas.datetime.now()
+    # Process the document via Local OCR (RegEx best effort)
+    ext = os.path.splitext(received_file.filename)[1] or ".jpg"
+    extracted_data = await run_in_threadpool(ai_agent.extract_transaction_data, content, ext)
+    
+    # If RegEx fails to find even the amount, we set a default
+    if extracted_data.get("total_amount", 0) == 0:
+        extracted_data["merchant_name"] = "Pendente (Não lido)"
+        extracted_data["needs_manual_review"] = True
+    
+    # Convert extracted date string to Python datetime object
+    date_val = extracted_data.get("transaction_date")
+    if date_val:
+        try:
+            date_obj = schemas.datetime.fromisoformat(date_val.replace(" ", "T"))
+        except (ValueError, TypeError):
+            date_obj = schemas.datetime.now()
+    else:
+        date_obj = schemas.datetime.now()
 
     # Save to database immediately after extraction to ensure zero data loss
     db_expense = models.Expense(
