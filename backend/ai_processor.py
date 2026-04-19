@@ -6,12 +6,17 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-MODEL_ID = "google/gemini-2.0-flash-exp:free"
+MODEL_LIST = [
+    "google/gemini-2.0-flash-001",
+    "google/gemini-2.0-flash-exp:free",
+    "meta-llama/llama-3.2-11b-vision-instruct:free",
+    "google/gemini-2.0-pro-exp-02-05:free"
+]
 
 async def analyze_receipt_with_ai(image_content: bytes, extension: str):
     """
-    Envia a imagem para o OpenRouter (Gemini) para extrair os dados iniciais
-    e mapear o padrão do comprovante.
+    Envia a imagem para o OpenRouter tentando vários modelos de visão
+    em sequência caso o primeiro falhe.
     """
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
@@ -36,54 +41,64 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str):
     Retorne APENAS o JSON, sem explicações.
     """
 
-    try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            response = await client.post(
-                "https://openrouter.ai/api/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json",
-                    "HTTP-Referer": "https://sharecom.app", # Requisito do OpenRouter para alguns modelos
-                    "X-Title": "SHARECOM AI"
-                },
-                json={
-                    "model": MODEL_ID,
-                    "messages": [
-                        {
-                            "role": "user",
-                            "content": [
-                                {"type": "text", "text": prompt},
-                                {
-                                    "type": "image_url",
-                                    "image_url": {
-                                        "url": f"data:{mime_type};base64,{base64_image}"
+    last_error = "Nenhum modelo disponível"
+    
+    for model_id in MODEL_LIST:
+        print(f"DEBUG: Tentando IA com o modelo: {model_id}...", flush=True)
+        try:
+            async with httpx.AsyncClient(timeout=45.0) as client:
+                response = await client.post(
+                    "https://openrouter.ai/api/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {api_key}",
+                        "Content-Type": "application/json",
+                        "HTTP-Referer": "https://sharecom.app",
+                        "X-Title": "SHARECOM AI"
+                    },
+                    json={
+                        "model": model_id,
+                        "messages": [
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": prompt},
+                                    {
+                                        "type": "image_url",
+                                        "image_url": {
+                                            "url": f"data:{mime_type};base64,{base64_image}"
+                                        }
                                     }
-                                }
-                            ]
-                        }
-                    ]
-                }
-            )
-            
-            if response.status_code == 200:
-                result = response.json()
-                if 'choices' not in result or not result['choices']:
-                    return None, f"Resposta vazia da IA: {json.dumps(result)}"
+                                ]
+                            }
+                        ]
+                    }
+                )
                 
-                content = result['choices'][0]['message']['content']
-                clean_json = content.replace("```json", "").replace("```", "").strip()
-                try:
-                    return json.loads(clean_json), None
-                except:
-                    return None, f"JSON Inválido retornado pela IA: {content[:100]}"
-            
-            elif response.status_code == 401:
-                return None, "Chave de API do OpenRouter inválida ou expirada."
-            elif response.status_code == 429:
-                return None, "Limite de requisições do OpenRouter atingido (Rate Limit)."
-            else:
-                return None, f"Erro {response.status_code}: {response.text[:200]}"
-    except httpx.TimeoutException:
-        return None, "Tempo esgotado ao contatar a IA (Timeout de 45s)."
-    except Exception as e:
-        return None, f"Erro inesperado na IA: {str(e)}"
+                if response.status_code == 200:
+                    result = response.json()
+                    if 'choices' not in result or not result['choices']:
+                        last_error = f"Resposta vazia de {model_id}"
+                        continue
+                    
+                    content = result['choices'][0]['message']['content']
+                    clean_json = content.replace("```json", "").replace("```", "").strip()
+                    try:
+                        data = json.loads(clean_json)
+                        print(f"DEBUG: Sucesso com o modelo {model_id}!", flush=True)
+                        return data, None
+                    except:
+                        last_error = f"JSON Inválido de {model_id}"
+                        continue
+                
+                elif response.status_code == 404:
+                    last_error = f"Modelo {model_id} não encontrado (404)"
+                    continue
+                else:
+                    last_error = f"Erro {response.status_code} em {model_id}: {response.text[:100]}"
+                    continue
+                    
+        except Exception as e:
+            last_error = f"Erro inesperado em {model_id}: {str(e)}"
+            continue
+
+    return None, f"Todos os modelos falharam. Último erro: {last_error}"
