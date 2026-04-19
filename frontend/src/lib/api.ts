@@ -17,14 +17,15 @@ export const SERVER_API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export const getApiUrl = (path: string) => {
-  const base = API_BASE_URL || "http://localhost:8000";
+  const base = (API_BASE_URL || FALLBACK_CLIENT_API_BASE_URL).replace(/\/$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
   return `${base}${cleanPath}`;
 };
 
 export const getServerApiUrl = (path: string) => {
+  const base = (SERVER_API_BASE_URL || FALLBACK_SERVER_API_BASE_URL).replace(/\/$/, "");
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
-  return `${SERVER_API_BASE_URL}${cleanPath}`;
+  return `${base}${cleanPath}`;
 };
 
 export const getUploadUrl = (filename: string) => {
