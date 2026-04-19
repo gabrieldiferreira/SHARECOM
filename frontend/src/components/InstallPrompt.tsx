@@ -79,7 +79,7 @@ export default function InstallPrompt() {
         >
           <ChevronLeft size={16} className={`transition-transform duration-300 ${isExpanded ? 'rotate-180' : ''}`} />
           <div className="[writing-mode:vertical-lr] text-[10px] font-bold tracking-widest uppercase">
-            {deferredPrompt ? 'INSTALAR' : 'AJUDA'}
+            {deferredPrompt ? 'INSTALAR' : 'APP'}
           </div>
         </button>
 
