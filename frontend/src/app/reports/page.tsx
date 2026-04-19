@@ -206,7 +206,7 @@ export default function ReportsPage() {
   const tooltipStyle = { backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", fontSize: "12px" };
 
   return (
-    <div className="p-4 md:p-6 space-y-5 font-sans" style={{ maxWidth: "100%" }}>
+    <div className="p-4 md:p-6 space-y-5 font-sans overflow-x-hidden" style={{ maxWidth: "100vw" }}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>

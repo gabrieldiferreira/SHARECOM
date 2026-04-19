@@ -114,72 +114,73 @@ async def process_ata(
     sha256_hash = ""
     ext = ".txt"
     filename = "text_note.txt"
+    tmp_file_path = None  # Caminho do arquivo temporário (para limpeza posterior)
 
     if received_file and received_file.filename:
         filename = received_file.filename
         content = await received_file.read()
         sha256_hash = hashlib.sha256(content).hexdigest()
-        ext = os.path.splitext(filename)[1] or ".jpg"
+        ext = os.path.splitext(filename)[1].lower() or ".jpg"
+
     elif receipt_url and receipt_url.strip().startswith("http"):
-        # Campo dedicado de URL: tenta baixar a imagem/PDF
         import httpx
         clean_url = receipt_url.strip()
         try:
             print(f"DEBUG: Baixando URL: {clean_url}", flush=True)
-            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+            async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
                 download_resp = await client.get(
                     clean_url,
-                    headers={"User-Agent": "Mozilla/5.0 (compatible; SHARECOM-Bot/1.0)"}
+                    headers={"User-Agent": "Mozilla/5.0 (Linux; Android 11; Mobile) AppleWebKit/537.36 Chrome/120.0 SHARECOM-Bot/2.0"}
                 )
-                content_type = download_resp.headers.get("content-type", "")
-                print(f"DEBUG: Status={download_resp.status_code}, Content-Type={content_type}", flush=True)
+                content_type = download_resp.headers.get("content-type", "").lower()
+                print(f"DEBUG: Status={download_resp.status_code} | Content-Type={content_type} | Bytes={len(download_resp.content)}", flush=True)
 
-                if download_resp.status_code == 200:
-                    # Rejeita HTML — provavelmente página de login ou erro
-                    if "text/html" in content_type:
-                        print("DEBUG: URL retornou HTML (página protegida ou redirect). Usando URL como texto.", flush=True)
-                        # Tenta extrair texto da página HTML como último recurso
-                        content = download_resp.content
-                        sha256_hash = hashlib.sha256(content).hexdigest()
-                        ext = ".html"
-                        filename = "downloaded_page.html"
-                    elif "pdf" in content_type:
-                        content = download_resp.content
-                        sha256_hash = hashlib.sha256(content).hexdigest()
-                        ext = ".pdf"
-                        filename = clean_url.split("/")[-1].split("?")[0] or "comprovante.pdf"
-                        print(f"DEBUG: PDF baixado com sucesso ({len(content)} bytes).", flush=True)
-                    elif any(img in content_type for img in ["image/jpeg", "image/png", "image/webp", "image/gif"]):
-                        content = download_resp.content
-                        sha256_hash = hashlib.sha256(content).hexdigest()
-                        if "png" in content_type: ext = ".png"
-                        elif "webp" in content_type: ext = ".webp"
-                        else: ext = ".jpg"
-                        filename = clean_url.split("/")[-1].split("?")[0] or f"imagem{ext}"
-                        print(f"DEBUG: Imagem baixada com sucesso ({len(content)} bytes).", flush=True)
-                    else:
-                        # Tipo desconhecido — tenta inferir pela URL
-                        url_lower = clean_url.lower()
-                        if ".pdf" in url_lower: ext = ".pdf"
-                        elif ".png" in url_lower: ext = ".png"
-                        elif ".webp" in url_lower: ext = ".webp"
-                        else: ext = ".jpg"
-                        content = download_resp.content
-                        sha256_hash = hashlib.sha256(content).hexdigest()
-                        filename = clean_url.split("/")[-1].split("?")[0] or f"arquivo{ext}"
-                        print(f"DEBUG: Tipo de conteúdo desconhecido ({content_type}). Tentando como {ext}.", flush=True)
+                if download_resp.status_code != 200:
+                    raise ValueError(f"HTTP {download_resp.status_code} ao baixar URL")
+
+                # Determina extensão pelo Content-Type (mais confiável que a URL)
+                if "pdf" in content_type:
+                    ext = ".pdf"
+                elif "png" in content_type:
+                    ext = ".png"
+                elif "webp" in content_type:
+                    ext = ".webp"
+                elif "gif" in content_type:
+                    ext = ".gif"
+                elif "jpeg" in content_type or "jpg" in content_type:
+                    ext = ".jpg"
+                elif "html" in content_type:
+                    ext = ".html"
                 else:
-                    print(f"DEBUG: Falha ao baixar URL (status {download_resp.status_code}). Usando URL como texto.", flush=True)
-                    content = clean_url.encode('utf-8')
-                    sha256_hash = hashlib.sha256(content).hexdigest()
-                    ext = ".txt"
+                    # Fallback: infere pela URL
+                    url_path = clean_url.lower().split("?")[0]
+                    if url_path.endswith(".pdf"): ext = ".pdf"
+                    elif url_path.endswith(".png"): ext = ".png"
+                    elif url_path.endswith(".webp"): ext = ".webp"
+                    else: ext = ".jpg"
+                    print(f"DEBUG: Content-Type desconhecido, inferido como {ext} pela URL.", flush=True)
+
+                content = download_resp.content
+                sha256_hash = hashlib.sha256(content).hexdigest()
+                filename = clean_url.split("/")[-1].split("?")[0] or f"comprovante{ext}"
+
+                # === SALVA ARQUIVO TEMPORÁRIO EM DISCO ===
+                # O EasyOCR é mais confiável lendo de arquivo do que de bytes em memória
+                if ext not in (".html", ".txt"):
+                    tmp_dir = "/tmp/sharecom"
+                    os.makedirs(tmp_dir, exist_ok=True)
+                    tmp_file_path = os.path.join(tmp_dir, f"{uuid.uuid4()}{ext}")
+                    with open(tmp_file_path, "wb") as f:
+                        f.write(content)
+                    print(f"DEBUG: Arquivo temporário salvo: {tmp_file_path} ({len(content)/1024:.1f} KB)", flush=True)
+
         except Exception as e:
-            print(f"DEBUG: Exceção ao baixar URL: {e}. Usando URL como texto.", flush=True)
+            print(f"DEBUG: Falha ao baixar URL: {e}. Tratando a URL como texto simples.", flush=True)
             content = clean_url.encode('utf-8')
             sha256_hash = hashlib.sha256(content).hexdigest()
             ext = ".txt"
+
     elif note:
-        # Texto puro como fonte
         content = note.encode('utf-8')
         sha256_hash = hashlib.sha256(content).hexdigest()
         filename = "note_comprovante.txt"
@@ -189,6 +190,9 @@ async def process_ata(
     # Check for idempotency
     existing_expense = db.query(models.Expense).filter(models.Expense.receipt == sha256_hash).first()
     if existing_expense:
+        # Limpa arquivo temporário antes de retornar
+        if tmp_file_path and os.path.exists(tmp_file_path):
+            os.remove(tmp_file_path)
         return {
             "idempotent": True,
             "ai_data": {
@@ -201,31 +205,43 @@ async def process_ata(
             "database_id": existing_expense.id
         }
     
-    # Process Data
-    extracted_data = {
-        "total_amount": 0.0,
-        "merchant_name": "Processando...",
-        "smart_category": "Outros",
-        "transaction_date": None
-    }
     raw_text = note or ""
-    structural_map = ""
+    extracted_data = None
+    ai_error = None
 
-    # Extração via OCR Local (Reforço)
-    import ocr_processor
-    ocr_fallback_data, raw_text = ocr_processor.extract_transaction_data(content, ext)
-    
-    # 3. Análise IA (Vision) com apoio do OCR
-    from ai_processor import analyze_receipt_with_ai
-    extracted_data, ai_error = await analyze_receipt_with_ai(content, ext, ocr_text=raw_text)
-    
-    if extracted_data is None:
-        # Se a IA falhou, usamos o OCR puro como fallback (plano B)
-        extracted_data = ocr_fallback_data
-        print(f"DEBUG: IA falhou ({ai_error}). Usando OCR de fallback.", flush=True)
-    
-    if not extracted_data:
-        extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
+    try:
+        # ======================================================
+        # ETAPA 1: OCR Local (EasyOCR + RegEx)
+        # Usa o arquivo em disco se disponível (mais confiável)
+        # ======================================================
+        import ocr_processor
+        ocr_fallback_data, raw_text = ocr_processor.extract_transaction_data(
+            content, ext, file_path=tmp_file_path
+        )
+        print(f"DEBUG: OCR concluído. Texto extraído ({len(raw_text)} chars)", flush=True)
+
+        # ======================================================
+        # ETAPA 2: Análise IA (Vision + OCR como contexto)
+        # ======================================================
+        from ai_processor import analyze_receipt_with_ai
+        extracted_data, ai_error = await analyze_receipt_with_ai(
+            content, ext, ocr_text=raw_text
+        )
+
+        if extracted_data is None:
+            extracted_data = ocr_fallback_data
+            print(f"DEBUG: IA falhou ({ai_error}). Usando OCR de fallback.", flush=True)
+
+        if not extracted_data:
+            extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
+
+    finally:
+        # ======================================================
+        # ETAPA 3: Limpeza — deleta arquivo temporário (Read-and-Destroy)
+        # ======================================================
+        if tmp_file_path and os.path.exists(tmp_file_path):
+            os.remove(tmp_file_path)
+            print(f"DEBUG: Arquivo temporário deletado: {tmp_file_path}", flush=True)
 
     # Save to database
     import json

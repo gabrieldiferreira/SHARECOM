@@ -1,20 +1,15 @@
 {
-  "name": "SHARECOM",
+  "name": "SHARECOM - Comprovantes",
   "short_name": "SHARECOM",
-  "theme_color": "#020617",
-  "background_color": "#020617",
+  "theme_color": "#3B82F6",
+  "background_color": "#111827",
   "display": "standalone",
   "orientation": "portrait",
-  "id": "/sharecom-pwa",
+  "id": "/",
   "scope": "/",
-  "start_url": "/?utm_source=pwa",
+  "start_url": "/",
+  "lang": "pt-BR",
   "icons": [
-    {
-      "src": "/icon-192x192.png",
-      "sizes": "192x192",
-      "type": "image/png",
-      "purpose": "maskable"
-    },
     {
       "src": "/icon-192x192.png",
       "sizes": "192x192",
@@ -26,6 +21,12 @@
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
+    },
+    {
+      "src": "/icon-512x512-maskable.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ],
   "screenshots": [
@@ -33,28 +34,22 @@
       "src": "/screenshot-desktop.png",
       "sizes": "1339x997",
       "type": "image/png",
-      "form_factor": "wide"
+      "form_factor": "wide",
+      "label": "SHARECOM Dashboard Desktop"
     },
     {
       "src": "/screenshot-mobile.png",
       "sizes": "500x699",
-      "type": "image/png"
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "SHARECOM Dashboard Mobile"
     }
   ],
-  "description": "Scanner inteligente de comprovantes em PDF e Imagem",
+  "description": "Gerencie e digitalize seus comprovantes financeiros com IA",
   "categories": ["finance", "productivity"],
-  "file_handlers": [
-    {
-      "action": "/api/share",
-      "accept": {
-        "image/*": [".jpg", ".jpeg", ".png"],
-        "application/pdf": [".pdf"]
-      }
-    }
-  ],
   "shortcuts": [
     {
-      "name": "Escanear Recibo",
+      "name": "Escanear Comprovante",
       "short_name": "Scanner",
       "description": "Abrir o scanner de comprovantes",
       "url": "/scanner",
@@ -79,7 +74,7 @@
       "files": [
         {
           "name": "receipt",
-          "accept": ["image/*", "application/pdf", ".pdf", "text/plain", "text/html"]
+          "accept": ["image/*", "application/pdf"]
         }
       ]
     }

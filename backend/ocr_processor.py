@@ -54,26 +54,41 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
 
     return "image", file_bytes
 
-def _extract_text_easyocr(image_bytes: bytes) -> str:
-    print(f"DEBUG: Iniciando EasyOCR. Tamanho da imagem: {len(image_bytes)} bytes")
+def _extract_text_easyocr(image_bytes: bytes, file_path: str = None) -> str:
+    """Extrai texto da imagem usando EasyOCR.
+    Prefere ler de arquivo em disco (mais confiável) quando file_path é fornecido.
+    """
     reader = get_easyocr_reader()
     if not reader:
         print("DEBUG: ERRO - Falha ao obter o reader do EasyOCR.")
         return ""
     try:
-        import numpy as np
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        print(f"DEBUG: Imagem carregada com sucesso ({image.width}x{image.height})")
-        result = reader.readtext(np.array(image), detail=0)
+        if file_path and os.path.exists(file_path):
+            # Leitura direta do arquivo — mais estavel para imagens baixadas da web
+            print(f"DEBUG: EasyOCR lendo de arquivo: {file_path}")
+            result = reader.readtext(file_path, detail=0)
+        else:
+            # Fallback: leitura de bytes em memória
+            import numpy as np
+            print(f"DEBUG: EasyOCR lendo de bytes ({len(image_bytes)} bytes)")
+            image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+            result = reader.readtext(np.array(image), detail=0)
         text = "\n".join(result)
-        print(f"DEBUG: OCR concluído. Caracteres extraídos: {len(text)}")
+        print(f"DEBUG: EasyOCR concluído. Caracteres: {len(text)}")
         return text
     except Exception as e:
         print(f"DEBUG: ERRO no EasyOCR: {e}")
         return ""
 
-def extract_transaction_data(file_bytes: bytes, extension: str) -> dict:
-    print(f"DEBUG: [ocr_processor] Entrou na função de extração. Extensão: {extension}", flush=True)
+def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str = None) -> dict:
+    """Extrai dados de transação do conteúdo fornecido.
+    
+    Args:
+        file_bytes: Conteúdo do arquivo em memória
+        extension: Extensão do arquivo (.jpg, .png, .pdf, .html, .txt)
+        file_path: Caminho opcional para arquivo em disco (preferido para imagens da web)
+    """
+    print(f"DEBUG: [ocr_processor] Extensão: {extension} | Arquivo em disco: {file_path}", flush=True)
     fallback_data = {
         "total_amount": 0.0,
         "currency": "BRL",
@@ -93,7 +108,8 @@ def extract_transaction_data(file_bytes: bytes, extension: str) -> dict:
 
         raw_text = ""
         if input_kind == "image":
-            raw_text = _extract_text_easyocr(prepared_input)
+            # Passa o file_path para o EasyOCR preferir leitura de disco
+            raw_text = _extract_text_easyocr(prepared_input, file_path=file_path)
         elif input_kind == "pdf_text":
             raw_text = prepared_input
 
