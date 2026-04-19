@@ -18,6 +18,13 @@ backend/uploads/
 backend/unidoc-*-firebase-adminsdk-*.json
 unidoc-*-firebase-adminsdk-*.json
 
+# Permitir arquivos de configuração essenciais
+!package.json
+!frontend/package.json
+!frontend/package-lock.json
+!frontend/tsconfig.json
+!frontend/public/manifest.json
+
 # IDE e Sistema Operacional
 .vscode/
 .idea/
