@@ -8,26 +8,31 @@ export default function InstallPrompt() {
   const [isVisible, setIsVisible] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isInstalling, setIsInstalling] = useState(false);
+  const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
-    // 1. Verifica se já está instalado para não mostrar nada
+    // 1. Verifica se já está instalado
     const checkInstalled = () => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
       if (isStandalone) {
         setIsVisible(false);
       } else {
-        // Se não for standalone, mostra a etiqueta após 1.5s
         setTimeout(() => setIsVisible(true), 1500);
       }
     };
 
     checkInstalled();
 
-    // 2. Captura o evento nativo de instalação do navegador
+    // 2. Se em 10 segundos o Chrome não liberar, ativa o modo manual
+    const manualTimer = setTimeout(() => {
+      if (!deferredPrompt) setShowManual(true);
+    }, 10000);
+
     const handler = (e: any) => {
       console.log("SHARECOM: Sistema de instalação pronto! ✅");
       e.preventDefault();
       setDeferredPrompt(e);
+      setShowManual(false); // Desativa modo manual se o nativo chegar
     };
 
     window.addEventListener("beforeinstallprompt", handler);
@@ -105,7 +110,7 @@ export default function InstallPrompt() {
           <div className="text-center">
             <p className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>SHARECOM</p>
             <p className="text-[9px]" style={{ color: 'var(--text-secondary)' }}>
-              {deferredPrompt ? 'Pronto para instalar' : 'Aguardando navegador...'}
+              {deferredPrompt ? 'Pronto para instalar' : showManual ? 'Instalação Manual' : 'Preparando...'}
             </p>
           </div>
 
@@ -113,7 +118,7 @@ export default function InstallPrompt() {
             onClick={handleInstall}
             disabled={isInstalling}
             className={`w-full py-2 text-white text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
-              deferredPrompt 
+              deferredPrompt || showManual
                 ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95' 
                 : 'bg-slate-600 opacity-70 cursor-not-allowed'
             }`}
@@ -123,7 +128,7 @@ export default function InstallPrompt() {
             ) : (
               <>
                 <Download size={12} />
-                {deferredPrompt ? 'INSTALAR AGORA' : 'PREPARANDO...'}
+                {deferredPrompt ? 'INSTALAR AGORA' : showManual ? 'COMO INSTALAR?' : 'AGUARDE...'}
               </>
             )}
           </button>
