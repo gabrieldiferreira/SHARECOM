@@ -29,10 +29,10 @@ interface SharecomDB extends DBSchema {
 let dbPromise: Promise<IDBPDatabase<SharecomDB>> | null = null;
 
 export function getDB() {
-  if (typeof window === 'undefined') return null; // Prevent SSR errors
+  if (typeof window === 'undefined') return null;
   
   if (!dbPromise) {
-    dbPromise = openDB<SharecomDB>('sharecom-db', 2, {
+    dbPromise = openDB<SharecomDB>('sharecom-db', 3, {
       upgrade(db, oldVersion, newVersion, transaction) {
         if (oldVersion < 1) {
           const store = db.createObjectStore('transactions', {
@@ -42,9 +42,12 @@ export function getDB() {
           store.createIndex('by-date', 'transaction_date');
           store.createIndex('by-hash', 'receipt_hash', { unique: true });
         }
-        if (oldVersion < 2) {
-            // New fields are just properties, no new indexes needed right now, 
-            // but we bump the version to recreate the connection smoothly.
+        if (oldVersion < 3) {
+          // v3: Corrige mapeamento errado dos campos vindos do backend.
+          // Limpa o cache local — dados corretos são re-baixados via syncWithBackend.
+          if (db.objectStoreNames.contains('transactions')) {
+            transaction.objectStore('transactions').clear();
+          }
         }
       },
     });
