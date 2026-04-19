@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 export default function SettingsPage() {
   return (
     <div className="p-6 h-full flex flex-col items-center justify-center text-center">
@@ -8,7 +10,7 @@ export default function SettingsPage() {
       <p className="text-label max-w-sm mb-6" style={{ color: 'var(--text-secondary)' }}>
         Configurações do sistema, exportação de dados e preferências chegarão na próxima atualização.
       </p>
-      <a href="/" className="px-5 py-2.5 text-sm font-medium text-white transition-colors" style={{ backgroundColor: '#3B82F6', borderRadius: '6px' }}>Voltar ao Painel</a>
+      <Link href="/" className="px-5 py-2.5 text-sm font-medium text-white transition-colors" style={{ backgroundColor: '#3B82F6', borderRadius: '6px' }}>Voltar ao Painel</Link>
     </div>
   );
 }
