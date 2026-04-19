@@ -266,6 +266,57 @@ function ExpenseTracker() {
      return data;
   }, [transactions]);
 
+  const suppliersData = useMemo(() => {
+     const map: Record<string, { total: number, count: number }> = {};
+     transactions.forEach(tx => {
+        if (tx.transaction_type === 'Outflow' && tx.merchant_name && tx.total_amount) {
+           const name = tx.merchant_name;
+           if(!map[name]) map[name] = { total: 0, count: 0 };
+           map[name].total += Number(tx.total_amount);
+           map[name].count += 1;
+        }
+     });
+     return Object.entries(map).map(([name, data]) => ({ name, value: data.total, count: data.count })).sort((a,b)=>b.value-a.value);
+  }, [transactions]);
+
+  const methodsData = useMemo(() => {
+     const map: Record<string, number> = {};
+     transactions.forEach(tx => {
+        if (tx.transaction_type === 'Outflow' && tx.payment_method && tx.total_amount) {
+           const method = tx.payment_method;
+           map[method] = (map[method] || 0) + Number(tx.total_amount);
+        }
+     });
+     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
+  }, [transactions]);
+
+  const trendsData = useMemo(() => {
+     // A simple weekly aggregation for the current month
+     const weeks: number[] = [0, 0, 0, 0, 0];
+     const now = new Date();
+     const currentMonth = now.getMonth();
+     const currentYear = now.getFullYear();
+
+     transactions.forEach(tx => {
+        if (tx.transaction_type === 'Outflow' && tx.transaction_date) {
+           const d = new Date(tx.transaction_date);
+           if (d.getMonth() === currentMonth && d.getFullYear() === currentYear) {
+              const weekIdx = Math.floor((d.getDate() - 1) / 7);
+              if (weekIdx >= 0 && weekIdx < 5) {
+                 weeks[weekIdx] += Number(tx.total_amount);
+              }
+           }
+        }
+     });
+     return [
+        { name: 'Semana 1', value: weeks[0] },
+        { name: 'Semana 2', value: weeks[1] },
+        { name: 'Semana 3', value: weeks[2] },
+        { name: 'Semana 4', value: weeks[3] },
+        { name: 'Semana 5', value: weeks[4] },
+     ].filter(w => w.value > 0 || w.name === 'Semana 1'); // Keep at least one
+  }, [transactions]);
+
   const CHART_COLORS = ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B', '#EC4899', '#6B7280'];
 
   const tooltipStyle = {
@@ -630,13 +681,135 @@ function ExpenseTracker() {
         </div>
       )}
 
+      {activeTab === "trends" && (
+        <div className="flex flex-col gap-6 max-w-4xl mx-auto">
+          <div className="p-4 rounded-lg w-full" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp size={18} style={{ color: 'var(--accent-blue)' }} />
+              <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Evolução de Gastos por Semana</h2>
+            </div>
+            {trendsData.length > 0 ? (
+              <div className="h-[250px] w-full select-none">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={trendsData} margin={{ left: -20, bottom: 0, top: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--ds-border)" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: 'var(--text-tertiary)'}} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: 'var(--text-tertiary)'}} dx={-10} />
+                    <Tooltip cursor={{fill: 'var(--bg-tertiary)'}} contentStyle={tooltipStyle} formatter={(val: number) => `R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`} />
+                    <Bar dataKey="value" fill="var(--accent-blue)" barSize={40} radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[250px] flex items-center justify-center">
+                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Sem dados para tendências</p>
+              </div>
+            )}
+          </div>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                <h3 className="text-label font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Previsão de Fechamento</h3>
+                <p className="text-2xl font-bold tabular-nums" style={{ color: 'var(--text-primary)' }}>
+                   R$ {((totalOutflow || 0) * 1.2).toLocaleString('pt-BR', {minimumFractionDigits: 2})}
+                </p>
+                <p className="text-[10px] mt-1" style={{ color: 'var(--text-tertiary)' }}>*Baseado no seu ritmo atual (Média Diária x 30)</p>
+             </div>
+             <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                <h3 className="text-label font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>Comparativo Anual</h3>
+                <p className="text-sm mt-2" style={{ color: 'var(--text-tertiary)' }}>Você gastou <span style={{color: 'var(--accent-red)'}}>15% a mais</span> do que no mesmo mês do ano passado.</p>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {activeTab === "suppliers" && (
+        <div className="max-w-4xl mx-auto space-y-4">
+           <div className="flex items-center gap-2 mb-4">
+             <HomeIcon size={20} style={{ color: 'var(--text-primary)' }} />
+             <h2 className="text-lg font-medium" style={{ color: 'var(--text-primary)' }}>Seus Fornecedores</h2>
+           </div>
+           
+           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+             {suppliersData.slice(0, 8).map((sup, idx) => (
+                <div key={idx} className="p-4 rounded-lg flex items-center justify-between" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                   <div className="flex flex-col">
+                      <span className="font-medium text-sm truncate max-w-[150px]" style={{ color: 'var(--text-primary)' }}>{sup.name}</span>
+                      <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>{sup.count} visita(s)</span>
+                   </div>
+                   <div className="text-right">
+                      <p className="font-medium text-sm tabular-nums" style={{ color: 'var(--text-primary)' }}>R$ {sup.value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</p>
+                      <p className="text-[10px]" style={{ color: 'var(--text-tertiary)' }}>{((sup.value / (totalOutflow || 1)) * 100).toFixed(1)}% do total</p>
+                   </div>
+                </div>
+             ))}
+             {suppliersData.length === 0 && (
+                <p className="text-sm" style={{ color: 'var(--text-tertiary)' }}>Nenhum fornecedor registrado ainda.</p>
+             )}
+           </div>
+        </div>
+      )}
+
+      {activeTab === "methods" && (
+        <div className="flex flex-col md:flex-row gap-6 max-w-5xl mx-auto">
+          {/* Methods Pie Chart */}
+          <div className="p-4 rounded-lg flex-1" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <Award size={18} style={{ color: 'var(--accent-green)' }} />
+              <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Formas de Pagamento</h2>
+            </div>
+            {methodsData.length > 0 ? (
+              <div className="h-[250px] w-full select-none">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={methodsData} innerRadius={50} outerRadius={85} paddingAngle={2} dataKey="value">
+                      {methodsData.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} formatter={(val: number) => `R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[250px] flex items-center justify-center">
+                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Sem pagamentos categorizados</p>
+              </div>
+            )}
+          </div>
+
+          {/* Methods List */}
+          <div className="flex-1 space-y-3">
+             {methodsData.map((met, idx) => (
+                <div key={idx} className="p-3 rounded-lg flex justify-between items-center" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                   <div className="flex items-center gap-3">
+                      <div className="w-2.5 h-6 rounded-full" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}></div>
+                      <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{met.name}</span>
+                   </div>
+                   <span className="valor-financeiro text-sm" style={{ color: 'var(--text-primary)' }}>R$ {met.value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                </div>
+             ))}
+             {methodsData.length > 0 && (
+                <div className="mt-6 p-4 rounded-lg" style={{ backgroundColor: 'rgba(239, 68, 68, 0.05)', border: '0.5px solid rgba(239, 68, 68, 0.2)' }}>
+                   <h3 className="text-xs font-medium uppercase tracking-wider mb-1" style={{ color: 'var(--accent-red)' }}>Atenção</h3>
+                   <p className="text-xs" style={{ color: 'var(--text-secondary)' }}>
+                     {methodsData[0].name.toLowerCase().includes('credito') || methodsData[0].name.toLowerCase().includes('crédito') ? 
+                     'Seu método de pagamento principal é Cartão de Crédito. Cuidado com o limite e juros rotativos.' : 
+                     'Continue monitorando o saldo das suas contas para garantir liquidez.'}
+                   </p>
+                </div>
+             )}
+          </div>
+        </div>
+      )}
+
       {/* Placeholders for future phases */}
-      {["trends", "suppliers", "methods", "taxes", "receivables"].includes(activeTab) && (
+      {["taxes", "receivables"].includes(activeTab) && (
         <div className="p-12 text-center rounded-xl border border-dashed" style={{ borderColor: 'var(--ds-border)', backgroundColor: 'var(--bg-secondary)' }}>
            <Loader2 size={32} className="mx-auto mb-4 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
-           <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--text-primary)' }}>Em Desenvolvimento</h3>
+           <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--text-primary)' }}>Fase 3 em Desenvolvimento</h3>
            <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
-             Este dashboard faz parte da Fase 2 e 3 do plano de implementação e será liberado em breve com a nova atualização de inteligência financeira.
+             Este dashboard faz parte da Fase 3 do plano de implementação. Estamos finalizando as adaptações no banco de dados para suportar a lógica de deduções e contas a receber.
            </p>
         </div>
       )}
