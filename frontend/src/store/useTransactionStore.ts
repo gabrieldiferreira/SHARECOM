@@ -117,7 +117,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   syncWithBackend: async () => {
-    // Basic sync logic: fetch from backend and merge
     try {
       const res = await authenticatedFetch(getApiUrl("/expenses"));
       if (res.ok) {
@@ -127,36 +126,38 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
           try {
             const txSet = db.transaction('transactions', 'readwrite');
             for (const item of remoteData) {
-              // Using individual put calls within a single transaction
+              // Mapeamento correto dos campos do backend para o store
               await txSet.store.put({
-                 id: item.id,
-                 total_amount: item.amount,
-                 currency: 'BRL',
-                 transaction_date: item.date,
-                 transaction_type: 'Outflow', 
-                 payment_method: 'Desconhecido',
-                 merchant_name: item.merchant,
-                 category: item.category,
-                 receipt_hash: item.receipt,
-                 is_synced: true,
-                 note: item.note
+                id: item.id,
+                total_amount: Number(item.amount) || 0,
+                currency: 'BRL',
+                transaction_date: item.date,
+                transaction_type: item.transaction_type || 'Outflow',  // usa o valor real do backend
+                payment_method: item.payment_method || 'Comprovante',
+                merchant_name: item.merchant || 'Desconhecido',
+                category: item.category || 'Outros',
+                receipt_hash: item.receipt || undefined,
+                destination_institution: item.destination_institution || undefined,
+                transaction_id: item.transaction_id || undefined,
+                masked_cpf: item.masked_cpf || undefined,
+                is_synced: true,
+                note: item.note || undefined,
               });
             }
             await txSet.done;
             get().fetchTransactions();
           } catch (dbError) {
             if (dbError instanceof DOMException && dbError.name === 'AbortError') {
-               console.warn("IndexedDB transaction aborted during sync (storage full or manual interrupt).");
+              console.warn("IndexedDB transaction aborted during sync.");
             } else {
-               throw dbError; // Rethrow to be caught by the outer catch
+              throw dbError;
             }
           }
         }
       }
     } catch (e) {
       if (e instanceof Error && e.message === "AUTH_REQUIRED") {
-        // Ignore startup sync before auth is fully established.
-        return;
+        return; // Ignora sync antes do login estar pronto
       }
       console.warn("Offline: Synchronization deferred.");
     }
