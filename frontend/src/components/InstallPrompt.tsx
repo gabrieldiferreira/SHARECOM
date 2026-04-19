@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Download, Smartphone, ChevronLeft, Loader2, MoreVertical, PlusSquare } from "lucide-react";
+import { Download, Smartphone, ChevronLeft, Loader2 } from "lucide-react";
 
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -11,6 +11,7 @@ export default function InstallPrompt() {
   const [showManual, setShowManual] = useState(false);
 
   useEffect(() => {
+    // 1. Verifica se já está instalado
     const checkInstalled = () => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
       if (isStandalone) {
@@ -22,36 +23,50 @@ export default function InstallPrompt() {
 
     checkInstalled();
 
+    // 2. Se em 10 segundos o Chrome não liberar, ativa o modo manual
     const manualTimer = setTimeout(() => {
       if (!deferredPrompt) setShowManual(true);
-    }, 8000);
+    }, 10000);
 
     const handler = (e: any) => {
+      console.log("SHARECOM: Sistema de instalação pronto! ✅");
       e.preventDefault();
       setDeferredPrompt(e);
-      setShowManual(false);
+      setShowManual(false); // Desativa modo manual se o nativo chegar
     };
 
     window.addEventListener("beforeinstallprompt", handler);
+
+    // 3. Detecta quando o app termina de ser instalado para sumir com a etiqueta
     window.addEventListener("appinstalled", () => {
+      console.log("SHARECOM: App instalado com sucesso! 🎉");
       setIsVisible(false);
       setDeferredPrompt(null);
     });
 
     return () => {
       window.removeEventListener("beforeinstallprompt", handler);
-      clearTimeout(manualTimer);
     };
   }, []);
 
   const handleInstall = async () => {
-    if (!deferredPrompt) return; // No modo manual, o clique apenas expande para ver as instruções
+    if (!deferredPrompt) {
+      // Se o Chrome ainda não liberou o evento, tentamos expandir para mostrar o status
+      setIsExpanded(true);
+      return;
+    }
 
     try {
       setIsInstalling(true);
+      // Dispara o prompt NATIVO do navegador sem intermediários
       await deferredPrompt.prompt();
+      
       const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') setIsVisible(false);
+      console.log(`SHARECOM: Resultado da instalação: ${outcome}`);
+      
+      if (outcome === 'accepted') {
+        setIsVisible(false);
+      }
     } catch (err) {
       console.error("Erro ao disparar instalação:", err);
     } finally {
@@ -69,7 +84,7 @@ export default function InstallPrompt() {
       }`}
     >
       <div className="flex items-center">
-        {/* Etiqueta / Aba */}
+        {/* Etiqueta Lateral */}
         <button 
           onClick={() => setIsExpanded(!isExpanded)}
           className={`h-24 w-8 rounded-l-xl flex flex-col items-center justify-center gap-2 shadow-lg border-y border-l transition-colors ${
@@ -83,62 +98,39 @@ export default function InstallPrompt() {
           </div>
         </button>
 
-        {/* Painel Interno */}
+        {/* Painel de Ação */}
         <div 
-          className="bg-white dark:bg-slate-900 border-y border-l p-4 shadow-2xl rounded-l-xl flex flex-col items-center gap-4 min-w-[180px] max-w-[220px]"
+          className="bg-white dark:bg-slate-900 border-y border-l p-4 shadow-2xl rounded-l-xl flex flex-col items-center gap-3 min-w-[150px]"
           style={{ borderColor: 'var(--ds-border)' }}
         >
-          <div className="flex flex-col items-center gap-2 text-center">
-             <div className={`p-2 rounded-full ${deferredPrompt ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>
-                {isInstalling ? <Loader2 size={20} className="animate-spin" /> : <Smartphone size={20} />}
-             </div>
-             <div>
-                <p className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>SHARECOM</p>
-                <p className="text-[9px]" style={{ color: 'var(--text-secondary)' }}>
-                   {deferredPrompt ? 'Pronto para instalar' : 'Siga os passos abaixo:'}
-                </p>
-             </div>
+          <div className={`p-2 rounded-full ${deferredPrompt ? 'bg-emerald-500/10 text-emerald-500' : 'bg-slate-500/10 text-slate-500'}`}>
+            {isInstalling ? <Loader2 size={20} className="animate-spin" /> : <Smartphone size={20} />}
+          </div>
+          
+          <div className="text-center">
+            <p className="text-[11px] font-bold" style={{ color: 'var(--text-primary)' }}>SHARECOM</p>
+            <p className="text-[9px]" style={{ color: 'var(--text-secondary)' }}>
+              {deferredPrompt ? 'Pronto para instalar' : showManual ? 'Instalação Manual' : 'Preparando...'}
+            </p>
           </div>
 
-          {/* Se não houver prompt nativo, mostra os passos direto na aba */}
-          {!deferredPrompt && (
-             <div className="space-y-3 w-full border-t pt-3" style={{ borderColor: 'var(--ds-border)' }}>
-                <div className="flex items-start gap-2">
-                   <div className="text-[10px] font-bold text-amber-500 mt-0.5">1.</div>
-                   <p className="text-[9px] leading-tight" style={{ color: 'var(--text-primary)' }}>
-                      Toque nos <span className="font-bold inline-flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 px-0.5 rounded">3 pontos <MoreVertical size={8}/></span>
-                   </p>
-                </div>
-                <div className="flex items-start gap-2">
-                   <div className="text-[10px] font-bold text-amber-500 mt-0.5">2.</div>
-                   <p className="text-[9px] leading-tight" style={{ color: 'var(--text-primary)' }}>
-                      Selecione <span className="font-bold inline-flex items-center gap-0.5 bg-slate-100 dark:bg-slate-800 px-0.5 rounded">Instalar <PlusSquare size={8}/></span>
-                   </p>
-                </div>
-             </div>
-          )}
-
-          {deferredPrompt && (
-             <button
-               onClick={handleInstall}
-               disabled={isInstalling}
-               className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-2 active:scale-95 shadow-lg shadow-emerald-500/20"
-             >
-               {isInstalling ? <Loader2 size={12} className="animate-spin" /> : (
-                 <>
-                   <Download size={12} />
-                   INSTALAR AGORA
-                 </>
-               )}
-             </button>
-          )}
-
-          <button 
-             onClick={() => setIsExpanded(false)}
-             className="text-[9px] font-medium" 
-             style={{ color: 'var(--text-tertiary)' }}
+          <button
+            onClick={handleInstall}
+            disabled={isInstalling}
+            className={`w-full py-2 text-white text-[10px] font-bold rounded-lg transition-all flex items-center justify-center gap-2 ${
+              deferredPrompt || showManual
+                ? 'bg-emerald-600 hover:bg-emerald-500 active:scale-95' 
+                : 'bg-slate-600 opacity-70 cursor-not-allowed'
+            }`}
           >
-             Fechar
+            {isInstalling ? (
+              <Loader2 size={12} className="animate-spin" />
+            ) : (
+              <>
+                <Download size={12} />
+                {deferredPrompt ? 'INSTALAR AGORA' : showManual ? 'COMO INSTALAR?' : 'AGUARDE...'}
+              </>
+            )}
           </button>
         </div>
       </div>
