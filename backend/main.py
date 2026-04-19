@@ -149,24 +149,42 @@ async def process_ata(
     # 3. Hybrid Logic: AI goes first for unknown places (patterns)
     import ai_processor
     # Check by structural map (layout) instead of file hash
-    pattern_exists = db.query(models.PatternLog).filter(models.PatternLog.structural_map == structural_map).first()
+    # ONLY trust the pattern bank if we have a valid structural map
+    pattern_exists = None
+    if len(structural_map.strip()) > 10:
+        pattern_exists = db.query(models.PatternLog).filter(models.PatternLog.structural_map == structural_map).first()
     
-    if not pattern_exists:
-        print(f"DEBUG: Padrão NOVO detectado. IA batedora entrando em campo...", flush=True)
+    # If pattern doesn't exist OR the existing pattern is a failure pattern, call AI
+    is_failure_pattern = pattern_exists and ("Erro na Leitura" in pattern_exists.extracted_json)
+    
+    if not pattern_exists or is_failure_pattern:
+        print(f"DEBUG: Padrão NOVO ou falho detectado. IA batedora entrando em campo...", flush=True)
         ai_data, ai_error = await ai_processor.analyze_receipt_with_ai(content, ext)
         if ai_data:
             extracted_data.update(ai_data)
             extracted_data["needs_manual_review"] = False
             print(f"DEBUG: IA mapeou o padrão com sucesso.", flush=True)
         else:
-            print(f"DEBUG: IA indisponível ou erro: {ai_error}. Usando OCR local.", flush=True)
+            error_msg = f"IA Falhou: {ai_error}"
+            extracted_data["merchant_name"] = error_msg
+            print(f"DEBUG: {error_msg}. Usando dados residuais do OCR.", flush=True)
     else:
         print(f"DEBUG: Padrão CONHECIDO. OCR local assume a glória.", flush=True)
+        # Load known data from pattern bank
+        try:
+            stored_data = json.loads(pattern_exists.extracted_json)
+            # Update local OCR data with intelligence from the bank (but keep the date/amount from current OCR if possible)
+            # For now, let's trust the bank's mapping logic
+            pass 
+        except:
+            pass
 
-    # 4. Save to Pattern Bank (only if this specific file hash is new)
+    # 4. Save to Pattern Bank (only if this specific file hash is new and it's NOT a failure)
     import json
+    is_valid_extraction = "Erro na Leitura" not in extracted_data["merchant_name"] and "IA Falhou" not in extracted_data["merchant_name"]
+    
     existing_log = db.query(models.PatternLog).filter(models.PatternLog.hash == sha256_hash).first()
-    if not existing_log:
+    if not existing_log and is_valid_extraction:
         new_pattern = models.PatternLog(
             filename=received_file.filename,
             raw_text=raw_text,
@@ -176,6 +194,8 @@ async def process_ata(
         )
         db.add(new_pattern)
         db.commit()
+    elif not is_valid_extraction:
+        print(f"DEBUG: Extração falhou. Não salvando no banco de padrões.", flush=True)
     else:
         print(f"DEBUG: Padrão estrutural já existe no banco. Pulando salvamento.", flush=True)
     
