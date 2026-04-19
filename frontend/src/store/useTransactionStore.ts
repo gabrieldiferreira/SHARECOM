@@ -124,24 +124,33 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         const remoteData = await res.json();
         const db = await getDB();
         if (db) {
-          const txSet = db.transaction('transactions', 'readwrite');
-          for (const item of remoteData) {
-            await txSet.store.put({
-               id: item.id,
-               total_amount: item.amount,
-               currency: 'BRL',
-               transaction_date: item.date,
-               transaction_type: 'Outflow', 
-               payment_method: 'Desconhecido',
-               merchant_name: item.merchant,
-               category: item.category,
-               receipt_hash: item.receipt,
-               is_synced: true,
-               note: item.note
-            });
+          try {
+            const txSet = db.transaction('transactions', 'readwrite');
+            for (const item of remoteData) {
+              // Using individual put calls within a single transaction
+              await txSet.store.put({
+                 id: item.id,
+                 total_amount: item.amount,
+                 currency: 'BRL',
+                 transaction_date: item.date,
+                 transaction_type: 'Outflow', 
+                 payment_method: 'Desconhecido',
+                 merchant_name: item.merchant,
+                 category: item.category,
+                 receipt_hash: item.receipt,
+                 is_synced: true,
+                 note: item.note
+              });
+            }
+            await txSet.done;
+            get().fetchTransactions();
+          } catch (dbError) {
+            if (dbError instanceof DOMException && dbError.name === 'AbortError') {
+               console.warn("IndexedDB transaction aborted during sync (storage full or manual interrupt).");
+            } else {
+               throw dbError; // Rethrow to be caught by the outer catch
+            }
           }
-          await txSet.done;
-          get().fetchTransactions();
         }
       }
     } catch (e) {
