@@ -205,10 +205,11 @@ async def process_ata(
     received_file: UploadFile = File(None),
     receipt_url: str = Form(None),
     note: str = Form(None),
+    save_tokens: bool = Form(False),
     db: Session = Depends(get_db),
     _: dict = Depends(verify_firebase_token),
 ):
-    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | URL: {receipt_url} | NOTA: {note}", flush=True)
+    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | URL: {receipt_url} | NOTA: {note} | SAVE TOKENS: {save_tokens}", flush=True)
     
     content = b""
     sha256_hash = ""
@@ -370,14 +371,18 @@ async def process_ata(
         # ======================================================
         # ETAPA 2: Análise IA (Vision + OCR como contexto)
         # ======================================================
-        from ai_processor import analyze_receipt_with_ai
-        extracted_data, ai_error = await analyze_receipt_with_ai(
-            content, ext, ocr_text=raw_text
-        )
-
-        if extracted_data is None:
+        if save_tokens:
+            print("DEBUG: 'Economia de Tokens' ativada. Pulando Gemini e usando apenas OCR local.", flush=True)
             extracted_data = ocr_fallback_data
-            print(f"DEBUG: IA falhou ({ai_error}). Usando OCR de fallback.", flush=True)
+        else:
+            from ai_processor import analyze_receipt_with_ai
+            extracted_data, ai_error = await analyze_receipt_with_ai(
+                content, ext, ocr_text=raw_text
+            )
+
+            if extracted_data is None:
+                extracted_data = ocr_fallback_data
+                print(f"DEBUG: IA falhou ({ai_error}). Usando OCR de fallback.", flush=True)
 
         if not extracted_data:
             extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}

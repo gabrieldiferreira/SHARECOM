@@ -23,6 +23,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showScanMenu, setShowScanMenu] = useState(false);
   const [pastedContent, setPastedContent] = useState("");
   const [pastedAt, setPastedAt] = useState<number | null>(null);
+  const [saveTokens, setSaveTokens] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -50,10 +51,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         setToast({ message: "Nenhum link disponível no clipboard", type: 'error' });
         return;
       }
-      
+
       setPastedContent(text);
       setPastedAt(Date.now());
-      setPendingNote(""); 
+      setPendingNote("");
       setShowModal(true);
       setShowScanMenu(false);
     } catch (err) {
@@ -108,18 +109,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           // Busca o arquivo no cache do Service Worker
           const cache = await caches.open('shared-files');
           const response = await cache.match('/api/shared-file-tmp');
-          
+
           if (response) {
             const blob = await response.blob();
             const file = new File([blob], `shared-receipt-${Date.now()}.jpg`, { type: blob.type });
-            
+
             // Define o arquivo e mostra o modal
             setSelectedFile(file);
             setShowModal(true);
-            
+
             // Limpa o cache
             await cache.delete('/api/shared-file-tmp');
-            
+
             // Limpa a URL sem recarregar a página
             const newUrl = window.location.pathname;
             window.history.replaceState({}, '', newUrl);
@@ -142,14 +143,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const executeUpload = async () => {
     if (!selectedFile && !pastedContent) return;
-    
+
     setShowModal(false);
     setIsUploading(true);
     const formData = new FormData();
     if (selectedFile) {
       formData.append("received_file", selectedFile, selectedFile.name);
     }
-    
+
     // Se for link: envia o URL limpo em campo separado, e o comentário em 'note'
     if (!selectedFile && pastedContent) {
       formData.append("receipt_url", pastedContent.trim());
@@ -160,7 +161,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     } else if (selectedFile && !pendingNote.trim()) {
       // sem nota, não adiciona nada
     }
-    
+
+    if (saveTokens) {
+      formData.append("save_tokens", "true");
+    }
+
     try {
       const apiUrl = getApiUrl("/process-ata");
       console.log("SHARECOM: Tentando enviar para:", apiUrl);
@@ -168,11 +173,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         method: "POST",
         body: formData,
       });
-      
+
       if (response.ok) {
         const data = await response.json();
         const ai = data.ai_data || {};
-        
+
         const newTx: TransactionEntity = {
           total_amount: ai.total_amount || 0,
           merchant_name: ai.merchant_name || 'Desconhecido',
@@ -217,7 +222,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         try {
           const errObj = JSON.parse(errorText);
           if (errObj.detail) errorMsg = errObj.detail;
-        } catch (e) {}
+        } catch (e) { }
         alert(`Erro ao processar: ${errorMsg}`);
       }
     } catch (e) {
@@ -268,17 +273,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen flex-col md:flex-row" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between p-4 sticky top-2 mx-3 z-50 shadow-xl" style={{ 
-        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.7)', 
-        backdropFilter: 'blur(16px)', 
+      <header className="md:hidden flex items-center justify-between p-4 sticky top-2 mx-3 z-50 shadow-xl" style={{
+        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.7)',
+        backdropFilter: 'blur(16px)',
         border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
-        borderRadius: '16px' 
+        borderRadius: '16px'
       }}>
         <div className="flex items-center gap-2">
           {user?.photoURL ? (
-            <img 
-              src={user.photoURL} 
-              alt={user.displayName || "Perfil"} 
+            <img
+              src={user.photoURL}
+              alt={user.displayName || "Perfil"}
               className="w-8 h-8 rounded-full"
               style={{ border: '0.5px solid var(--ds-border)' }}
             />
@@ -311,30 +316,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* User Profile Info */}
         {user && (
           <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-             {user.photoURL ? (
-                <img 
-                  src={user.photoURL} 
-                  alt={user.displayName || "Perfil"} 
-                  className="w-10 h-10 rounded-full"
-                  style={{ border: '0.5px solid var(--ds-border)' }}
-                />
-             ) : (
-                <div className="w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
-                   {user.displayName?.[0] || "U"}
-                </div>
-             )}
-             <div className="overflow-hidden">
-                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>{getGreeting()}</p>
-                <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{user.displayName}</p>
-             </div>
+            {user.photoURL ? (
+              <img
+                src={user.photoURL}
+                alt={user.displayName || "Perfil"}
+                className="w-10 h-10 rounded-full"
+                style={{ border: '0.5px solid var(--ds-border)' }}
+              />
+            ) : (
+              <div className="w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
+                {user.displayName?.[0] || "U"}
+              </div>
+            )}
+            <div className="overflow-hidden">
+              <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>{getGreeting()}</p>
+              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{user.displayName}</p>
+            </div>
           </div>
         )}
-        
+
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
             const isActive = item.href ? pathname === item.href : false;
-            
+
             if (item.onClick) {
               return (
                 <button
@@ -401,25 +406,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <input 
-        type="file" 
-        ref={fileInputRef} 
-        onChange={handleFileSelection} 
-        className="hidden" 
+      <input
+        type="file"
+        ref={fileInputRef}
+        onChange={handleFileSelection}
+        className="hidden"
         accept="image/*,application/pdf"
       />
-      <input 
-        type="file" 
-        ref={galleryInputRef} 
-        onChange={handleFileSelection} 
-        className="hidden" 
+      <input
+        type="file"
+        ref={galleryInputRef}
+        onChange={handleFileSelection}
+        className="hidden"
         accept="image/*"
       />
-      <input 
-        type="file" 
-        ref={cameraInputRef} 
-        onChange={handleFileSelection} 
-        className="hidden" 
+      <input
+        type="file"
+        ref={cameraInputRef}
+        onChange={handleFileSelection}
+        className="hidden"
         accept="image/*"
         capture="environment"
       />
@@ -429,7 +434,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="fixed inset-0 z-[250] md:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setShowScanMenu(false)} />
           <div className="absolute bottom-0 left-0 right-0 animate-in slide-in-from-bottom duration-300">
-            <div 
+            <div
               className="mx-4 mb-8 rounded-2xl overflow-hidden shadow-2xl border"
               style={{ backgroundColor: 'var(--bg-primary)', borderColor: 'var(--ds-border)' }}
             >
@@ -439,9 +444,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <X size={18} />
                 </button>
               </div>
-              
+
               <div className="p-2 space-y-1">
-                <button 
+                <button
                   onClick={() => { setShowScanMenu(false); cameraInputRef.current?.click(); }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
@@ -454,7 +459,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </div>
                 </button>
 
-                <button 
+                <button
                   onClick={() => { setShowScanMenu(false); galleryInputRef.current?.click(); }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
@@ -467,7 +472,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </div>
                 </button>
 
-                <button 
+                <button
                   onClick={() => { setShowScanMenu(false); fileInputRef.current?.click(); }}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
@@ -480,7 +485,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </div>
                 </button>
 
-                <button 
+                <button
                   onClick={handlePasteLink}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
@@ -510,32 +515,32 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   <Plus size={18} className="rotate-45" />
                 </button>
               </div>
-              
-               {selectedFile ? (
-                 <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
-                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)', color: '#3B82F6' }}>
-                       <Plus size={18} />
-                    </div>
-                    <div className="overflow-hidden">
-                       <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Arquivo Selecionado</p>
-                       <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{selectedFile?.name}</p>
-                    </div>
-                 </div>
-               ) : (
-                 <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20 shadow-sm" style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-500">
-                       <Link2 size={20} />
-                    </div>
-                    <div className="overflow-hidden flex-1">
-                       <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">Link Detectado</p>
-                       <p className="text-[11px] font-mono truncate opacity-80" style={{ color: 'var(--text-primary)' }}>{pastedContent}</p>
-                    </div>
-                 </div>
-               )}
+
+              {selectedFile ? (
+                <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                  <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)', color: '#3B82F6' }}>
+                    <Plus size={18} />
+                  </div>
+                  <div className="overflow-hidden">
+                    <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Arquivo Selecionado</p>
+                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{selectedFile?.name}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20 shadow-sm" style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>
+                  <div className="w-10 h-10 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-500">
+                    <Link2 size={20} />
+                  </div>
+                  <div className="overflow-hidden flex-1">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">Link Detectado</p>
+                    <p className="text-[11px] font-mono truncate opacity-80" style={{ color: 'var(--text-primary)' }}>{pastedContent}</p>
+                  </div>
+                </div>
+              )}
 
               <div>
                 <label className="text-label block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Deseja adicionar um comentário?</label>
-                <textarea 
+                <textarea
                   autoFocus
                   value={pendingNote}
                   onChange={(e) => setPendingNote(e.target.value)}
@@ -545,15 +550,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 />
               </div>
 
+              <div className="flex items-center gap-2 mt-2">
+                <input 
+                  type="checkbox" 
+                  id="saveTokens" 
+                  checked={saveTokens} 
+                  onChange={(e) => setSaveTokens(e.target.checked)}
+                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4"
+                />
+                <label htmlFor="saveTokens" className="text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>
+                  Economia de Tokens (Extração Básica)
+                </label>
+              </div>
+
               <div className="grid grid-cols-2 gap-3 pt-1">
-                <button 
+                <button
                   onClick={() => setShowModal(false)}
                   className="px-4 py-2.5 rounded-md text-sm font-medium transition-colors"
                   style={{ border: '0.5px solid var(--ds-border)', color: 'var(--text-secondary)', borderRadius: '6px' }}
                 >
                   Cancelar
                 </button>
-                <button 
+                <button
                   onClick={executeUpload}
                   className="px-4 py-2.5 rounded-md text-sm font-medium text-white transition-all"
                   style={{ backgroundColor: '#3B82F6', borderRadius: '6px' }}
@@ -590,9 +608,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Global Loading Bar */}
         <div className={`fixed top-0 left-0 w-full h-1 z-[100] transition-opacity duration-300 ${(isUploading || uploadSuccess) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-          <div 
+          <div
             className="h-full transition-all ease-out"
-            style={{ 
+            style={{
               backgroundColor: '#10B981',
               width: uploadSuccess ? '100%' : (isUploading ? '90%' : '0%'),
               transitionDuration: isUploading ? '15s' : '0.5s'
@@ -607,12 +625,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Bottom Nav - Mobile */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 px-4 flex items-center justify-around z-50 shadow-[0_-8px_30px_rgba(0,0,0,0.2)]" style={{ 
-          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.85)', 
-          backdropFilter: 'blur(20px)', 
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 px-4 flex items-center justify-around z-50 shadow-[0_-8px_30px_rgba(0,0,0,0.2)]" style={{
+          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(20px)',
           borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
-          borderRadius: '24px 24px 0 0', 
-          paddingBottom: 'env(safe-area-inset-bottom)', 
+          borderRadius: '24px 24px 0 0',
+          paddingBottom: 'env(safe-area-inset-bottom)',
           transform: 'translateZ(0)',
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale'

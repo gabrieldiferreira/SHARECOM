@@ -8,28 +8,7 @@ import { TransactionEntity } from "../lib/db";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
 
-// Lazy load recharts — reduz o bundle inicial em ~200 KB
-// Os gráficos só carregam após o conteúdo principal estar visível
-const ChartPlaceholder = () => (
-  <div className="h-full w-full flex items-center justify-center" style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
-    <Loader2 size={16} className="animate-spin mr-2" /> Carregando gráfico...
-  </div>
-);
-
-const { BarChart, Bar, LineChart, Line, PieChart, Pie, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } = {
-  BarChart: dynamic(() => import('recharts').then(m => ({ default: m.BarChart })), { ssr: false, loading: ChartPlaceholder }),
-  Bar: dynamic(() => import('recharts').then(m => ({ default: m.Bar })), { ssr: false }),
-  LineChart: dynamic(() => import('recharts').then(m => ({ default: m.LineChart })), { ssr: false }),
-  Line: dynamic(() => import('recharts').then(m => ({ default: m.Line })), { ssr: false }),
-  PieChart: dynamic(() => import('recharts').then(m => ({ default: m.PieChart })), { ssr: false }),
-  Pie: dynamic(() => import('recharts').then(m => ({ default: m.Pie })), { ssr: false }),
-  XAxis: dynamic(() => import('recharts').then(m => ({ default: m.XAxis })), { ssr: false }),
-  YAxis: dynamic(() => import('recharts').then(m => ({ default: m.YAxis })), { ssr: false }),
-  ResponsiveContainer: dynamic(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })), { ssr: false }),
-  Cell: dynamic(() => import('recharts').then(m => ({ default: m.Cell })), { ssr: false }),
-  Tooltip: dynamic(() => import('recharts').then(m => ({ default: m.Tooltip })), { ssr: false }),
-  CartesianGrid: dynamic(() => import('recharts').then(m => ({ default: m.CartesianGrid })), { ssr: false }),
-};
+// Dashboards removidos conforme solicitação
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "Alimentação": <Coffee size={20} />,
@@ -50,17 +29,18 @@ function ExpenseTracker() {
     balance,
     pendingNote,
     setPendingNote,
-    fetchTransactions, 
+    fetchTransactions,
     addTransaction, 
     deleteTransaction, 
     clearAllData,
-    syncWithBackend 
+    syncWithBackend
   } = useTransactionStore();
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [saveTokens, setSaveTokens] = useState(false);
   const [showManualModal, setShowManualModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   
@@ -146,6 +126,7 @@ function ExpenseTracker() {
     const formData = new FormData();
     formData.append("received_file", selectedFile, selectedFile.name);
     if (pendingNote) formData.append("note", pendingNote);
+    if (saveTokens) formData.append("save_tokens", "true");
     
     try {
       const response = await authenticatedFetch(getApiUrl("/receipts"), {
@@ -221,45 +202,6 @@ function ExpenseTracker() {
     return new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d);
   };
 
-  const lifestyleData = useMemo(() => {
-    let day = 0, night = 0;
-    transactions.forEach(tx => {
-       if(tx.transaction_date) {
-          const date = new Date(tx.transaction_date);
-          if (isNaN(date.getTime())) return;
-          const hour = date.getHours();
-          const val = Number(tx.total_amount) || 0;
-          if(hour >= 6 && hour < 18) day += val;
-          else night += val;
-       }
-    });
-    return [{ name: 'Diurno (6h-18h)', value: day }, { name: 'Noturno (18h-6h)', value: night }];
-  }, [transactions]);
-
-  const categoriesData = useMemo(() => {
-    const map: Record<string, number> = {};
-    transactions.forEach(tx => {
-        if(tx.transaction_type === 'Outflow' && tx.total_amount) {
-            map[tx.category] = (map[tx.category] || 0) + (Number(tx.total_amount) || 0);
-        }
-    });
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
-  }, [transactions]);
-
-  const institutionsData = useMemo(() => {
-    const map: Record<string, number> = {};
-    transactions.forEach(tx => {
-        const val = Number(tx.total_amount) || 0;
-        if(val > 0) {
-            const inst = tx.destination_institution || tx.merchant_name || 'Outros';
-            map[inst] = (map[inst] || 0) + val;
-        }
-    });
-    const data = Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value).slice(0, 6);
-    if (data.length === 0) return [{ name: 'Sem dados', value: 1, isEmpty: true }];
-    return data;
-  }, [transactions]);
-
   const topBeneficiary = useMemo(() => {
      const map: Record<string, number> = {};
      transactions.forEach(tx => {
@@ -271,50 +213,6 @@ function ExpenseTracker() {
      }
      return top;
   }, [transactions]);
-
-  const growthData = useMemo(() => {
-     let current = 0;
-     const sorted = [...transactions]
-        .filter(tx => tx.transaction_date && !isNaN(new Date(tx.transaction_date).getTime()))
-        .sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
-     
-     const data = sorted.map(tx => {
-         const val = Number(tx.total_amount) || 0;
-         current += (tx.transaction_type === 'Inflow' ? val : -val);
-         const date = new Date(tx.transaction_date);
-         return { 
-            date: new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric' }).format(date), 
-            capital: current 
-         };
-     });
-     if (data.length === 1) {
-         data.push({ date: 'Hoje', capital: data[0].capital });
-     }
-     return data;
-  }, [transactions]);
-
-  const notesAnalysis = useMemo(() => {
-    const keywords: Record<string, number> = {};
-    transactions.forEach(tx => {
-       if (tx.note) {
-          const val = Number(tx.total_amount) || 0;
-          const words = tx.note.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-          words.forEach(w => { keywords[w] = (keywords[w] || 0) + val; });
-       }
-    });
-    return Object.entries(keywords).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value).slice(0, 5);
-  }, [transactions]);
-
-  const CHART_COLORS = ['#8B5CF6', '#3B82F6', '#F59E0B', '#EC4899', '#14B8A6', '#6B7280'];
-
-  const tooltipStyle = {
-    backgroundColor: 'var(--bg-primary)',
-    border: '0.5px solid var(--ds-border)',
-    borderRadius: '8px',
-    fontSize: '12px',
-    color: 'var(--text-primary)',
-    padding: '12px',
-  };
 
   if (!mounted) {
     return <div className="p-8 animate-pulse text-center" style={{ color: 'var(--text-secondary)' }}>Iniciando...</div>;
@@ -402,8 +300,8 @@ function ExpenseTracker() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
-        <div className="lg:col-span-8 space-y-6">
+      <div className="flex flex-col gap-6 items-start max-w-4xl mx-auto">
+        <div className="w-full space-y-6">
           
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileSelection} />
 
@@ -427,6 +325,10 @@ function ExpenseTracker() {
                   <div>
                     <label className="text-label block mb-1" style={{ color: 'var(--text-secondary)' }}>Comentário (opcional)</label>
                     <textarea autoFocus value={pendingNote} onChange={(e) => setPendingNote(e.target.value)} placeholder="Ex: Almoço com cliente..." className="w-full p-3 text-sm focus:outline-none h-20 resize-none" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '6px', color: 'var(--text-primary)' }} />
+                  </div>
+                  <div className="flex items-center gap-2 mt-2">
+                    <input type="checkbox" id="saveTokensPage" checked={saveTokens} onChange={(e) => setSaveTokens(e.target.checked)} className="rounded border-gray-300 text-blue-600 focus:ring-blue-500 w-4 h-4" />
+                    <label htmlFor="saveTokensPage" className="text-sm cursor-pointer" style={{ color: 'var(--text-secondary)' }}>Economia de Tokens (Extração Básica)</label>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <button onClick={() => setShowModal(false)} className="px-4 py-2.5 text-sm font-medium" style={{ border: '0.5px solid var(--ds-border)', borderRadius: '6px', color: 'var(--text-secondary)' }}>Cancelar</button>
@@ -476,132 +378,6 @@ function ExpenseTracker() {
             </div>
           )}
 
-          {/* Portfolio Growth Chart */}
-          <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-            <div className="flex items-center gap-2 mb-4">
-              <TrendingUp size={18} style={{ color: '#3B82F6' }} />
-              <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Evolução de Patrimônio</h2>
-            </div>
-            {growthData.length > 0 ? (
-              <div className="h-[220px] w-full select-none">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={growthData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--ds-border)" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dx={-10} />
-                    <Tooltip contentStyle={tooltipStyle} />
-                    <Line type="monotone" dataKey="capital" stroke="#3B82F6" strokeWidth={2} dot={growthData.length === 1} activeDot={{ r: 4 }} />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="h-[220px] flex items-center justify-center">
-                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Sem transações registradas</p>
-              </div>
-            )}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '12px' }}>
-              {/* Institutional Exposure */}
-              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Landmark size={18} style={{ color: '#8B5CF6' }} />
-                  <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Exposição Institucional</h2>
-                </div>
-                <div className="h-[160px] select-none">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie data={institutionsData} innerRadius={45} outerRadius={70} paddingAngle={3} dataKey="value">
-                        {institutionsData.map((entry: any, index: number) => (
-                          <Cell key={`cell-${index}`} fill={entry.isEmpty ? 'var(--bg-tertiary)' : CHART_COLORS[index % CHART_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={tooltipStyle} formatter={(val: number, name: string, props: any) => props.payload.isEmpty ? ['Sem Dados', 'Valor'] : [val, name]} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                {!institutionsData[0]?.isEmpty && (
-                  <div className="flex justify-center flex-wrap mt-2" style={{ gap: '16px' }}>
-                      {institutionsData.map((entry, index) => (
-                          <div key={index} className="flex items-center gap-1.5 text-label" style={{ color: 'var(--text-secondary)' }}>
-                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[index % CHART_COLORS.length] }}></div>
-                              <span className="truncate max-w-[80px]">{entry.name}</span>
-                          </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Lifestyle Analysis */}
-              <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <Clock size={18} style={{ color: '#F59E0B' }} />
-                  <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Análise de Costumes</h2>
-                </div>
-                {transactions.length > 0 ? (
-                    <div className="h-[160px] select-none">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <BarChart data={lifestyleData} margin={{ left: -20, bottom: 0, top: 10 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--ds-border)" />
-                            <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fontSize: 10, fill: 'var(--text-tertiary)'}} dy={10} />
-                            <YAxis axisLine={false} tickLine={false} tick={{fontSize: 10, fill: 'var(--text-tertiary)'}} dx={-10} />
-                            <Tooltip cursor={{fill: 'var(--bg-tertiary)'}} contentStyle={tooltipStyle} />
-                            <Bar dataKey="value" fill="#8B5CF6" barSize={30} radius={[4, 4, 0, 0]} />
-                          </BarChart>
-                        </ResponsiveContainer>
-                    </div>
-                ) : (
-                    <div className="h-[160px] flex items-center justify-center">
-                      <p className="text-label text-center" style={{ color: 'var(--text-tertiary)' }}>Nenhum costume registrado</p>
-                    </div>
-                )}
-              </div>
-
-              {/* Notes Analysis */}
-              <div className="p-4 rounded-lg md:col-span-2" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
-                <div className="flex items-center gap-2 mb-4">
-                  <MessageSquare size={18} style={{ color: '#EC4899' }} />
-                  <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Dashboard de Notas</h2>
-                </div>
-                {notesAnalysis.length > 0 ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6 items-center">
-                    <div className="h-[180px] select-none">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={notesAnalysis} layout="vertical" margin={{ left: 20, right: 30, top: 0, bottom: 0 }}>
-                          <XAxis type="number" hide />
-                          <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-secondary)' }} width={80} />
-                          <Tooltip contentStyle={tooltipStyle} cursor={{ fill: 'var(--bg-tertiary)' }} />
-                          <Bar dataKey="value" fill="#EC4899" radius={[0, 4, 4, 0]} barSize={18} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="space-y-3">
-                       <p className="text-label leading-relaxed" style={{ color: 'var(--text-secondary)' }}>
-                         Padrões recorrentes baseados nas suas anotações manuais.
-                       </p>
-                       <div className="space-y-2">
-                          {notesAnalysis.map((item, idx) => (
-                            <div key={idx} className="flex justify-between items-center text-label" style={{ borderBottom: '0.5px solid var(--ds-border)', paddingBottom: '6px' }}>
-                               <span className="font-medium capitalize" style={{ color: 'var(--text-primary)' }}>{item.name}</span>
-                               <span className="valor-financeiro" style={{ color: '#3B82F6' }}>R$ {item.value.toLocaleString('pt-BR')}</span>
-                            </div>
-                          ))}
-                       </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-6 text-center rounded-lg" style={{ backgroundColor: 'var(--bg-primary)', border: '1px dashed var(--ds-border)' }}>
-                    <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Nenhuma nota detectada nas suas transações.</p>
-                    <p className="text-label mt-1" style={{ color: 'var(--text-tertiary)' }}>Adicione notas ao enviar comprovantes para descobrir onde você mais gasta.</p>
-                  </div>
-                )}
-              </div>
-          </div>
-        </div>
-
-        {/* Right Column */}
-        <div className="lg:col-span-4 space-y-4">
-          
           {/* Top Beneficiary */}
           <div className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px', borderLeft: '3px solid #8B5CF6' }}>
              <div className="flex items-center gap-2 mb-1">
