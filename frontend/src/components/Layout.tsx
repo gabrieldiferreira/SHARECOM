@@ -307,7 +307,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden sticky top-[68px] left-0 right-0 h-3 z-40 pointer-events-none" style={{ background: 'linear-gradient(to bottom, var(--bg-primary) 0%, transparent 100%)', marginTop: '-12px' }}></div>
 
       {/* Sidebar - Desktop */}
-      <aside className="hidden md:flex flex-col w-60 p-4 space-y-6 overflow-y-auto no-scrollbar h-screen sticky top-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '0.5px solid var(--ds-border)' }}>
+      <aside className="hidden md:flex flex-col w-60 p-4 space-y-6 overflow-y-auto scroll-container no-scrollbar h-screen sticky top-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '0.5px solid var(--ds-border)' }}>
         <div className="flex items-center justify-between px-2 pt-2">
           <h1 className="text-xl font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
           <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
@@ -690,7 +690,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ></div>
         </div>
 
-        <div className="flex-1 overflow-y-auto pb-20 md:pb-0">
+        <div className="flex-1 overflow-y-auto scroll-container pb-20 md:pb-0">
           <div className="max-w-7xl mx-auto w-full">
             {children}
           </div>
