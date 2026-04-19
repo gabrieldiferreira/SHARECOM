@@ -8,7 +8,27 @@ import { TransactionEntity } from "../lib/db";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
 
-// Dashboards removidos conforme solicitação
+// Lazy load recharts para os dashboards
+const ChartPlaceholder = () => (
+  <div className="h-full w-full flex items-center justify-center" style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
+    <Loader2 size={16} className="animate-spin mr-2" /> Carregando gráfico...
+  </div>
+);
+
+const { BarChart, Bar, LineChart, Line, PieChart, Pie, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } = {
+  BarChart: dynamic(() => import('recharts').then(m => ({ default: m.BarChart })), { ssr: false, loading: ChartPlaceholder }),
+  Bar: dynamic(() => import('recharts').then(m => ({ default: m.Bar })), { ssr: false }),
+  LineChart: dynamic(() => import('recharts').then(m => ({ default: m.LineChart })), { ssr: false }),
+  Line: dynamic(() => import('recharts').then(m => ({ default: m.Line })), { ssr: false }),
+  PieChart: dynamic(() => import('recharts').then(m => ({ default: m.PieChart })), { ssr: false }),
+  Pie: dynamic(() => import('recharts').then(m => ({ default: m.Pie })), { ssr: false }),
+  XAxis: dynamic(() => import('recharts').then(m => ({ default: m.XAxis })), { ssr: false }),
+  YAxis: dynamic(() => import('recharts').then(m => ({ default: m.YAxis })), { ssr: false }),
+  ResponsiveContainer: dynamic(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })), { ssr: false }),
+  Cell: dynamic(() => import('recharts').then(m => ({ default: m.Cell })), { ssr: false }),
+  Tooltip: dynamic(() => import('recharts').then(m => ({ default: m.Tooltip })), { ssr: false }),
+  CartesianGrid: dynamic(() => import('recharts').then(m => ({ default: m.CartesianGrid })), { ssr: false }),
+};
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "Alimentação": <Coffee size={20} />,
@@ -44,6 +64,7 @@ function ExpenseTracker() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   
+  const [activeTab, setActiveTab] = useState("main");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all"); 
   const [currentPage, setCurrentPage] = useState(1);
@@ -214,6 +235,48 @@ function ExpenseTracker() {
      return top;
   }, [transactions]);
 
+  const categoriesData = useMemo(() => {
+    const map: Record<string, number> = {};
+    transactions.forEach(tx => {
+        if(tx.transaction_type === 'Outflow' && tx.total_amount) {
+            map[tx.category] = (map[tx.category] || 0) + (Number(tx.total_amount) || 0);
+        }
+    });
+    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
+  }, [transactions]);
+
+  const growthData = useMemo(() => {
+     let current = 0;
+     const sorted = [...transactions]
+        .filter(tx => tx.transaction_date && !isNaN(new Date(tx.transaction_date).getTime()))
+        .sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
+     
+     const data = sorted.map(tx => {
+         const val = Number(tx.total_amount) || 0;
+         current += (tx.transaction_type === 'Inflow' ? val : -val);
+         const date = new Date(tx.transaction_date);
+         return { 
+            date: new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric' }).format(date), 
+            capital: current 
+         };
+     });
+     if (data.length === 1) {
+         data.push({ date: 'Hoje', capital: data[0].capital });
+     }
+     return data;
+  }, [transactions]);
+
+  const CHART_COLORS = ['#10B981', '#3B82F6', '#8B5CF6', '#F59E0B', '#EC4899', '#6B7280'];
+
+  const tooltipStyle = {
+    backgroundColor: 'var(--bg-primary)',
+    border: '0.5px solid var(--ds-border)',
+    borderRadius: '8px',
+    fontSize: '12px',
+    color: 'var(--text-primary)',
+    padding: '12px',
+  };
+
   if (!mounted) {
     return <div className="p-8 animate-pulse text-center" style={{ color: 'var(--text-secondary)' }}>Iniciando...</div>;
   }
@@ -240,8 +303,37 @@ function ExpenseTracker() {
          </button>
       </div>
 
-      {/* Search & Filters */}
-      <div className="p-3 rounded-lg flex flex-col md:flex-row gap-3 items-center justify-between" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '8px' }}>
+      {/* Tabs Navigation */}
+      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2" style={{ borderBottom: '1px solid var(--ds-border)' }}>
+        {[
+          { id: 'main', label: 'Principal' },
+          { id: 'categories', label: 'Categorias' },
+          { id: 'trends', label: 'Tendências' },
+          { id: 'suppliers', label: 'Fornecedores' },
+          { id: 'methods', label: 'Métodos' },
+          { id: 'taxes', label: 'Impostos' },
+          { id: 'receivables', label: 'A Receber' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className="px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors relative"
+            style={{ 
+              color: activeTab === tab.id ? 'var(--accent-green)' : 'var(--text-secondary)',
+            }}
+          >
+            {tab.label}
+            {activeTab === tab.id && (
+              <div className="absolute bottom-0 left-0 right-0 h-0.5 rounded-t-full" style={{ backgroundColor: 'var(--accent-green)' }} />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {activeTab === "main" && (
+        <>
+          {/* Search & Filters */}
+          <div className="p-3 rounded-lg flex flex-col md:flex-row gap-3 items-center justify-between" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '8px' }}>
          <div className="relative w-full md:w-80">
             <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
             <input 
@@ -304,6 +396,31 @@ function ExpenseTracker() {
         <div className="w-full space-y-6">
           
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*,application/pdf" onChange={handleFileSelection} />
+
+          {/* Portfolio Growth Chart */}
+          <div className="p-4 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <TrendingUp size={18} style={{ color: 'var(--accent-green)' }} />
+              <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Evolução últimos 30 dias</h2>
+            </div>
+            {growthData.length > 0 ? (
+              <div className="h-[220px] w-full select-none">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={growthData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--ds-border)" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dy={10} />
+                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dx={-10} />
+                    <Tooltip contentStyle={tooltipStyle} />
+                    <Line type="monotone" dataKey="capital" stroke="var(--accent-green)" strokeWidth={2} dot={growthData.length === 1} activeDot={{ r: 4 }} />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[220px] flex items-center justify-center">
+                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Sem transações registradas</p>
+              </div>
+            )}
+          </div>
 
           {/* Upload Modal */}
           {showModal && (
@@ -459,6 +576,71 @@ function ExpenseTracker() {
           )}
         </div>
       </div>
+      </>
+      )}
+
+      {activeTab === "categories" && (
+        <div className="flex flex-col md:flex-row gap-6 max-w-5xl mx-auto">
+          {/* Categories Pie Chart */}
+          <div className="p-4 rounded-lg flex-1" style={{ backgroundColor: 'var(--bg-secondary)', borderRadius: '8px' }}>
+            <div className="flex items-center gap-2 mb-4">
+              <PieChart size={18} style={{ color: 'var(--accent-green)' }} />
+              <h2 className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>Distribuição de Gastos</h2>
+            </div>
+            {categoriesData.length > 0 ? (
+              <div className="h-[250px] w-full select-none">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie data={categoriesData} innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value">
+                      {categoriesData.map((entry: any, index: number) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} formatter={(val: number) => `R$ ${val.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[250px] flex items-center justify-center">
+                <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Sem gastos categorizados</p>
+              </div>
+            )}
+          </div>
+
+          {/* Categories List */}
+          <div className="flex-1 space-y-3">
+             <h2 className="text-sm font-medium mb-4" style={{ color: 'var(--text-primary)' }}>Ranking de Categorias</h2>
+             {categoriesData.map((cat, idx) => (
+                <div key={idx} className="p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                   <div className="flex justify-between items-center mb-2">
+                      <div className="flex items-center gap-2">
+                         <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}>
+                           {CATEGORY_ICONS[cat.name] || <ShoppingBag size={14} />}
+                         </div>
+                         <span className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{cat.name}</span>
+                      </div>
+                      <span className="valor-financeiro text-sm" style={{ color: 'var(--text-primary)' }}>R$ {cat.value.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                   </div>
+                   <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
+                      <div className="h-full rounded-full" style={{ width: `${(cat.value / (totalOutflow || 1)) * 100}%`, backgroundColor: CHART_COLORS[idx % CHART_COLORS.length] }}></div>
+                   </div>
+                </div>
+             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Placeholders for future phases */}
+      {["trends", "suppliers", "methods", "taxes", "receivables"].includes(activeTab) && (
+        <div className="p-12 text-center rounded-xl border border-dashed" style={{ borderColor: 'var(--ds-border)', backgroundColor: 'var(--bg-secondary)' }}>
+           <Loader2 size={32} className="mx-auto mb-4 animate-spin" style={{ color: 'var(--text-tertiary)' }} />
+           <h3 className="text-lg font-medium mb-2" style={{ color: 'var(--text-primary)' }}>Em Desenvolvimento</h3>
+           <p className="text-sm max-w-md mx-auto" style={{ color: 'var(--text-secondary)' }}>
+             Este dashboard faz parte da Fase 2 e 3 do plano de implementação e será liberado em breve com a nova atualização de inteligência financeira.
+           </p>
+        </div>
+      )}
+
     </div>
   );
 }
