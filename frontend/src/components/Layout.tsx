@@ -21,9 +21,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showModal, setShowModal] = useState(false);
   const [showScanMenu, setShowScanMenu] = useState(false);
   const [pastedContent, setPastedContent] = useState("");
+  const [pastedAt, setPastedAt] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  // Timer para invalidar links antigos (60 segundos)
+  useEffect(() => {
+    if (showModal && pastedAt && !selectedFile) {
+      const timer = setInterval(() => {
+        const now = Date.now();
+        if (now - pastedAt > 60000) {
+          setShowModal(false);
+          setPastedContent("");
+          setPastedAt(null);
+          setToast({ message: "Link expirado (limite de 1 minuto)", type: 'error' });
+        }
+      }, 1000);
+      return () => clearInterval(timer);
+    }
+  }, [showModal, pastedAt, selectedFile]);
 
   const handlePasteLink = async () => {
     try {
@@ -34,7 +51,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }
       
       setPastedContent(text);
-      setPendingNote(""); // Deixa a caixa de comentário limpa para o usuário
+      setPastedAt(Date.now());
+      setPendingNote(""); 
       setShowModal(true);
       setShowScanMenu(false);
     } catch (err) {
