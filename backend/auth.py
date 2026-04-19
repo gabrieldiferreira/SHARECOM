@@ -1,3 +1,4 @@
+import json
 import os
 from typing import Any, Dict
 
@@ -15,6 +16,7 @@ def _init_firebase_admin() -> None:
     if firebase_admin._apps:
         return
 
+    service_account_json = os.getenv("FIREBASE_SERVICE_ACCOUNT_JSON", "").strip()
     credentials_path = os.getenv("FIREBASE_CREDENTIALS_PATH", "").strip()
     google_app_creds = os.getenv("GOOGLE_APPLICATION_CREDENTIALS", "").strip()
     project_id = (
@@ -23,8 +25,21 @@ def _init_firebase_admin() -> None:
     )
     options = {"projectId": project_id} if project_id else None
 
-    if credentials_path:
-        cred = credentials.Certificate(credentials_path)
+    cred = None
+    if service_account_json:
+        try:
+            cred_dict = json.loads(service_account_json)
+            cred = credentials.Certificate(cred_dict)
+        except Exception as exc:
+            print(f"AuthError: Failed to parse FIREBASE_SERVICE_ACCOUNT_JSON: {exc}")
+
+    if not cred and credentials_path:
+        try:
+            cred = credentials.Certificate(credentials_path)
+        except Exception as exc:
+            print(f"AuthError: Failed to load credentials from {credentials_path}: {exc}")
+
+    if cred:
         if options:
             firebase_admin.initialize_app(cred, options=options)
         else:
@@ -36,8 +51,8 @@ def _init_firebase_admin() -> None:
             firebase_admin.initialize_app()
     else:
         raise RuntimeError(
-            "Missing Firebase Admin credentials. Set FIREBASE_CREDENTIALS_PATH "
-            "or GOOGLE_APPLICATION_CREDENTIALS to a Firebase service-account JSON file."
+            "Missing Firebase Admin credentials. Set FIREBASE_SERVICE_ACCOUNT_JSON, "
+            "FIREBASE_CREDENTIALS_PATH or GOOGLE_APPLICATION_CREDENTIALS."
         )
 
 
@@ -72,8 +87,7 @@ def verify_firebase_token(authorization: str | None = Header(default=None)) -> D
                 status_code=503,
                 detail=(
                     "Firebase Admin credentials not configured. "
-                    "Set FIREBASE_CREDENTIALS_PATH (or GOOGLE_APPLICATION_CREDENTIALS) "
-                    "to a service-account JSON file."
+                    "Set FIREBASE_SERVICE_ACCOUNT_JSON or FIREBASE_CREDENTIALS_PATH."
                 ),
             ) from exc
         print(f"AuthError: Invalid Firebase token: {exc}")
