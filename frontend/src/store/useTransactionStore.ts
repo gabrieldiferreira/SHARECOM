@@ -118,7 +118,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
   syncWithBackend: async () => {
     try {
-      const res = await authenticatedFetch(getApiUrl("/expenses"));
+      const res = await authenticatedFetch(getApiUrl("/expenses"), { cache: "no-store" });
       if (res.ok) {
         const remoteData = await res.json();
         const db = await getDB();
@@ -142,8 +142,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
                 masked_cpf: item.masked_cpf || undefined,
                 is_synced: true,
                 note: item.note || undefined,
-                is_deductible: item.is_deductible === 1 || item.is_deductible === true,
-                reimbursement_status: item.reimbursement_status || 'None',
               });
             }
             await txSet.done;
