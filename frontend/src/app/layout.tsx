@@ -6,7 +6,12 @@ import AuthGate from "@/components/AuthGate";
 import ErrorSentinel from "@/components/ErrorSentinel";
 import InstallPrompt from "@/components/InstallPrompt";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
+const inter = Inter({
+  subsets: ["latin"],
+  variable: "--font-inter",
+  display: "swap", // Prevents render-blocking: shows fallback font instantly
+  preload: true,
+});
 
 export const viewport: Viewport = {
   themeColor: "#020617",
@@ -18,17 +23,20 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: "SHARECOM - Gerenciamento de Comprovantes",
-  description: "Sistema de gerenciamento de comprovantes financeiros",
+  description: "Sistema inteligente de gerenciamento de comprovantes financeiros com extração de dados via IA",
   manifest: "/manifest.json",
   icons: {
-    icon: "/icon-512x512.png",
-    apple: "/icon-512x512.png",
+    icon: [
+      { url: "/icon-192x192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icon-512x512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/icon-192x192.png",
   },
   appleWebApp: {
     capable: true,
     statusBarStyle: "black-translucent",
     title: "SHARECOM",
-    startupImage: "/icon-512x512.png"
+    startupImage: "/icon-192x192.png"
   },
   other: {
     "apple-mobile-web-app-capable": "yes",
@@ -46,6 +54,15 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR">
+      <head>
+        {/* DNS prefetch + preconnect para recursos externos */}
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link rel="dns-prefetch" href="https://firebaseapp.com" />
+        <link rel="dns-prefetch" href="https://openrouter.ai" />
+        {/* Preload do ícone principal (evita LCP delay) */}
+        <link rel="preload" href="/icon-192x192.png" as="image" type="image/png" />
+      </head>
       <body className={`${inter.variable} font-sans`}>
         <ErrorSentinel>
           <AuthGate>

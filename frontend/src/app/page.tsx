@@ -1,12 +1,35 @@
 "use client";
 
 import { useState, useEffect, Suspense, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
 import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, BarChart3, Plus, Loader2, CheckCircle2, TrendingUp, Landmark, Clock, Award, MessageSquare, Search, Filter, ChevronLeft, ChevronRight } from "lucide-react";
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } from 'recharts';
 import { useTransactionStore } from "../store/useTransactionStore";
 import { TransactionEntity } from "../lib/db";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
+
+// Lazy load recharts — reduz o bundle inicial em ~200 KB
+// Os gráficos só carregam após o conteúdo principal estar visível
+const ChartPlaceholder = () => (
+  <div className="h-full w-full flex items-center justify-center" style={{ color: 'var(--text-tertiary)', fontSize: '12px' }}>
+    <Loader2 size={16} className="animate-spin mr-2" /> Carregando gráfico...
+  </div>
+);
+
+const { BarChart, Bar, LineChart, Line, PieChart, Pie, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } = {
+  BarChart: dynamic(() => import('recharts').then(m => ({ default: m.BarChart })), { ssr: false, loading: ChartPlaceholder }),
+  Bar: dynamic(() => import('recharts').then(m => ({ default: m.Bar })), { ssr: false }),
+  LineChart: dynamic(() => import('recharts').then(m => ({ default: m.LineChart })), { ssr: false }),
+  Line: dynamic(() => import('recharts').then(m => ({ default: m.Line })), { ssr: false }),
+  PieChart: dynamic(() => import('recharts').then(m => ({ default: m.PieChart })), { ssr: false }),
+  Pie: dynamic(() => import('recharts').then(m => ({ default: m.Pie })), { ssr: false }),
+  XAxis: dynamic(() => import('recharts').then(m => ({ default: m.XAxis })), { ssr: false }),
+  YAxis: dynamic(() => import('recharts').then(m => ({ default: m.YAxis })), { ssr: false }),
+  ResponsiveContainer: dynamic(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })), { ssr: false }),
+  Cell: dynamic(() => import('recharts').then(m => ({ default: m.Cell })), { ssr: false }),
+  Tooltip: dynamic(() => import('recharts').then(m => ({ default: m.Tooltip })), { ssr: false }),
+  CartesianGrid: dynamic(() => import('recharts').then(m => ({ default: m.CartesianGrid })), { ssr: false }),
+};
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "Alimentação": <Coffee size={20} />,

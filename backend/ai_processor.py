@@ -42,7 +42,14 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str, ocr_text
     
     content_list = [{"type": "text", "text": prompt_base}]
     
-    if extension.lower() != ".txt":
+    if extension.lower() == ".html":
+        # Página HTML: extrai texto puro para a IA analisar
+        import re as _re
+        html_text = image_content.decode('utf-8', errors='ignore')
+        plain_text = _re.sub(r'<[^>]+>', ' ', html_text)  # remove tags HTML
+        plain_text = _re.sub(r'\s+', ' ', plain_text).strip()[:3000]  # limita tamanho
+        content_list[0]["text"] += f"\n\nCONTEÚDOM DA PÁGINA WEB (EXTRAÍDO DE HTML):\n{plain_text}"
+    elif extension.lower() != ".txt":
         base64_image = base64.b64encode(image_content).decode('utf-8')
         mime_type = "image/jpeg" if extension.lower() in [".jpg", ".jpeg"] else "image/png"
         content_list.append({

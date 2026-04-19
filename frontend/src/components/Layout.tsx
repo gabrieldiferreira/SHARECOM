@@ -150,10 +150,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       formData.append("received_file", selectedFile, selectedFile.name);
     }
     
-    // Combina o link/texto colado com o comentário do usuário
-    const finalNote = selectedFile ? pendingNote : `${pastedContent}${pendingNote ? `\n\nComentário: ${pendingNote}` : ""}`;
-    if (finalNote) {
-      formData.append("note", finalNote);
+    // Se for link: envia o URL limpo em campo separado, e o comentário em 'note'
+    if (!selectedFile && pastedContent) {
+      formData.append("receipt_url", pastedContent.trim());
+    }
+    // Nota/comentário do usuário (opcional)
+    if (pendingNote.trim()) {
+      formData.append("note", pendingNote.trim());
+    } else if (selectedFile && !pendingNote.trim()) {
+      // sem nota, não adiciona nada
     }
     
     try {

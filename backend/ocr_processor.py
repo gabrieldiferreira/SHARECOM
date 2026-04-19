@@ -26,6 +26,13 @@ def get_easyocr_reader():
 
 def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]:
     ext = extension.lower()
+    if ext == ".html":
+        import re as _re
+        html_text = file_bytes.decode('utf-8', errors='ignore')
+        plain_text = _re.sub(r'<[^>]+>', ' ', html_text)
+        plain_text = _re.sub(r'\s+', ' ', plain_text).strip()
+        return "pdf_text", plain_text
+
     if ext == ".pdf":
         pdf_stream = io.BytesIO(file_bytes)
         doc = fitz.open(stream=pdf_stream, filetype="pdf")

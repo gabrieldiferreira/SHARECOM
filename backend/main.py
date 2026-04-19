@@ -103,11 +103,12 @@ def create_expense(
 @app.post("/receipts") # Keep legacy endpoint for frontend compatibility
 async def process_ata(
     received_file: UploadFile = File(None),
+    receipt_url: str = Form(None),
     note: str = Form(None),
     db: Session = Depends(get_db),
     _: dict = Depends(verify_firebase_token),
 ):
-    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | NOTA: {note}", flush=True)
+    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | URL: {receipt_url} | NOTA: {note}", flush=True)
     
     content = b""
     sha256_hash = ""
@@ -119,37 +120,71 @@ async def process_ata(
         content = await received_file.read()
         sha256_hash = hashlib.sha256(content).hexdigest()
         ext = os.path.splitext(filename)[1] or ".jpg"
-    elif note and note.startswith("http"):
-        # Tenta baixar o conteúdo se for um link direto de imagem/pdf
+    elif receipt_url and receipt_url.strip().startswith("http"):
+        # Campo dedicado de URL: tenta baixar a imagem/PDF
         import httpx
+        clean_url = receipt_url.strip()
         try:
-            print(f"DEBUG: Detectado link direto. Tentando baixar: {note}", flush=True)
-            async with httpx.AsyncClient(timeout=10.0) as client:
-                download_resp = await client.get(note)
+            print(f"DEBUG: Baixando URL: {clean_url}", flush=True)
+            async with httpx.AsyncClient(timeout=15.0, follow_redirects=True) as client:
+                download_resp = await client.get(
+                    clean_url,
+                    headers={"User-Agent": "Mozilla/5.0 (compatible; SHARECOM-Bot/1.0)"}
+                )
+                content_type = download_resp.headers.get("content-type", "")
+                print(f"DEBUG: Status={download_resp.status_code}, Content-Type={content_type}", flush=True)
+
                 if download_resp.status_code == 200:
-                    content = download_resp.content
-                    sha256_hash = hashlib.sha256(content).hexdigest()
-                    # Tenta descobrir a extensão pelo link
-                    if ".pdf" in note.lower(): ext = ".pdf"
-                    elif ".png" in note.lower(): ext = ".png"
-                    else: ext = ".jpg"
-                    filename = note.split("/")[-1] or "downloaded_file.jpg"
-                    print(f"DEBUG: Download concluído com sucesso ({len(content)} bytes).", flush=True)
+                    # Rejeita HTML — provavelmente página de login ou erro
+                    if "text/html" in content_type:
+                        print("DEBUG: URL retornou HTML (página protegida ou redirect). Usando URL como texto.", flush=True)
+                        # Tenta extrair texto da página HTML como último recurso
+                        content = download_resp.content
+                        sha256_hash = hashlib.sha256(content).hexdigest()
+                        ext = ".html"
+                        filename = "downloaded_page.html"
+                    elif "pdf" in content_type:
+                        content = download_resp.content
+                        sha256_hash = hashlib.sha256(content).hexdigest()
+                        ext = ".pdf"
+                        filename = clean_url.split("/")[-1].split("?")[0] or "comprovante.pdf"
+                        print(f"DEBUG: PDF baixado com sucesso ({len(content)} bytes).", flush=True)
+                    elif any(img in content_type for img in ["image/jpeg", "image/png", "image/webp", "image/gif"]):
+                        content = download_resp.content
+                        sha256_hash = hashlib.sha256(content).hexdigest()
+                        if "png" in content_type: ext = ".png"
+                        elif "webp" in content_type: ext = ".webp"
+                        else: ext = ".jpg"
+                        filename = clean_url.split("/")[-1].split("?")[0] or f"imagem{ext}"
+                        print(f"DEBUG: Imagem baixada com sucesso ({len(content)} bytes).", flush=True)
+                    else:
+                        # Tipo desconhecido — tenta inferir pela URL
+                        url_lower = clean_url.lower()
+                        if ".pdf" in url_lower: ext = ".pdf"
+                        elif ".png" in url_lower: ext = ".png"
+                        elif ".webp" in url_lower: ext = ".webp"
+                        else: ext = ".jpg"
+                        content = download_resp.content
+                        sha256_hash = hashlib.sha256(content).hexdigest()
+                        filename = clean_url.split("/")[-1].split("?")[0] or f"arquivo{ext}"
+                        print(f"DEBUG: Tipo de conteúdo desconhecido ({content_type}). Tentando como {ext}.", flush=True)
                 else:
-                    # Se falhar o download, trata como texto
-                    content = note.encode('utf-8')
+                    print(f"DEBUG: Falha ao baixar URL (status {download_resp.status_code}). Usando URL como texto.", flush=True)
+                    content = clean_url.encode('utf-8')
                     sha256_hash = hashlib.sha256(content).hexdigest()
+                    ext = ".txt"
         except Exception as e:
-            print(f"DEBUG: Falha ao baixar link: {e}. Tratando como texto.", flush=True)
-            content = note.encode('utf-8')
+            print(f"DEBUG: Exceção ao baixar URL: {e}. Usando URL como texto.", flush=True)
+            content = clean_url.encode('utf-8')
             sha256_hash = hashlib.sha256(content).hexdigest()
+            ext = ".txt"
     elif note:
-        # Se não tem arquivo, mas tem nota (texto puro), usamos a nota como fonte
+        # Texto puro como fonte
         content = note.encode('utf-8')
         sha256_hash = hashlib.sha256(content).hexdigest()
-        filename = "link_comprovante.txt"
+        filename = "note_comprovante.txt"
     else:
-        raise HTTPException(status_code=400, detail="Nenhum dado (arquivo ou link) enviado.")
+        raise HTTPException(status_code=400, detail="Nenhum dado (arquivo, URL ou texto) enviado.")
     
     # Check for idempotency
     existing_expense = db.query(models.Expense).filter(models.Expense.receipt == sha256_hash).first()
