@@ -16,6 +16,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const { addTransaction, pendingNote, setPendingNote } = useTransactionStore();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
+  const [lastAdded, setLastAdded] = useState<{ amount: number, merchant: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showScanMenu, setShowScanMenu] = useState(false);
@@ -149,8 +150,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
 
         await addTransaction(newTx);
+        setLastAdded({ amount: newTx.total_amount, merchant: newTx.merchant_name });
         setUploadSuccess(true);
-        setTimeout(() => setUploadSuccess(false), 3000);
+        setTimeout(() => {
+          setUploadSuccess(false);
+          setLastAdded(null);
+        }, 4000);
       } else {
         if (response.status === 401) {
           alert("Sua sessão expirou. Faça login novamente para continuar.");
@@ -469,6 +474,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
+        {/* Global Success Notification Toast */}
+        {uploadSuccess && lastAdded && (
+          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[300] w-[90%] max-w-sm animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 backdrop-blur-md bg-opacity-90">
+              <div className="bg-white/20 p-2 rounded-full">
+                <CheckCircle2 size={24} />
+              </div>
+              <div className="flex-1 overflow-hidden">
+                <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Gasto Adicionado</p>
+                <p className="text-sm font-semibold truncate">{lastAdded.merchant}</p>
+              </div>
+              <div className="text-right whitespace-nowrap">
+                <p className="text-lg font-bold">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lastAdded.amount)}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Global Loading Bar */}
         <div className={`fixed top-0 left-0 w-full h-1 z-[100] transition-opacity duration-300 ${(isUploading || uploadSuccess) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
           <div 
