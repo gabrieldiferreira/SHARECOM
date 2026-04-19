@@ -102,33 +102,34 @@ def create_expense(
 @app.post("/process-ata")
 @app.post("/receipts") # Keep legacy endpoint for frontend compatibility
 async def process_ata(
-    received_file: UploadFile = File(...),
+    received_file: UploadFile = File(None),
     note: str = Form(None),
     db: Session = Depends(get_db),
     _: dict = Depends(verify_firebase_token),
 ):
-    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO DO ARQUIVO: {received_file.filename}", flush=True)
-    """
-    Absolute Privacy Processing: 
-    Reads the file into memory, extracts data via AI, and destroys the buffer.
-    Zero persistence to disk.
-    """
-    if not received_file.filename:
-        raise HTTPException(status_code=400, detail="Documento não identificado.")
+    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | NOTA: {note}", flush=True)
     
-    # Read directly into RAM
-    content = await received_file.read()
+    content = b""
+    sha256_hash = ""
+    ext = ".txt"
+    filename = "text_note.txt"
+
+    if received_file and received_file.filename:
+        filename = received_file.filename
+        content = await received_file.read()
+        sha256_hash = hashlib.sha256(content).hexdigest()
+        ext = os.path.splitext(filename)[1] or ".jpg"
+    elif note:
+        # Se não tem arquivo, mas tem nota, usamos a nota como fonte
+        content = note.encode('utf-8')
+        sha256_hash = hashlib.sha256(content).hexdigest()
+        filename = "link_comprovante.txt"
+    else:
+        raise HTTPException(status_code=400, detail="Nenhum dado (arquivo ou link) enviado.")
     
-    # Calculate SHA-256 for idempotency (prevents duplicate 'Atas')
-    sha256_hash = hashlib.sha256(content).hexdigest()
-    print(f"DEBUG: Hash do arquivo: {sha256_hash}", flush=True)
-    
-    # Check if this 'Ata' already exists
+    # Check for idempotency
     existing_expense = db.query(models.Expense).filter(models.Expense.receipt == sha256_hash).first()
     if existing_expense:
-        print(f"DEBUG: BLOQUEIO - Arquivo já existe no banco (ID: {existing_expense.id}). Retornando dados antigos.", flush=True)
-        # Clear sensitive bytes immediately
-        del content
         return {
             "idempotent": True,
             "ai_data": {
@@ -141,97 +142,59 @@ async def process_ata(
             "database_id": existing_expense.id
         }
     
-    # 2. Process File via OCR (The Scout)
-    ext = os.path.splitext(received_file.filename)[1] or ".jpg"
-    extracted_data, raw_text = await run_in_threadpool(ocr_processor.extract_transaction_data, content, ext)
-    structural_map = generate_structural_map(raw_text)
-    
-    # 3. Hybrid Logic: AI goes first for unknown places (patterns)
-    import ai_processor
-    # Check by structural map (layout) instead of file hash
-    # ONLY trust the pattern bank if we have a valid structural map
-    pattern_exists = None
-    if len(structural_map.strip()) > 10:
-        pattern_exists = db.query(models.PatternLog).filter(models.PatternLog.structural_map == structural_map).first()
-    
-    # If pattern doesn't exist OR the existing pattern is a failure pattern, call AI
-    is_failure_pattern = pattern_exists and ("Erro na Leitura" in pattern_exists.extracted_json)
-    
-    if not pattern_exists or is_failure_pattern:
-        print(f"DEBUG: Padrão NOVO ou falho detectado. IA batedora entrando em campo...", flush=True)
-        ai_data, ai_error = await ai_processor.analyze_receipt_with_ai(content, ext)
-        if ai_data:
-            extracted_data.update(ai_data)
-            extracted_data["needs_manual_review"] = False
-            print(f"DEBUG: IA mapeou o padrão com sucesso.", flush=True)
-        else:
-            error_msg = f"IA Falhou: {ai_error}"
-            extracted_data["merchant_name"] = error_msg
-            print(f"DEBUG: {error_msg}. Usando dados residuais do OCR.", flush=True)
-    else:
-        print(f"DEBUG: Padrão CONHECIDO. OCR local assume a glória.", flush=True)
-        # Load known data from pattern bank
-        try:
-            stored_data = json.loads(pattern_exists.extracted_json)
-            # Update local OCR data with intelligence from the bank (but keep the date/amount from current OCR if possible)
-            # For now, let's trust the bank's mapping logic
-            pass 
-        except:
-            pass
+    # Process Data
+    extracted_data = {
+        "total_amount": 0.0,
+        "merchant_name": "Processando...",
+        "smart_category": "Outros",
+        "transaction_date": None
+    }
+    raw_text = note or ""
+    structural_map = ""
 
-    # 4. Save to Pattern Bank (only if this specific file hash is new and it's NOT a failure)
-    import json
-    is_valid_extraction = "Erro na Leitura" not in extracted_data["merchant_name"] and "IA Falhou" not in extracted_data["merchant_name"]
+    if received_file:
+        extracted_data, raw_text = await run_in_threadpool(ocr_processor.extract_transaction_data, content, ext)
+        structural_map = generate_structural_map(raw_text)
     
-    existing_log = db.query(models.PatternLog).filter(models.PatternLog.hash == sha256_hash).first()
-    if not existing_log and is_valid_extraction:
-        new_pattern = models.PatternLog(
-            filename=received_file.filename,
-            raw_text=raw_text,
-            structural_map=structural_map,
-            extracted_json=json.dumps(extracted_data),
-            hash=sha256_hash
-        )
-        db.add(new_pattern)
-        db.commit()
-    elif not is_valid_extraction:
-        print(f"DEBUG: Extração falhou. Não salvando no banco de padrões.", flush=True)
+    # Call AI (The Scout)
+    import ai_processor
+    # Se for apenas texto (link), a IA vai analisar o texto da nota
+    ai_data, ai_error = await ai_processor.analyze_receipt_with_ai(content, ext)
+    
+    if ai_data:
+        extracted_data.update(ai_data)
     else:
-        print(f"DEBUG: Padrão estrutural já existe no banco. Pulando salvamento.", flush=True)
-    
-    # Convert extracted date string to Python datetime object
+        if not received_file:
+             extracted_data["merchant_name"] = f"Erro no Link: {ai_error}"
+
+    # Save to database
+    import json
     date_val = extracted_data.get("transaction_date")
+    date_obj = schemas.datetime.now()
     if date_val:
         try:
             date_obj = schemas.datetime.fromisoformat(date_val.replace(" ", "T"))
-        except (ValueError, TypeError):
-            date_obj = schemas.datetime.now()
-    else:
-        date_obj = schemas.datetime.now()
+        except:
+            pass
 
-    # Save to database immediately after extraction to ensure zero data loss
     db_expense = models.Expense(
         date=date_obj,
         amount=extracted_data.get("total_amount", 0),
         category=extracted_data.get("smart_category", "Outros"),
         merchant=extracted_data.get("merchant_name", "Desconhecido"),
-        description=f"Extracted from {received_file.filename}",
-        receipt=sha256_hash, # Link to the unique hash of the file
+        description=f"Processado via {('Arquivo' if received_file else 'Link')}",
+        receipt=sha256_hash,
         transaction_type=extracted_data.get("transaction_type", "Outflow"),
         payment_method=extracted_data.get("payment_method", "Desconhecido"),
         destination_institution=extracted_data.get("destination_institution"),
-        transaction_id=extracted_data.get("transaction_id") or None,
-        masked_cpf=extracted_data.get("masked_cpf") or None,
+        transaction_id=extracted_data.get("transaction_id"),
         note=note
     )
     
     db.add(db_expense)
     db.commit()
     db.refresh(db_expense)
-
-    # Explicitly nullify content buffer to hint GC
-    del content
-        
+    
     return {
         "idempotent": False,
         "filename": sha256_hash, 

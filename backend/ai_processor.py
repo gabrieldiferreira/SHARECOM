@@ -16,17 +16,15 @@ MODEL_LIST = [
 async def analyze_receipt_with_ai(image_content: bytes, extension: str):
     """
     Envia a imagem para o OpenRouter tentando vários modelos de visão
+    Envia a imagem ou texto para o OpenRouter tentando vários modelos de visão
     em sequência caso o primeiro falhe.
     """
     api_key = os.getenv("OPENROUTER_API_KEY")
     if not api_key:
         return None, "Chave do OpenRouter não configurada no ambiente."
 
-    # Prepara a imagem em Base64
-    base64_image = base64.b64encode(image_content).decode('utf-8')
-    mime_type = "image/jpeg" if extension.lower() in [".jpg", ".jpeg"] else "image/png"
-
-    prompt = """
+    # Configuração do conteúdo (Imagem ou Texto)
+    prompt_base = """
     Analise este comprovante financeiro e extraia os dados no formato JSON estrito:
     {
         "total_amount": float,
@@ -40,6 +38,19 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str):
     }
     Retorne APENAS o JSON, sem explicações.
     """
+    
+    content_list = [{"type": "text", "text": prompt_base}]
+    
+    if extension.lower() != ".txt":
+        base64_image = base64.b64encode(image_content).decode('utf-8')
+        mime_type = "image/jpeg" if extension.lower() in [".jpg", ".jpeg"] else "image/png"
+        content_list.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:{mime_type};base64,{base64_image}"}
+        })
+    else:
+        text_content = image_content.decode('utf-8', errors='ignore')
+        content_list[0]["text"] += f"\n\nCONTEÚDO PARA ANALISAR:\n{text_content}"
 
     last_error = "Nenhum modelo disponível"
     
@@ -60,15 +71,7 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str):
                         "messages": [
                             {
                                 "role": "user",
-                                "content": [
-                                    {"type": "text", "text": prompt},
-                                    {
-                                        "type": "image_url",
-                                        "image_url": {
-                                            "url": f"data:{mime_type};base64,{base64_image}"
-                                        }
-                                    }
-                                ]
+                                "content": content_list
                             }
                         ]
                     }

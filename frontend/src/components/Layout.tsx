@@ -2,7 +2,7 @@
 
 import React, { useState, useRef } from "react";
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera, Image, FileText, X } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera, Image, FileText, X, ClipboardPaste, Link2 } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -20,9 +20,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showModal, setShowModal] = useState(false);
   const [showScanMenu, setShowScanMenu] = useState(false);
+  const [pastedContent, setPastedContent] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+
+  const handlePasteLink = async () => {
+    try {
+      const text = await navigator.clipboard.readText();
+      if (!text) {
+        alert("Sua área de transferência está vazia.");
+        return;
+      }
+      
+      setPastedContent(text);
+      setPendingNote(""); // Deixa a caixa de comentário limpa para o usuário
+      setShowModal(true);
+      setShowScanMenu(false);
+    } catch (err) {
+      alert("Para colar, você precisa permitir o acesso à área de transferência no seu navegador.");
+      console.error("Erro ao ler clipboard:", err);
+    }
+  };
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isDark, setIsDark] = useState(false);
   const isLoginPage = pathname === "/login";
@@ -103,14 +122,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const executeUpload = async () => {
-    if (!selectedFile) return;
+    if (!selectedFile && !pastedContent) return;
     
     setShowModal(false);
     setIsUploading(true);
     const formData = new FormData();
-    formData.append("received_file", selectedFile, selectedFile.name);
-    if (pendingNote) {
-      formData.append("note", pendingNote);
+    if (selectedFile) {
+      formData.append("received_file", selectedFile, selectedFile.name);
+    }
+    
+    // Combina o link/texto colado com o comentário do usuário
+    const finalNote = selectedFile ? pendingNote : `${pastedContent}${pendingNote ? `\n\nComentário: ${pendingNote}` : ""}`;
+    if (finalNote) {
+      formData.append("note", finalNote);
     }
     
     try {
@@ -193,7 +217,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: "Histórico", href: "/timeline", icon: History },
     { name: "Scanner", href: "/scanner", icon: ScanLine },
     { name: "Relatórios", href: "/reports", icon: PieChart },
-    { name: "Ajustes", href: "/settings", icon: Settings },
+    { name: "Colar", onClick: handlePasteLink, icon: ClipboardPaste },
   ];
 
   const handleLogout = async () => {
@@ -282,11 +306,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = item.href ? pathname === item.href : false;
+            
+            if (item.onClick) {
+              return (
+                <button
+                  key={item.name}
+                  onClick={item.onClick}
+                  className="w-full flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200 hover:bg-black/5"
+                  style={{
+                    backgroundColor: 'transparent',
+                    color: 'var(--text-secondary)',
+                  }}
+                >
+                  <Icon size={20} />
+                  <span className="font-medium text-sm">{item.name}</span>
+                </button>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href || "#"}
                 className="flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200"
                 style={{
                   backgroundColor: isActive ? '#3B82F6' : 'transparent',
@@ -410,6 +452,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     <p className="text-[10px] text-gray-500">Escolher PDF ou documento</p>
                   </div>
                 </button>
+
+                <button 
+                  onClick={handlePasteLink}
+                  className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
+                >
+                  <div className="w-10 h-10 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center">
+                    <ClipboardPaste size={20} />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-sm font-medium">Colar do Clipboard</p>
+                    <p className="text-[10px] text-gray-500">Detectar link ou texto copiado</p>
+                  </div>
+                </button>
               </div>
             </div>
           </div>
@@ -429,15 +484,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </button>
               </div>
               
-              <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
-                 <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)', color: '#3B82F6' }}>
-                    <Plus size={18} />
+               {selectedFile ? (
+                 <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)', color: '#3B82F6' }}>
+                       <Plus size={18} />
+                    </div>
+                    <div className="overflow-hidden">
+                       <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Arquivo Selecionado</p>
+                       <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{selectedFile?.name}</p>
+                    </div>
                  </div>
-                 <div className="overflow-hidden">
-                    <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Arquivo Selecionado</p>
-                    <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{selectedFile?.name}</p>
+               ) : (
+                 <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20 shadow-sm" style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-500">
+                       <Link2 size={20} />
+                    </div>
+                    <div className="overflow-hidden flex-1">
+                       <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600/70">Link Pronto para Processar</p>
+                       <p className="text-[11px] font-mono truncate opacity-80" style={{ color: 'var(--text-primary)' }}>{pastedContent}</p>
+                    </div>
                  </div>
-              </div>
+               )}
 
               <div>
                 <label className="text-label block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Deseja adicionar um comentário?</label>
@@ -525,11 +592,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }}>
           {navItems.slice(0, 2).map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = item.href ? pathname === item.href : false;
+
+            if (item.onClick) {
+              return (
+                <button
+                  key={item.name}
+                  onClick={item.onClick}
+                  className="flex flex-col items-center space-y-0.5 transition-colors"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <Icon size={20} />
+                  <span className="text-[11px] font-semibold">{item.name}</span>
+                </button>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href || "#"}
                 className="flex flex-col items-center space-y-0.5 transition-colors"
                 style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
               >
@@ -563,11 +645,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           {[navItems[3], navItems[4]].map((item) => {
             const Icon = item.icon;
-            const isActive = pathname === item.href;
+            const isActive = item.href ? pathname === item.href : false;
+
+            if (item.onClick) {
+              return (
+                <button
+                  key={item.name}
+                  onClick={item.onClick}
+                  className="flex flex-col items-center space-y-0.5 transition-colors"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <Icon size={20} />
+                  <span className="text-[10px] font-medium">{item.name}</span>
+                </button>
+              );
+            }
+
             return (
               <Link
                 key={item.href}
-                href={item.href}
+                href={item.href || "#"}
                 className="flex flex-col items-center space-y-0.5 transition-colors"
                 style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
               >
