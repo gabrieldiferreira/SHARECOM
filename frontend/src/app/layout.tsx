@@ -8,6 +8,14 @@ import InstallPrompt from "@/components/InstallPrompt";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 
+export const viewport: Viewport = {
+  themeColor: "#020617",
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
+
 export const metadata: Metadata = {
   title: "SHARECOM - Gerenciamento de Comprovantes",
   description: "Sistema de gerenciamento de comprovantes financeiros",
