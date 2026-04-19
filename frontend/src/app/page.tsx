@@ -63,7 +63,6 @@ function ExpenseTracker() {
     syncWithBackend();
   }, [fetchTransactions, syncWithBackend]);
 
-  if (!mounted) return null;
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter(tx => {
