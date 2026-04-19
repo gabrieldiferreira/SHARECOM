@@ -55,13 +55,19 @@
   }
 }
 
-/* Recharts Global Fixes - Evitar fundo branco e seleção no mobile */
-.recharts-wrapper, .recharts-wrapper * {
+/* Recharts Global Fixes - Evitar fundo branco, seleção e travamento de scroll no mobile */
+.recharts-wrapper, .recharts-surface {
   outline: none !important;
   -webkit-tap-highlight-color: transparent !important;
   user-select: none !important;
   -webkit-user-select: none !important;
-  touch-action: pan-y; /* Permite scroll vertical da página mas não no gráfico */
+  touch-action: pan-y !important; /* Força scroll vertical */
+  pointer-events: none !important; /* Impede que o gráfico capture o toque do dedo (evita travamento do feed) */
+}
+
+/* Garante que elementos internos do gráfico também não capturem eventos */
+.recharts-wrapper * {
+  pointer-events: none !important;
 }
 
 /* Evita que a tela inteira balance pro lado no mobile */
