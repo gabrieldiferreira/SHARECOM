@@ -118,7 +118,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
   syncWithBackend: async () => {
     try {
-      const res = await authenticatedFetch(getApiUrl("/expenses"), { cache: "no-store" });
+      const res = await authenticatedFetch(getApiUrl(`/expenses?t=${Date.now()}`), { cache: "no-store" });
       if (res.ok) {
         const remoteData = await res.json();
         const db = await getDB();

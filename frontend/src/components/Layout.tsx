@@ -199,8 +199,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        console.log("SHARECOM: Salvando localmente...");
         await addTransaction(newTx);
+        console.log("SHARECOM: Sincronizando com o backend...");
         await syncWithBackend(); // Força re-sync com o backend para atualizar os dashboards
+        console.log("SHARECOM: Sincronização finalizada.");
         setLastAdded({ amount: newTx.total_amount, merchant: newTx.merchant_name });
         setUploadSuccess(true);
         setTimeout(() => {
