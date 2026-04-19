@@ -203,7 +203,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen flex-col md:flex-row" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between p-4 sticky top-0 z-50" style={{ backgroundColor: 'var(--bg-secondary)', borderBottom: '0.5px solid var(--ds-border)' }}>
+      <header className="md:hidden flex items-center justify-between p-4 sticky top-2 mx-3 z-50 shadow-xl" style={{ 
+        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.7)', 
+        backdropFilter: 'blur(16px)', 
+        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
+        borderRadius: '16px' 
+      }}>
         <div className="flex items-center gap-2">
           {user?.photoURL ? (
             <img 
@@ -225,6 +230,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
         </button>
       </header>
+
+      {/* Header Fade Effect (Subtle & Small) */}
+      <div className="md:hidden sticky top-[68px] left-0 right-0 h-3 z-40 pointer-events-none" style={{ background: 'linear-gradient(to bottom, var(--bg-primary) 0%, transparent 100%)', marginTop: '-12px' }}></div>
 
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex flex-col w-60 p-4 space-y-6 overflow-y-auto no-scrollbar h-screen sticky top-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '0.5px solid var(--ds-border)' }}>
@@ -403,7 +411,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Bottom Nav - Mobile */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 px-4 flex items-center justify-around z-50" style={{ backgroundColor: 'var(--bg-secondary)', borderTop: '0.5px solid var(--ds-border)' }}>
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 px-4 flex items-center justify-around z-50 shadow-[0_-8px_30px_rgba(0,0,0,0.2)]" style={{ 
+          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.85)', 
+          backdropFilter: 'blur(20px)', 
+          borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
+          borderRadius: '24px 24px 0 0', 
+          paddingBottom: 'env(safe-area-inset-bottom)', 
+          transform: 'translateZ(0)',
+          WebkitFontSmoothing: 'antialiased',
+          MozOsxFontSmoothing: 'grayscale'
+        }}>
           {navItems.slice(0, 2).map((item) => {
             const Icon = item.icon;
             const isActive = pathname === item.href;
@@ -415,7 +432,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
               >
                 <Icon size={20} />
-                <span className="text-[10px] font-medium">{item.name}</span>
+                <span className="text-[11px] font-semibold">{item.name}</span>
               </Link>
             );
           })}
