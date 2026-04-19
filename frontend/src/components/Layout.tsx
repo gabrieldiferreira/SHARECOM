@@ -238,7 +238,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: "Histórico", href: "/timeline", icon: History },
     { name: "Scanner", href: "/scanner", icon: ScanLine },
     { name: "Relatórios", href: "/reports", icon: PieChart },
-    { name: "Colar", onClick: handlePasteLink, icon: ClipboardPaste },
+    { name: "Link", onClick: handlePasteLink, icon: Link2 },
   ];
 
   const handleLogout = async () => {
@@ -478,12 +478,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   onClick={handlePasteLink}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
-                  <div className="w-10 h-10 rounded-full bg-orange-500/10 text-orange-500 flex items-center justify-center">
-                    <ClipboardPaste size={20} />
+                  <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
+                    <Link2 size={20} />
                   </div>
                   <div className="text-left">
-                    <p className="text-sm font-medium">Colar do Clipboard</p>
-                    <p className="text-[10px] text-gray-500">Detectar link ou texto copiado</p>
+                    <p className="text-sm font-medium">Link do Clipboard</p>
+                    <p className="text-[10px] text-gray-500">Detectar link ou imagem copiada</p>
                   </div>
                 </button>
               </div>
