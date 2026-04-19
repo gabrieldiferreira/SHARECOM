@@ -8,7 +8,7 @@ import {
 import {
   FileText, FileSpreadsheet, Download, TrendingUp, TrendingDown,
   DollarSign, Layers, Calendar, CreditCard, Building2, Filter,
-  ChevronDown, Loader2, Info,
+  ChevronDown, Loader2, Info, CheckCircle2, X
 } from "lucide-react";
 import { useTransactionStore } from "../../store/useTransactionStore";
 import { getApiUrl } from "../../lib/api";
@@ -39,6 +39,7 @@ export default function ReportsPage() {
   const [dateRange, setDateRange] = useState<DateRange>({ start: "", end: "" });
   const [typeFilter, setTypeFilter] = useState<"all" | "Inflow" | "Outflow">("all");
   const [customerName, setCustomerName] = useState("");
+  const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
   useEffect(() => {
     setMounted(true);
@@ -179,9 +180,19 @@ export default function ReportsPage() {
       a.click();
       a.remove();
       URL.revokeObjectURL(url);
+      
+      setNotification({
+        type: 'success',
+        message: `${format.toUpperCase()} gerado e baixado com sucesso!`
+      });
+      setTimeout(() => setNotification(null), 5000);
     } catch (err) {
       console.error("Export error:", err);
-      alert("Erro ao exportar. Verifique se o servidor backend está rodando.");
+      setNotification({
+        type: 'error',
+        message: "Erro ao exportar. Verifique a conexão com o servidor."
+      });
+      setTimeout(() => setNotification(null), 5000);
     } finally {
       setExporting(null);
     }
@@ -206,7 +217,28 @@ export default function ReportsPage() {
   const tooltipStyle = { backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", fontSize: "12px" };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 font-sans w-full max-w-full">
+    <div className="p-4 md:p-6 space-y-6 font-sans w-full max-w-full relative">
+      {/* Notification Card */}
+      {notification && (
+        <div className="fixed top-20 right-4 z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
+          <div className={`flex items-center gap-3 p-4 rounded-xl border-thin shadow-lg backdrop-blur-md ${
+            notification.type === 'success' 
+              ? 'bg-ds-bg-secondary/90 border-fn-income/30' 
+              : 'bg-ds-bg-secondary/90 border-fn-expense/30'
+          }`}>
+            <div className={notification.type === 'success' ? 'text-fn-income' : 'text-fn-expense'}>
+              {notification.type === 'success' ? <CheckCircle2 size={20} /> : <Info size={20} />}
+            </div>
+            <div className="flex-1">
+              <p className="text-[14px] font-medium text-ds-text-primary">{notification.message}</p>
+            </div>
+            <button onClick={() => setNotification(null)} className="text-ds-text-tertiary hover:text-ds-text-primary transition-colors">
+              <X size={16} />
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
