@@ -28,8 +28,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const handlePasteLink = async () => {
     try {
       const text = await navigator.clipboard.readText();
-      if (!text) {
-        alert("Sua área de transferência está vazia.");
+      if (!text || text.trim() === "") {
+        setToast({ message: "Nenhum link disponível no clipboard", type: 'error' });
         return;
       }
       
@@ -38,7 +38,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setShowModal(true);
       setShowScanMenu(false);
     } catch (err) {
-      alert("Para colar, você precisa permitir o acesso à área de transferência no seu navegador.");
+      setToast({ message: "Permita o acesso à área de transferência para colar", type: 'error' });
       console.error("Erro ao ler clipboard:", err);
     }
   };
