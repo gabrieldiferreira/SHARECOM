@@ -20,22 +20,6 @@ import schemas
 # Create tables
 Base.metadata.create_all(bind=engine)
 
-# Auto-migration for Phase 3 columns (safely adds columns if they don't exist)
-try:
-    from sqlalchemy import text
-    with engine.begin() as conn:
-        try:
-            conn.execute(text("ALTER TABLE expenses ADD COLUMN is_deductible INTEGER DEFAULT 0"))
-        except Exception:
-            pass # column already exists
-        try:
-            conn.execute(text("ALTER TABLE expenses ADD COLUMN reimbursement_status VARCHAR DEFAULT 'None'"))
-        except Exception:
-            pass # column already exists
-        print("DEBUG: Auto-migration completed.", flush=True)
-except Exception as e:
-    print(f"DEBUG: Auto-migration error (ignored): {e}", flush=True)
-
 # =============================================================================
 # CACHE EM MEMÓRIA — LRU + TTL + STATS + WARM-UP
 # Estratégias aplicadas (ref: FasterCapital + dev.to/reishenrique):
@@ -221,11 +205,11 @@ async def process_ata(
     received_file: UploadFile = File(None),
     receipt_url: str = Form(None),
     note: str = Form(None),
-    save_tokens: bool = Form(False),
+    transaction_type: str = Form(None),
     db: Session = Depends(get_db),
     _: dict = Depends(verify_firebase_token),
 ):
-    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | URL: {receipt_url} | NOTA: {note} | SAVE TOKENS: {save_tokens}", flush=True)
+    print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | URL: {receipt_url} | NOTA: {note}", flush=True)
     
     content = b""
     sha256_hash = ""
@@ -387,18 +371,14 @@ async def process_ata(
         # ======================================================
         # ETAPA 2: Análise IA (Vision + OCR como contexto)
         # ======================================================
-        if save_tokens:
-            print("DEBUG: 'Economia de Tokens' ativada. Pulando Gemini e usando apenas OCR local.", flush=True)
-            extracted_data = ocr_fallback_data
-        else:
-            from ai_processor import analyze_receipt_with_ai
-            extracted_data, ai_error = await analyze_receipt_with_ai(
-                content, ext, ocr_text=raw_text
-            )
+        from ai_processor import analyze_receipt_with_ai
+        extracted_data, ai_error = await analyze_receipt_with_ai(
+            content, ext, ocr_text=raw_text
+        )
 
-            if extracted_data is None:
-                extracted_data = ocr_fallback_data
-                print(f"DEBUG: IA falhou ({ai_error}). Usando OCR de fallback.", flush=True)
+        if extracted_data is None:
+            extracted_data = ocr_fallback_data
+            print(f"DEBUG: IA falhou ({ai_error}). Usando OCR de fallback.", flush=True)
 
         if not extracted_data:
             extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
@@ -427,6 +407,27 @@ async def process_ata(
     amount = extracted_data.get("total_amount") if is_receipt and extracted_data.get("total_amount") is not None else 0.0
     merchant = extracted_data.get("merchant_name") or ("Link Informativo" if not is_receipt else "Desconhecido")
 
+    # Sanitize and Validate Transaction ID
+    tx_id = extracted_data.get("transaction_id")
+    if tx_id:
+        import re
+        tx_id = re.sub(r'[^A-Z0-9]', '', str(tx_id).upper())
+        # Corrigir erros comuns do OCR
+        tx_id = tx_id.replace('O', '0').replace('I', '1').replace('S', '5')
+        extracted_data["transaction_id"] = tx_id
+        
+        # Verificar duplicidade
+        existing = db.query(models.Expense).filter(models.Expense.transaction_id == tx_id).first()
+        if existing:
+            print(f"DEBUG: Comprovante duplicado interceptado. Retornando ID {existing.id} existente.", flush=True)
+            return {
+                "idempotent": True,
+                "filename": existing.receipt, 
+                "ai_data": extracted_data,
+                "note": existing.note,
+                "database_id": existing.id
+            }
+
     db_expense = models.Expense(
         date=date_obj,
         amount=amount,
@@ -434,10 +435,10 @@ async def process_ata(
         merchant=merchant,
         description=extracted_data.get("description") or f"Processado via {('Arquivo' if received_file else 'Link')}",
         receipt=sha256_hash,
-        transaction_type=extracted_data.get("transaction_type", "Outflow"),
+        transaction_type=transaction_type or extracted_data.get("transaction_type", "Outflow"),
         payment_method=extracted_data.get("payment_method", "Desconhecido"),
         destination_institution=extracted_data.get("destination_institution"),
-        transaction_id=extracted_data.get("transaction_id"),
+        transaction_id=tx_id,
         note=note
     )
     

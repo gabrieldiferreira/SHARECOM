@@ -3,7 +3,7 @@
 import React, { useState, useRef, useEffect } from "react";
 
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera, Image, FileText, X, ClipboardPaste, Link2 } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera, Image, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -20,6 +20,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [lastAdded, setLastAdded] = useState<{ amount: number, merchant: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [uploadType, setUploadType] = useState<"Inflow" | "Outflow">("Outflow");
   const [showScanMenu, setShowScanMenu] = useState(false);
   const [pastedContent, setPastedContent] = useState("");
   const [pastedAt, setPastedAt] = useState<number | null>(null);
@@ -137,6 +138,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     const file = e.target.files?.[0];
     if (!file) return;
     setSelectedFile(file);
+    setUploadType("Outflow");
     setShowModal(true);
   };
 
@@ -154,6 +156,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (!selectedFile && pastedContent) {
       formData.append("receipt_url", pastedContent.trim());
     }
+    // Tipo de transação selecionado pelo usuário
+    formData.append("transaction_type", uploadType);
     // Nota/comentário do usuário (opcional)
     if (pendingNote.trim()) {
       formData.append("note", pendingNote.trim());
@@ -503,29 +507,48 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       {/* Note Confirmation Modal */}
       {showModal && (
-        <div className="fixed inset-0 z-[200] flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setShowModal(false)} />
-          <div className="w-full max-w-sm rounded-lg relative z-10 overflow-hidden" style={{ backgroundColor: 'var(--bg-primary)', border: '0.5px solid var(--ds-border)', borderRadius: '8px' }}>
-            <div className="p-4 space-y-4">
+        <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 sm:p-4">
+          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(false)} />
+
+          {/* Glass card — same frosted-glass style as the header */}
+          <div
+            className="w-full max-w-sm relative z-10 overflow-hidden rounded-2xl shadow-2xl"
+            style={{
+              backgroundColor: isDark ? 'rgba(15, 23, 42, 0.82)' : 'rgba(255, 255, 255, 0.82)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'}`,
+            }}
+          >
+            <div className="p-5 space-y-4">
+              {/* Header */}
               <div className="flex items-center justify-between">
-                <h3 className="text-base font-medium" style={{ color: 'var(--text-primary)' }}>Confirmar Envio</h3>
-                <button onClick={() => setShowModal(false)} style={{ color: 'var(--text-tertiary)' }}>
-                  <Plus size={18} className="rotate-45" />
+                <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Confirmar Envio</h3>
+                <button
+                  onClick={() => setShowModal(false)}
+                  className="w-7 h-7 rounded-full flex items-center justify-center transition-colors hover:bg-black/10"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <X size={16} />
                 </button>
               </div>
 
+              {/* File / Link preview */}
               {selectedFile ? (
-                <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+                <div
+                  className="flex items-center gap-3 p-3 rounded-xl"
+                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '0.5px solid var(--ds-border)' }}
+                >
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)', color: '#3B82F6' }}>
-                    <Plus size={18} />
+                    <FileText size={18} />
                   </div>
                   <div className="overflow-hidden">
-                    <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>Arquivo Selecionado</p>
+                    <p className="text-[10px] uppercase tracking-wider font-semibold" style={{ color: 'var(--text-tertiary)' }}>Arquivo Selecionado</p>
                     <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{selectedFile?.name}</p>
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20 shadow-sm" style={{ backgroundColor: 'rgba(16, 185, 129, 0.05)' }}>
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-emerald-500/20" style={{ backgroundColor: 'rgba(16, 185, 129, 0.07)' }}>
                   <div className="w-10 h-10 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-500">
                     <Link2 size={20} />
                   </div>
@@ -536,30 +559,94 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               )}
 
+              {/* ── Transaction direction selector ── */}
               <div>
-                <label className="text-label block mb-1.5" style={{ color: 'var(--text-secondary)' }}>Deseja adicionar um comentário?</label>
+                <p className="text-[11px] font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--text-tertiary)' }}>Tipo de Movimentação</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Outflow (Saída) */}
+                  <button
+                    onClick={() => setUploadType("Outflow")}
+                    className="relative flex flex-col items-center gap-1.5 py-3 rounded-xl font-medium text-sm transition-all duration-200 active:scale-95"
+                    style={{
+                      backgroundColor: uploadType === 'Outflow' ? 'rgba(239, 68, 68, 0.12)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                      border: uploadType === 'Outflow' ? '1.5px solid rgba(239, 68, 68, 0.6)' : '1px solid var(--ds-border)',
+                      color: uploadType === 'Outflow' ? '#EF4444' : 'var(--text-tertiary)',
+                      boxShadow: uploadType === 'Outflow' ? '0 0 12px rgba(239,68,68,0.15)' : 'none',
+                    }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
+                      style={{ backgroundColor: uploadType === 'Outflow' ? 'rgba(239,68,68,0.2)' : 'transparent' }}
+                    >
+                      <ArrowDown size={18} strokeWidth={2.5} />
+                    </div>
+                    <span className="text-[12px] font-semibold">Saída</span>
+                    {uploadType === 'Outflow' && (
+                      <span className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-[#EF4444]" />
+                    )}
+                  </button>
+
+                  {/* Inflow (Entrada) */}
+                  <button
+                    onClick={() => setUploadType("Inflow")}
+                    className="relative flex flex-col items-center gap-1.5 py-3 rounded-xl font-medium text-sm transition-all duration-200 active:scale-95"
+                    style={{
+                      backgroundColor: uploadType === 'Inflow' ? 'rgba(16, 185, 129, 0.12)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                      border: uploadType === 'Inflow' ? '1.5px solid rgba(16, 185, 129, 0.6)' : '1px solid var(--ds-border)',
+                      color: uploadType === 'Inflow' ? '#10B981' : 'var(--text-tertiary)',
+                      boxShadow: uploadType === 'Inflow' ? '0 0 12px rgba(16,185,129,0.15)' : 'none',
+                    }}
+                  >
+                    <div
+                      className="w-8 h-8 rounded-full flex items-center justify-center transition-all"
+                      style={{ backgroundColor: uploadType === 'Inflow' ? 'rgba(16,185,129,0.2)' : 'transparent' }}
+                    >
+                      <ArrowUp size={18} strokeWidth={2.5} />
+                    </div>
+                    <span className="text-[12px] font-semibold">Entrada</span>
+                    {uploadType === 'Inflow' && (
+                      <span className="absolute top-1.5 right-2 w-1.5 h-1.5 rounded-full bg-[#10B981]" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Comment textarea */}
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Comentário (opcional)</label>
                 <textarea
-                  autoFocus
                   value={pendingNote}
                   onChange={(e) => setPendingNote(e.target.value)}
                   placeholder="Ex: Almoço com cliente, treino de futebol..."
-                  className="w-full rounded-md p-3 text-sm focus:outline-none transition-colors h-24 resize-none"
-                  style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', color: 'var(--text-primary)', borderRadius: '6px' }}
+                  className="w-full rounded-xl p-3 text-sm focus:outline-none transition-colors h-20 resize-none"
+                  style={{
+                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                    border: '0.5px solid var(--ds-border)',
+                    color: 'var(--text-primary)',
+                  }}
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3 pt-1">
+              {/* Actions */}
+              <div className="grid grid-cols-2 gap-3">
                 <button
                   onClick={() => setShowModal(false)}
-                  className="px-4 py-2.5 rounded-md text-sm font-medium transition-colors"
-                  style={{ border: '0.5px solid var(--ds-border)', color: 'var(--text-secondary)', borderRadius: '6px' }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all active:scale-95"
+                  style={{ border: '0.5px solid var(--ds-border)', color: 'var(--text-secondary)' }}
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={executeUpload}
-                  className="px-4 py-2.5 rounded-md text-sm font-medium text-white transition-all"
-                  style={{ backgroundColor: '#3B82F6', borderRadius: '6px' }}
+                  className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-95"
+                  style={{
+                    background: uploadType === 'Outflow'
+                      ? 'linear-gradient(135deg, #EF4444, #DC2626)'
+                      : 'linear-gradient(135deg, #10B981, #059669)',
+                    boxShadow: uploadType === 'Outflow'
+                      ? '0 4px 15px rgba(239,68,68,0.3)'
+                      : '0 4px 15px rgba(16,185,129,0.3)',
+                  }}
                 >
                   Enviar Agora
                 </button>

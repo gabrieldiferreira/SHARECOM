@@ -3,32 +3,26 @@
 @tailwind utilities;
 
 @layer base {
-  /* MODO CLARO (Proof of Payment Light) */
+  /* MODO CLARO (padrão) */
   :root {
-    --text-primary: #111827;
-    --text-secondary: #4B5563;
+    --text-primary: #1F2937;
+    --text-secondary: #6B7280;
     --text-tertiary: #9CA3AF;
     --bg-primary: #FFFFFF;
-    --bg-secondary: #F3F7F5; /* Leve toque esverdeado */
-    --bg-tertiary: #E8F0EC;
-    --ds-border: #D1E0D7;
-    --accent-green: #10B981;
-    --accent-blue: #3B82F6;
-    --accent-red: #EF4444;
+    --bg-secondary: #F9FAFB;
+    --bg-tertiary: #F3F4F6;
+    --ds-border: #E5E7EB;
   }
 
-  /* MODO ESCURO (Proof of Payment Dark - Muito Financeiro) */
+  /* MODO ESCURO */
   .dark {
-    --text-primary: #F3F4F6;
+    --text-primary: #F9FAFB;
     --text-secondary: #9CA3AF;
     --text-tertiary: #6B7280;
-    --bg-primary: #050505; /* Preto absoluto quase */
-    --bg-secondary: #0B110D; /* Fundo secundário verde super escuro */
-    --bg-tertiary: #131E17;
-    --ds-border: #1B2D22; /* Borda verde escura */
-    --accent-green: #10B981;
-    --accent-blue: #3B82F6;
-    --accent-red: #EF4444;
+    --bg-primary: #111827;
+    --bg-secondary: #1F2937;
+    --bg-tertiary: #374151;
+    --ds-border: #374151;
   }
 
   * {

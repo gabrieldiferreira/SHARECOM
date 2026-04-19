@@ -16,16 +16,16 @@ import { auth } from "../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 
 const CATEGORY_COLORS: Record<string, string> = {
-  "Alimentação": "#F59E0B",
-  "Compras": "#EC4899",
-  "Transporte": "#3B82F6",
-  "Casa": "#8B5CF6",
+  "Alimentação": "#8B5CF6",
+  "Compras": "#3B82F6",
+  "Transporte": "#F59E0B",
+  "Casa": "#EC4899",
   "Serviços": "#14B8A6",
-  "Lazer": "#F97316",
+  "Lazer": "#6B7280",
   "Receita": "#10B981",
   "Outros": "#6B7280",
 };
-const PIE_COLORS = ["#3B82F6", "#10B981", "#F59E0B", "#EC4899", "#8B5CF6", "#14B8A6", "#F97316", "#EF4444", "#6366F1", "#6B7280"];
+const PIE_COLORS = ["#8B5CF6", "#3B82F6", "#F59E0B", "#EC4899", "#14B8A6", "#6B7280"];
 
 type ReportType = "overview" | "category" | "monthly" | "payment" | "institution";
 
@@ -206,12 +206,12 @@ export default function ReportsPage() {
   const tooltipStyle = { backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", fontSize: "12px" };
 
   return (
-    <div className="p-4 md:p-6 space-y-5 font-sans overflow-x-hidden" style={{ maxWidth: "100vw" }}>
+    <div className="p-4 md:p-6 space-y-6 font-sans w-full max-w-full">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-medium" style={{ color: "var(--text-primary)" }}>Relatórios Avançados</h1>
-          <p className="text-label mt-1" style={{ color: "var(--text-secondary)" }}>
+          <h1 className="text-[22px] font-medium text-ds-text-primary">Relatórios Avançados</h1>
+          <p className="text-[12px] mt-1 text-ds-text-secondary">
             Análise detalhada de {filtered.length} transação(ões)
           </p>
         </div>
@@ -222,14 +222,12 @@ export default function ReportsPage() {
               placeholder="Nome do cliente"
               value={customerName}
               onChange={(e) => setCustomerName(e.target.value)}
-              className="py-2 text-sm font-medium w-full"
-              style={{ backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", outline: "none", minWidth: "180px", paddingLeft: "12px", paddingRight: "32px" }}
+              className="py-2 text-[14px] font-medium w-full bg-ds-bg-secondary text-ds-text-primary border-thin border-ds-border rounded-md outline-none min-w-[180px] pl-3 pr-8"
             />
-            <div className="group" style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)", cursor: "pointer", display: "flex", alignItems: "center" }}>
-              <Info size={16} style={{ color: "var(--text-tertiary)" }} />
+            <div className="group absolute right-2 top-1/2 -translate-y-1/2 cursor-pointer flex items-center">
+              <Info size={16} className="text-ds-text-tertiary" />
               <span
-                className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 whitespace-nowrap rounded px-2 py-1 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                style={{ backgroundColor: "var(--bg-secondary)", color: "var(--text-primary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", zIndex: 50 }}
+                className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 whitespace-nowrap rounded-md px-2 py-1 text-[12px] opacity-0 group-hover:opacity-100 transition-opacity bg-ds-bg-secondary text-ds-text-primary border-thin border-ds-border z-50"
               >
                 Insira seu nome
               </span>
@@ -239,8 +237,7 @@ export default function ReportsPage() {
             <button
               onClick={() => handleExport("pdf")}
               disabled={exporting !== null || filtered.length === 0}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-all disabled:opacity-40"
-              style={{ backgroundColor: "#EF4444", color: "#FFFFFF", borderRadius: "6px" }}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-[14px] font-medium transition-all disabled:opacity-40 bg-fn-expense text-white rounded-md"
             >
               {exporting === "pdf" ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
               <span className="hidden xs:inline">PDF</span><span className="inline xs:hidden">PDF</span>
@@ -248,8 +245,7 @@ export default function ReportsPage() {
             <button
               onClick={() => handleExport("excel")}
               disabled={exporting !== null || filtered.length === 0}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-sm font-medium transition-all disabled:opacity-40"
-              style={{ backgroundColor: "#10B981", color: "#FFFFFF", borderRadius: "6px" }}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 text-[14px] font-medium transition-all disabled:opacity-40 bg-fn-income text-white rounded-md"
             >
               {exporting === "excel" ? <Loader2 size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
               <span className="hidden xs:inline">Excel</span><span className="inline xs:hidden">Excel</span>
@@ -259,17 +255,16 @@ export default function ReportsPage() {
       </div>
 
       {/* Filters bar */}
-      <div className="p-3 rounded-lg flex flex-col lg:flex-row gap-3 lg:items-center" style={{ backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "8px" }}>
+      <div className="p-3 rounded-lg flex flex-col lg:flex-row gap-3 lg:items-center bg-ds-bg-secondary border-thin border-ds-border">
         <div className="flex items-center gap-2 shrink-0">
-          <Filter size={14} style={{ color: "var(--text-tertiary)" }} />
-          <span className="text-label font-medium" style={{ color: "var(--text-secondary)" }}>Filtros:</span>
+          <Filter size={14} className="text-ds-text-tertiary" />
+          <span className="text-[12px] font-medium text-ds-text-secondary">Filtros:</span>
         </div>
         <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full">
           <select
             value={typeFilter}
             onChange={e => setTypeFilter(e.target.value as "all" | "Inflow" | "Outflow")}
-            className="py-1.5 px-3 text-sm focus:outline-none w-full sm:w-auto"
-            style={{ backgroundColor: "var(--bg-primary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", color: "var(--text-primary)" }}
+            className="py-1.5 px-3 text-[14px] focus:outline-none w-full sm:w-auto bg-ds-bg-primary border-thin border-ds-border rounded-md text-ds-text-primary"
           >
             <option value="all">Todos os tipos</option>
             <option value="Inflow">Apenas Entradas</option>
@@ -280,16 +275,14 @@ export default function ReportsPage() {
               type="date"
               value={dateRange.start}
               onChange={e => setDateRange(prev => ({ ...prev, start: e.target.value }))}
-              className="py-1.5 px-3 text-sm focus:outline-none flex-1 sm:w-32"
-              style={{ backgroundColor: "var(--bg-primary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", color: "var(--text-primary)" }}
+              className="py-1.5 px-3 text-[14px] focus:outline-none flex-1 sm:w-32 bg-ds-bg-primary border-thin border-ds-border rounded-md text-ds-text-primary"
             />
-            <span className="text-label shrink-0" style={{ color: "var(--text-tertiary)" }}>até</span>
+            <span className="text-[12px] shrink-0 text-ds-text-tertiary">até</span>
             <input
               type="date"
               value={dateRange.end}
               onChange={e => setDateRange(prev => ({ ...prev, end: e.target.value }))}
-              className="py-1.5 px-3 text-sm focus:outline-none flex-1 sm:w-32"
-              style={{ backgroundColor: "var(--bg-primary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", color: "var(--text-primary)" }}
+              className="py-1.5 px-3 text-[14px] focus:outline-none flex-1 sm:w-32 bg-ds-bg-primary border-thin border-ds-border rounded-md text-ds-text-primary"
             />
           </div>
         </div>
@@ -298,18 +291,18 @@ export default function ReportsPage() {
       {/* Summary cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         {[
-          { label: "Entradas", value: fmtMoney(inflowTotal), color: "#10B981", icon: <TrendingUp size={18} /> },
-          { label: "Saídas", value: fmtMoney(outflowTotal), color: "#EF4444", icon: <TrendingDown size={18} /> },
-          { label: "Saldo", value: fmtMoney(balance), color: balance >= 0 ? "#10B981" : "#EF4444", icon: <DollarSign size={18} /> },
-          { label: "Transações", value: String(filtered.length), color: "#3B82F6", icon: <Layers size={18} /> },
+          { label: "Entradas", value: fmtMoney(inflowTotal), colorClass: "text-fn-income", bgClass: "bg-[#10B981] bg-opacity-10", icon: <TrendingUp size={18} /> },
+          { label: "Saídas", value: fmtMoney(outflowTotal), colorClass: "text-fn-expense", bgClass: "bg-[#EF4444] bg-opacity-10", icon: <TrendingDown size={18} /> },
+          { label: "Saldo", value: fmtMoney(balance), colorClass: balance >= 0 ? "text-fn-income" : "text-fn-expense", bgClass: balance >= 0 ? "bg-[#10B981] bg-opacity-10" : "bg-[#EF4444] bg-opacity-10", icon: <DollarSign size={18} /> },
+          { label: "Transações", value: String(filtered.length), colorClass: "text-fn-balance", bgClass: "bg-[#3B82F6] bg-opacity-10", icon: <Layers size={18} /> },
         ].map(c => (
-          <div key={c.label} className="p-3 rounded-lg flex items-center gap-2 sm:gap-3" style={{ backgroundColor: "var(--bg-secondary)", borderRadius: "8px" }}>
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0" style={{ backgroundColor: `${c.color}15`, color: c.color }}>
+          <div key={c.label} className="p-3 rounded-lg flex items-center gap-2 sm:gap-3 bg-ds-bg-secondary border-thin border-ds-border">
+            <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0 ${c.colorClass} ${c.bgClass}`}>
               {c.icon}
             </div>
             <div className="min-w-0">
-              <p className="text-[10px] sm:text-xs uppercase tracking-wider font-semibold opacity-70" style={{ color: "var(--text-secondary)" }}>{c.label}</p>
-              <p className="valor-financeiro text-sm sm:text-lg truncate" style={{ color: c.color }}>{c.value}</p>
+              <p className="text-[10px] sm:text-[12px] uppercase tracking-wider font-medium text-ds-text-secondary">{c.label}</p>
+              <p className={`tabular-nums font-medium text-[14px] sm:text-[22px] truncate ${c.colorClass}`}>{c.value}</p>
             </div>
           </div>
         ))}
@@ -321,13 +314,7 @@ export default function ReportsPage() {
           <button
             key={r.id}
             onClick={() => setActiveReport(r.id)}
-            className="flex items-center gap-1.5 px-3 py-2 text-sm whitespace-nowrap transition-all"
-            style={{
-              backgroundColor: activeReport === r.id ? "#3B82F6" : "transparent",
-              color: activeReport === r.id ? "#FFFFFF" : "var(--text-secondary)",
-              border: activeReport === r.id ? "none" : "0.5px solid var(--ds-border)",
-              borderRadius: "6px",
-            }}
+            className={`flex items-center gap-1.5 px-3 py-2 text-[14px] font-medium whitespace-nowrap transition-all rounded-md ${activeReport === r.id ? 'bg-fn-balance text-white border-transparent' : 'bg-transparent text-ds-text-secondary border-thin border-ds-border'}`}
           >
             {r.icon}
             {r.label}
@@ -336,21 +323,21 @@ export default function ReportsPage() {
       </div>
 
       {/* Report content */}
-      <div className="rounded-lg overflow-hidden" style={{ backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "8px" }}>
+      <div className="rounded-lg overflow-hidden bg-ds-bg-secondary border-thin border-ds-border">
         {filtered.length === 0 ? (
           <div className="py-12 text-center">
-            <p className="text-sm" style={{ color: "var(--text-secondary)" }}>Nenhuma transação encontrada com os filtros selecionados.</p>
+            <p className="text-[14px] text-ds-text-secondary">Nenhuma transação encontrada com os filtros selecionados.</p>
           </div>
         ) : (
           <div className="p-3 sm:p-6">
             {/* ── Overview ─────────────────────────────── */}
             {activeReport === "overview" && (
               <div className="space-y-8">
-                <h2 className="text-lg font-medium border-b pb-2" style={{ color: "var(--text-primary)", borderColor: "var(--ds-border)" }}>Visão Geral</h2>
+                <h2 className="text-[18px] font-medium border-b-thin border-ds-border pb-2 text-ds-text-primary">Visão Geral</h2>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Pie: category distribution */}
                   <div className="flex flex-col items-center">
-                    <p className="text-sm mb-4 font-semibold text-center w-full" style={{ color: "var(--text-secondary)" }}>Distribuição por Categoria</p>
+                    <p className="text-[14px] mb-4 font-medium text-center w-full text-ds-text-secondary">Distribuição por Categoria</p>
                     <div className="w-full h-[280px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
@@ -377,7 +364,7 @@ export default function ReportsPage() {
                   </div>
                   {/* Bar: inflow vs outflow by month */}
                   <div className="flex flex-col items-center">
-                    <p className="text-sm mb-4 font-semibold text-center w-full" style={{ color: "var(--text-secondary)" }}>Entradas vs Saídas (Mensal)</p>
+                    <p className="text-[14px] mb-4 font-medium text-center w-full text-ds-text-secondary">Entradas vs Saídas (Mensal)</p>
                     <div className="w-full h-[280px]">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -395,7 +382,7 @@ export default function ReportsPage() {
                 </div>
                 {/* Line: balance over time */}
                 <div className="pt-4">
-                  <p className="text-sm mb-4 font-semibold" style={{ color: "var(--text-secondary)" }}>Evolução do Saldo Mensal</p>
+                  <p className="text-[14px] mb-4 font-medium text-ds-text-secondary">Evolução do Saldo Mensal</p>
                   <div className="w-full h-[220px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <LineChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -414,8 +401,8 @@ export default function ReportsPage() {
             {/* ── Category ─────────────────────────────── */}
             {activeReport === "category" && (
               <div className="space-y-6">
-                <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>Relatório por Categoria</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "20px" }}>
+                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Categoria</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div>
                     <ResponsiveContainer width="100%" height={300}>
                       <PieChart>
@@ -446,11 +433,11 @@ export default function ReportsPage() {
                 </div>
                 {/* Category table */}
                 <div className="overflow-x-auto">
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <table className="w-full border-collapse">
                     <thead>
                       <tr>
                         {["Categoria", "Entradas", "Saídas", "Total", "Qtd", "% do Total"].map(h => (
-                          <th key={h} className="text-label text-left px-3 py-2 font-medium" style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--ds-border)" }}>{h}</th>
+                          <th key={h} className="text-[12px] text-left px-3 py-2 font-medium text-ds-text-secondary border-b-thin border-ds-border">{h}</th>
                         ))}
                       </tr>
                     </thead>
@@ -459,15 +446,15 @@ export default function ReportsPage() {
                         const grandTotal = categoryData.reduce((a, x) => a + x.total, 0) || 1;
                         return (
                           <tr key={c.name}>
-                            <td className="px-3 py-2 text-sm" style={{ color: "var(--text-primary)", borderBottom: "0.5px solid var(--ds-border)" }}>
+                            <td className="px-3 py-2 text-[14px] text-ds-text-primary border-b-thin border-ds-border">
                               <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: c.color }} />
                               {c.name}
                             </td>
-                            <td className="px-3 py-2 text-sm" style={{ color: "#10B981", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(c.inflow)}</td>
-                            <td className="px-3 py-2 text-sm" style={{ color: "#EF4444", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(c.outflow)}</td>
-                            <td className="px-3 py-2 text-sm font-medium" style={{ color: "var(--text-primary)", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(c.total)}</td>
-                            <td className="px-3 py-2 text-sm" style={{ color: "var(--text-secondary)", borderBottom: "0.5px solid var(--ds-border)" }}>{c.count}</td>
-                            <td className="px-3 py-2 text-sm" style={{ color: "var(--text-secondary)", borderBottom: "0.5px solid var(--ds-border)" }}>{((c.total / grandTotal) * 100).toFixed(1)}%</td>
+                            <td className="px-3 py-2 text-[14px] tabular-nums font-medium text-fn-income border-b-thin border-ds-border">{fmtMoney(c.inflow)}</td>
+                            <td className="px-3 py-2 text-[14px] tabular-nums font-medium text-fn-expense border-b-thin border-ds-border">{fmtMoney(c.outflow)}</td>
+                            <td className="px-3 py-2 text-[14px] tabular-nums font-medium text-ds-text-primary border-b-thin border-ds-border">{fmtMoney(c.total)}</td>
+                            <td className="px-3 py-2 text-[14px] text-ds-text-secondary border-b-thin border-ds-border">{c.count}</td>
+                            <td className="px-3 py-2 text-[14px] text-ds-text-secondary border-b-thin border-ds-border">{((c.total / grandTotal) * 100).toFixed(1)}%</td>
                           </tr>
                         );
                       })}
@@ -480,7 +467,7 @@ export default function ReportsPage() {
             {/* ── Monthly ──────────────────────────────── */}
             {activeReport === "monthly" && (
               <div className="space-y-6">
-                <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>Relatório Mensal</h2>
+                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório Mensal</h2>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={monthlyData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--ds-border)" />
@@ -503,22 +490,22 @@ export default function ReportsPage() {
                 </ResponsiveContainer>
                 {/* Monthly table */}
                 <div className="overflow-x-auto">
-                  <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                  <table className="w-full border-collapse">
                     <thead>
                       <tr>
                         {["Mês", "Entradas", "Saídas", "Saldo", "Transações"].map(h => (
-                          <th key={h} className="text-label text-left px-3 py-2 font-medium" style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--ds-border)" }}>{h}</th>
+                          <th key={h} className="text-[12px] text-left px-3 py-2 font-medium text-ds-text-secondary border-b-thin border-ds-border">{h}</th>
                         ))}
                       </tr>
                     </thead>
                     <tbody>
                       {monthlyData.map(m => (
                         <tr key={m.month}>
-                          <td className="px-3 py-2 text-sm capitalize" style={{ color: "var(--text-primary)", borderBottom: "0.5px solid var(--ds-border)" }}>{m.label}</td>
-                          <td className="px-3 py-2 text-sm" style={{ color: "#10B981", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(m.inflow)}</td>
-                          <td className="px-3 py-2 text-sm" style={{ color: "#EF4444", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(m.outflow)}</td>
-                          <td className="px-3 py-2 text-sm font-medium" style={{ color: m.balance >= 0 ? "#10B981" : "#EF4444", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(m.balance)}</td>
-                          <td className="px-3 py-2 text-sm" style={{ color: "var(--text-secondary)", borderBottom: "0.5px solid var(--ds-border)" }}>{m.count}</td>
+                          <td className="px-3 py-2 text-[14px] capitalize text-ds-text-primary border-b-thin border-ds-border">{m.label}</td>
+                          <td className="px-3 py-2 text-[14px] tabular-nums font-medium text-fn-income border-b-thin border-ds-border">{fmtMoney(m.inflow)}</td>
+                          <td className="px-3 py-2 text-[14px] tabular-nums font-medium text-fn-expense border-b-thin border-ds-border">{fmtMoney(m.outflow)}</td>
+                          <td className={`px-3 py-2 text-[14px] tabular-nums font-medium border-b-thin border-ds-border ${m.balance >= 0 ? 'text-fn-income' : 'text-fn-expense'}`}>{fmtMoney(m.balance)}</td>
+                          <td className="px-3 py-2 text-[14px] text-ds-text-secondary border-b-thin border-ds-border">{m.count}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -530,8 +517,8 @@ export default function ReportsPage() {
             {/* ── Payment Method ───────────────────────── */}
             {activeReport === "payment" && (
               <div className="space-y-6">
-                <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>Relatório por Método de Pagamento</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "20px" }}>
+                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Método de Pagamento</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <ResponsiveContainer width="100%" height={300}>
                     <PieChart>
                       <Pie data={paymentData} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={110} innerRadius={50} paddingAngle={2} label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} style={{ fontSize: "11px" }}>
@@ -543,11 +530,11 @@ export default function ReportsPage() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="overflow-x-auto">
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <table className="w-full border-collapse">
                       <thead>
                         <tr>
                           {["Método", "Total", "Qtd", "%"].map(h => (
-                            <th key={h} className="text-label text-left px-3 py-2 font-medium" style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--ds-border)" }}>{h}</th>
+                            <th key={h} className="text-[12px] text-left px-3 py-2 font-medium text-ds-text-secondary border-b-thin border-ds-border">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -556,13 +543,13 @@ export default function ReportsPage() {
                           const grandTotal = paymentData.reduce((a, x) => a + x.total, 0) || 1;
                           return (
                             <tr key={p.name}>
-                              <td className="px-3 py-2 text-sm" style={{ color: "var(--text-primary)", borderBottom: "0.5px solid var(--ds-border)" }}>
+                              <td className="px-3 py-2 text-[14px] text-ds-text-primary border-b-thin border-ds-border">
                                 <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
                                 {p.name}
                               </td>
-                              <td className="px-3 py-2 text-sm font-medium" style={{ color: "var(--text-primary)", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(p.total)}</td>
-                              <td className="px-3 py-2 text-sm" style={{ color: "var(--text-secondary)", borderBottom: "0.5px solid var(--ds-border)" }}>{p.count}</td>
-                              <td className="px-3 py-2 text-sm" style={{ color: "var(--text-secondary)", borderBottom: "0.5px solid var(--ds-border)" }}>{((p.total / grandTotal) * 100).toFixed(1)}%</td>
+                              <td className="px-3 py-2 text-[14px] tabular-nums font-medium text-ds-text-primary border-b-thin border-ds-border">{fmtMoney(p.total)}</td>
+                              <td className="px-3 py-2 text-[14px] text-ds-text-secondary border-b-thin border-ds-border">{p.count}</td>
+                              <td className="px-3 py-2 text-[14px] text-ds-text-secondary border-b-thin border-ds-border">{((p.total / grandTotal) * 100).toFixed(1)}%</td>
                             </tr>
                           );
                         })}
@@ -576,8 +563,8 @@ export default function ReportsPage() {
             {/* ── Institution ──────────────────────────── */}
             {activeReport === "institution" && (
               <div className="space-y-6">
-                <h2 className="text-lg font-medium" style={{ color: "var(--text-primary)" }}>Relatório por Instituição</h2>
-                <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: "20px" }}>
+                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Instituição</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={institutionData.slice(0, 10)} layout="vertical">
                       <CartesianGrid strokeDasharray="3 3" stroke="var(--ds-border)" />
@@ -588,11 +575,11 @@ export default function ReportsPage() {
                     </BarChart>
                   </ResponsiveContainer>
                   <div className="overflow-x-auto">
-                    <table style={{ width: "100%", borderCollapse: "collapse" }}>
+                    <table className="w-full border-collapse">
                       <thead>
                         <tr>
                           {["Instituição", "Total", "Qtd", "%"].map(h => (
-                            <th key={h} className="text-label text-left px-3 py-2 font-medium" style={{ color: "var(--text-secondary)", borderBottom: "1px solid var(--ds-border)" }}>{h}</th>
+                            <th key={h} className="text-[12px] text-left px-3 py-2 font-medium text-ds-text-secondary border-b-thin border-ds-border">{h}</th>
                           ))}
                         </tr>
                       </thead>
@@ -601,13 +588,13 @@ export default function ReportsPage() {
                           const grandTotal = institutionData.reduce((a, x) => a + x.total, 0) || 1;
                           return (
                             <tr key={inst.name}>
-                              <td className="px-3 py-2 text-sm" style={{ color: "var(--text-primary)", borderBottom: "0.5px solid var(--ds-border)" }}>
+                              <td className="px-3 py-2 text-[14px] text-ds-text-primary border-b-thin border-ds-border">
                                 <span className="inline-block w-2.5 h-2.5 rounded-full mr-2" style={{ backgroundColor: PIE_COLORS[i % PIE_COLORS.length] }} />
                                 {inst.name}
                               </td>
-                              <td className="px-3 py-2 text-sm font-medium" style={{ color: "var(--text-primary)", borderBottom: "0.5px solid var(--ds-border)" }}>{fmtMoney(inst.total)}</td>
-                              <td className="px-3 py-2 text-sm" style={{ color: "var(--text-secondary)", borderBottom: "0.5px solid var(--ds-border)" }}>{inst.count}</td>
-                              <td className="px-3 py-2 text-sm" style={{ color: "var(--text-secondary)", borderBottom: "0.5px solid var(--ds-border)" }}>{((inst.total / grandTotal) * 100).toFixed(1)}%</td>
+                              <td className="px-3 py-2 text-[14px] tabular-nums font-medium text-ds-text-primary border-b-thin border-ds-border">{fmtMoney(inst.total)}</td>
+                              <td className="px-3 py-2 text-[14px] text-ds-text-secondary border-b-thin border-ds-border">{inst.count}</td>
+                              <td className="px-3 py-2 text-[14px] text-ds-text-secondary border-b-thin border-ds-border">{((inst.total / grandTotal) * 100).toFixed(1)}%</td>
                             </tr>
                           );
                         })}

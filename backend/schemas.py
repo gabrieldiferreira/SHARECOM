@@ -13,8 +13,6 @@ class ExpenseBase(BaseModel):
     transaction_id: str | None = None
     masked_cpf: str | None = None
     note: str | None = None
-    is_deductible: bool = False
-    reimbursement_status: str = "None"
 
 class ExpenseCreate(ExpenseBase):
     date: datetime | None = None # Allow passing extracted timestamp
