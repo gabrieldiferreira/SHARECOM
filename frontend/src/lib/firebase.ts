@@ -4,13 +4,13 @@ import { Firestore, getFirestore } from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
 const firebaseConfig = {
-  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
+  apiKey: "AIzaSyAYIuIphaTzqV56gwbWOHYShf5p-cyxYCk",
+  authDomain: "unidoc-493609.firebaseapp.com",
+  projectId: "unidoc-493609",
+  storageBucket: "unidoc-493609.firebasestorage.app",
+  messagingSenderId: "894636866610",
+  appId: "1:894636866610:web:ed5fcd475112f9e037502b",
+  measurementId: "G-JVY94D582R"
 };
 
 export const hasFirebaseConfig = [

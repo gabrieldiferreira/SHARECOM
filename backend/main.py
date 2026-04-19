@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from typing import List
 import os
 import uuid
-import ai_agent
+# import ai_agent # Removed as requested
 import hashlib
 from auth import verify_firebase_token
 
@@ -110,26 +110,15 @@ async def process_ata(
             }
         }
     
-    # Process the document via AI directly from memory
-    ext = os.path.splitext(received_file.filename)[1] or ".jpg"
-    extracted_data = await run_in_threadpool(ai_agent.extract_transaction_data, content, ext)
-    
-    # Do not allow unread receipts to pass through
-    if extracted_data.get("total_amount", 0) == 0 and "Erro" in extracted_data.get("merchant_name", ""):
-        # Explicitly nullify content buffer to hint GC
-        del content
-        raise HTTPException(status_code=422, detail="Não foi possível ler o comprovante. Tente tirar uma foto mais nítida.")
-
-    # Convert extracted date string to Python datetime object
-    date_val = extracted_data.get("transaction_date")
-    if date_val:
-        try:
-            # Support both 'YYYY-MM-DDTHH:MM:SS' and 'YYYY-MM-DD HH:MM:SS'
-            date_obj = schemas.datetime.fromisoformat(date_val.replace(" ", "T"))
-        except (ValueError, TypeError):
-            date_obj = schemas.datetime.now()
-    else:
-        date_obj = schemas.datetime.now()
+    # AI Disabled: Return defaults for manual entry
+    extracted_data = {
+        "total_amount": 0.0,
+        "smart_category": "Outros",
+        "merchant_name": "Pendente",
+        "transaction_date": schemas.datetime.now().isoformat(),
+        "needs_manual_review": True
+    }
+    date_obj = schemas.datetime.now()
 
     # Save to database immediately after extraction to ensure zero data loss
     db_expense = models.Expense(
