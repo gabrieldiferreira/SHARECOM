@@ -21,6 +21,10 @@ Base.metadata.create_all(bind=engine)
 app = FastAPI(title="SHARECOM API", version="1.0.0")
 app.include_router(export_router)
 
+@app.get("/")
+def read_root():
+    return {"status": "online", "message": "SHARECOM API is running successfully!"}
+
 # os.makedirs("uploads", exist_ok=True)
 # app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads") # Removed for Read-and-Delete privacy policy
 
