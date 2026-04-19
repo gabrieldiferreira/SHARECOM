@@ -161,6 +161,53 @@ async def process_ata(
                     print(f"DEBUG: Content-Type desconhecido, inferido como {ext} pela URL.", flush=True)
 
                 content = download_resp.content
+
+                # Se o link é uma página web, a IA não acha dados no HTML puro.
+                if ext == ".html":
+                    import re as _re
+                    html_text = content.decode('utf-8', errors='ignore')
+                    
+                    # 1. TRATAMENTO ESPECIAL PARA GOOGLE PHOTOS
+                    # Google Photos não renderiza bem no Microlink (pega só a UI).
+                    # Mas podemos extrair o link direto da imagem via og:image.
+                    gphotos_match = _re.search(r'property="og:image"\s+content="([^"]+)"', html_text)
+                    if "photos.app.goo.gl" in clean_url and gphotos_match:
+                        raw_img_url = gphotos_match.group(1)
+                        # O link do og:image vem cortado (ex: =w355-h315-p-k). Mudamos para =s0 (tamanho original)
+                        if "=" in raw_img_url:
+                            raw_img_url = raw_img_url.split("=")[0] + "=s0"
+                        
+                        print(f"DEBUG: Link do Google Photos detectado. Baixando imagem original: {raw_img_url}", flush=True)
+                        try:
+                            img_resp = await client.get(raw_img_url, timeout=20.0, follow_redirects=True)
+                            if img_resp.status_code == 200:
+                                content = img_resp.content
+                                ext = ".jpg"
+                                print(f"DEBUG: Imagem original do Google Photos baixada ({len(content)} bytes).", flush=True)
+                        except Exception as e:
+                            print(f"DEBUG: Falha ao baixar imagem do Google Photos ({e}).", flush=True)
+
+                    # 2. SE NÃO FOI RESOLVIDO (Não é Google Photos ou falhou), usa Microlink (Screenshots)
+                    if ext == ".html":
+                        import urllib.parse
+                        encoded_url = urllib.parse.quote(clean_url, safe='')
+                        ml_url = f"https://api.microlink.io/?url={encoded_url}&screenshot=true&meta=false"
+                        print(f"DEBUG: Link retornou HTML. Capturando screenshot via Microlink...", flush=True)
+                        try:
+                            ml_resp = await client.get(ml_url, timeout=30.0)
+                            if ml_resp.status_code == 200:
+                                ml_data = ml_resp.json()
+                                screenshot_url = ml_data.get("data", {}).get("screenshot", {}).get("url")
+                                if screenshot_url:
+                                    print(f"DEBUG: Screenshot gerado! Baixando: {screenshot_url}", flush=True)
+                                    img_resp = await client.get(screenshot_url, timeout=20.0)
+                                    if img_resp.status_code == 200:
+                                        content = img_resp.content
+                                        ext = ".png"
+                                        print(f"DEBUG: Sucesso. HTML convertido para PNG ({len(content)} bytes).", flush=True)
+                        except Exception as ml_e:
+                            print(f"DEBUG: Falha no Microlink ({ml_e}). Fallback para HTML puro.", flush=True)
+
                 sha256_hash = hashlib.sha256(content).hexdigest()
                 filename = clean_url.split("/")[-1].split("?")[0] or f"comprovante{ext}"
 
