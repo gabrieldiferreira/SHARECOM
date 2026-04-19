@@ -41,6 +41,33 @@
       "type": "image/png"
     }
   ],
+  "description": "Scanner inteligente de comprovantes em PDF e Imagem",
+  "categories": ["finance", "productivity"],
+  "file_handlers": [
+    {
+      "action": "/api/share",
+      "accept": {
+        "image/*": [".jpg", ".jpeg", ".png"],
+        "application/pdf": [".pdf"]
+      }
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Escanear Recibo",
+      "short_name": "Scanner",
+      "description": "Abrir o scanner de comprovantes",
+      "url": "/scanner",
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Ver Histórico",
+      "short_name": "Histórico",
+      "description": "Ver transações passadas",
+      "url": "/timeline",
+      "icons": [{ "src": "/icon-192x192.png", "sizes": "192x192" }]
+    }
+  ],
   "share_target": {
     "action": "/api/share",
     "method": "POST",

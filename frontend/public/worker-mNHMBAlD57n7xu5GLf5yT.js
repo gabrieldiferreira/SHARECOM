@@ -1,1 +1,0 @@
-(()=>{const o=self;o.addEventListener("push",t=>{const n=t.data.json();o.registration.showNotification(n.title,{body:n.body,icon:"/icon-192x192.png"})})})();
