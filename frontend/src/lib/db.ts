@@ -12,6 +12,7 @@ export interface TransactionEntity {
   destination_institution?: string;
   transaction_id?: string;
   masked_cpf?: string;
+  description?: string;
   needs_manual_review?: boolean;
   receipt_hash?: string; // SHA-256
   is_synced: boolean;

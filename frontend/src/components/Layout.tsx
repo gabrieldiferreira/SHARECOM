@@ -185,6 +185,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           transaction_date: ai.transaction_date || new Date().toISOString(),
           transaction_type: ai.transaction_type || 'Outflow',
           payment_method: ai.payment_method || 'Comprovante',
+          description: ai.description || undefined,
           destination_institution: ai.destination_institution || undefined,
           transaction_id: ai.transaction_id || undefined,
           masked_cpf: ai.masked_cpf || undefined,
@@ -296,7 +297,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           )}
         </div>
 
-        <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 shadow-sm">
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
+          </div>
+          <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
+        </div>
 
         <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
           {isDark ? <Sun size={18} /> : <Moon size={18} />}
@@ -309,7 +315,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex flex-col w-60 p-4 space-y-6 overflow-y-auto scroll-container no-scrollbar h-screen sticky top-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '0.5px solid var(--ds-border)' }}>
         <div className="flex items-center justify-between px-2 pt-2">
-          <h1 className="text-xl font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
+          <div className="flex items-center gap-2">
+             <div className="w-7 h-7 rounded-md overflow-hidden border border-black/5 shadow-sm">
+               <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
+             </div>
+             <h1 className="text-xl font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
+          </div>
           <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
             {isDark ? <Sun size={16} /> : <Moon size={16} />}
           </button>

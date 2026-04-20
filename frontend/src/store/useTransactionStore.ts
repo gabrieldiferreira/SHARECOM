@@ -140,6 +140,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
                 destination_institution: item.destination_institution || undefined,
                 transaction_id: item.transaction_id || undefined,
                 masked_cpf: item.masked_cpf || undefined,
+                description: item.description || undefined,
                 is_synced: true,
                 note: item.note || undefined,
               });

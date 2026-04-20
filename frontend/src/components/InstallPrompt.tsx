@@ -75,10 +75,10 @@ export default function InstallPrompt() {
       >
         <div className="flex items-start gap-3">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-            style={{ backgroundColor: "#3B82F6" }}
+            className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
+            style={{ border: '1px solid var(--ds-border)' }}
           >
-            <Smartphone size={20} className="text-white" />
+            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
           </div>
           <div className="flex-1">
             <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -115,10 +115,10 @@ export default function InstallPrompt() {
     >
       <div className="flex items-center gap-3 p-4">
         <div
-          className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-          style={{ backgroundColor: "#3B82F6" }}
+          className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
+          style={{ border: '1px solid var(--ds-border)' }}
         >
-          <Download size={20} className="text-white" />
+          <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>

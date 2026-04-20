@@ -181,6 +181,7 @@ function ExpenseTracker() {
           transaction_date: ai.transaction_date || new Date().toISOString(),
           transaction_type: ai.transaction_type || 'Outflow',
           payment_method: ai.payment_method || 'Comprovante',
+          description: ai.description || undefined,
           destination_institution: ai.destination_institution || undefined,
           transaction_id: ai.transaction_id || undefined,
           masked_cpf: ai.masked_cpf || undefined,
@@ -223,6 +224,86 @@ function ExpenseTracker() {
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d);
+  };
+
+  const formatCurrency = (value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
+
+  const normalizeBusinessName = (value?: string) => {
+    if (!value) return null;
+    const normalized = value.trim().replace(/\s+/g, ' ');
+    return normalized.length > 0 ? normalized : null;
+  };
+
+  const topCounterparties = useMemo(() => {
+    const map: Record<string, { name: string; count: number; total: number; lastDate: string }> = {};
+    transactions.forEach(tx => {
+      const name = normalizeBusinessName(tx.merchant_name) || 'Desconhecido';
+      if (!map[name]) {
+        map[name] = { name, count: 0, total: 0, lastDate: tx.transaction_date };
+      }
+      map[name].count += 1;
+      map[name].total += Number(tx.total_amount) || 0;
+      if (new Date(tx.transaction_date).getTime() > new Date(map[name].lastDate).getTime()) {
+        map[name].lastDate = tx.transaction_date;
+      }
+    });
+    return Object.values(map)
+      .sort((a, b) => (b.count - a.count) || (b.total - a.total))
+      .slice(0, 5);
+  }, [transactions]);
+
+  const topBanks = useMemo(() => {
+    const map: Record<string, { name: string; count: number; total: number }> = {};
+    transactions.forEach(tx => {
+      const bank = normalizeBusinessName(tx.destination_institution) || normalizeBusinessName(tx.payment_method);
+      if (!bank) return;
+      if (!map[bank]) {
+        map[bank] = { name: bank, count: 0, total: 0 };
+      }
+      map[bank].count += 1;
+      map[bank].total += Number(tx.total_amount) || 0;
+    });
+    return Object.values(map)
+      .sort((a, b) => (b.count - a.count) || (b.total - a.total))
+      .slice(0, 5);
+  }, [transactions]);
+
+  const mostRecentReceipt = useMemo(() => {
+    if (transactions.length === 0) return null;
+    return [...transactions].sort((a, b) => {
+      const idDiff = (Number(b.id) || 0) - (Number(a.id) || 0);
+      if (idDiff !== 0) return idDiff;
+      return new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime();
+    })[0];
+  }, [transactions]);
+
+  const recentReceipts = useMemo(() => {
+    if (!mostRecentReceipt) return [];
+    return [
+      mostRecentReceipt,
+      ...transactions.filter((tx) => tx.id !== mostRecentReceipt.id).slice(0, 4),
+    ];
+  }, [transactions, mostRecentReceipt]);
+
+  const getReceiptFields = (tx: TransactionEntity) => {
+    const fields = [
+      { label: 'Estabelecimento', value: tx.merchant_name },
+      { label: 'Categoria', value: tx.category },
+      { label: 'Valor', value: formatCurrency(tx.total_amount) },
+      { label: 'Data da transação', value: formatDate(tx.transaction_date) },
+      { label: 'Tipo', value: tx.transaction_type === 'Inflow' ? 'Entrada' : 'Saída' },
+      { label: 'Meio de pagamento', value: tx.payment_method },
+      { label: 'Instituição / banco', value: tx.destination_institution },
+      { label: 'ID da transação', value: tx.transaction_id },
+      { label: 'CPF mascarado', value: tx.masked_cpf },
+      { label: 'Descrição extraída', value: tx.description },
+      { label: 'Nota', value: tx.note },
+      { label: 'Hash do comprovante', value: tx.receipt_hash },
+      { label: 'Sincronização', value: tx.is_synced ? 'Sincronizado' : 'Pendente local' },
+      { label: 'Revisão manual', value: tx.needs_manual_review ? 'Necessária' : undefined },
+    ];
+
+    return fields.filter((field) => field.value !== undefined && field.value !== null && String(field.value).trim() !== '');
   };
 
   const categoriesData = useMemo(() => {
@@ -314,6 +395,55 @@ function ExpenseTracker() {
     fontSize: '12px',
     color: 'var(--text-primary)',
     padding: '12px',
+  };
+
+  const renderReceiptCard = (tx: TransactionEntity) => {
+    const fields = getReceiptFields(tx);
+
+    return (
+      <div key={tx.id} className="rounded-xl border-thin border-ds-border bg-ds-bg-secondary p-4 space-y-4">
+        <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <div className="w-10 h-10 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-ds-text-tertiary">
+                {CATEGORY_ICONS[tx.category] || <Receipt size={18} />}
+              </div>
+              <div>
+                <p className="text-[15px] font-medium text-ds-text-primary break-words">{tx.merchant_name || 'Desconhecido'}</p>
+                <p className="text-[12px] text-ds-text-tertiary">{formatDate(tx.transaction_date)}</p>
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full ${tx.transaction_type === 'Inflow' ? 'bg-[#10B981] bg-opacity-10 text-fn-income' : 'bg-[#EF4444] bg-opacity-10 text-fn-expense'}`}>
+              {tx.transaction_type === 'Inflow' ? <TrendingUp size={11} /> : <TrendingDown size={11} />}
+              {tx.transaction_type === 'Inflow' ? 'Entrada' : 'Saída'}
+            </span>
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full bg-ds-bg-primary border-thin border-ds-border text-ds-text-secondary">
+              <Landmark size={11} />
+              {tx.destination_institution || tx.payment_method || 'Sem banco'}
+            </span>
+            <span className="text-[16px] font-medium tabular-nums text-ds-text-primary">
+              {tx.transaction_type === 'Inflow' ? '+' : '-'}{formatCurrency(tx.total_amount)}
+            </span>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {fields.map((field) => (
+            <div key={`${tx.id}-${field.label}`} className="rounded-lg bg-ds-bg-primary border-thin border-ds-border p-3">
+              <p className="text-[10px] uppercase tracking-wider text-ds-text-tertiary mb-1">{field.label}</p>
+              <p className="text-[13px] text-ds-text-primary break-words">{field.value}</p>
+            </div>
+          ))}
+        </div>
+
+        <div className="flex items-center justify-between text-[11px] text-ds-text-tertiary">
+          <span>{fields.length} campo(s) exibido(s)</span>
+          <button onClick={() => tx.id && deleteTransaction(tx.id)} className="text-fn-expense font-medium">Excluir</button>
+        </div>
+      </div>
+    );
   };
 
   if (!mounted) {
@@ -453,26 +583,37 @@ function ExpenseTracker() {
 
             <div className="w-full max-w-md mx-auto space-y-3">
                <div className="flex items-center justify-between mb-2">
-                  <h3 className="text-[12px] font-medium text-ds-text-secondary uppercase tracking-wider">Últimos Registros</h3>
+                  <h3 className="text-[12px] font-medium text-ds-text-secondary uppercase tracking-wider">Comprovante Mais Recente</h3>
                   <button onClick={() => setShowManualModal(true)} className="text-[12px] text-fn-balance font-medium">Adicionar +</button>
                </div>
-               {transactions.slice(0, 3).map(tx => (
+               {recentReceipts.map(tx => (
                   <div key={tx.id} className="flex items-center justify-between p-4 bg-ds-bg-secondary border-thin border-ds-border rounded-xl">
-                     <div className="flex items-center gap-3">
-                        <div className="w-10 h-10 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-ds-text-tertiary">
-                           <Receipt size={16} />
+                     <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-10 h-10 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-ds-text-tertiary shrink-0">
+                           <Landmark size={16} />
                         </div>
-                        <div>
-                           <p className="text-[14px] font-medium text-ds-text-primary truncate max-w-[150px]">{tx.merchant_name}</p>
-                           <p className="text-[12px] text-ds-text-tertiary">{tx.category}</p>
+                        <div className="min-w-0">
+                           <p className="text-[14px] font-medium text-ds-text-primary truncate">{tx.merchant_name}</p>
+                           <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[11px] text-ds-text-tertiary">{formatDate(tx.transaction_date)}</span>
+                              <span className="w-1 h-1 rounded-full bg-ds-border"></span>
+                              <span className="text-[11px] text-ds-text-tertiary truncate max-w-[120px]">
+                                 {tx.destination_institution || tx.payment_method || 'Instituição não identificada'}
+                              </span>
+                           </div>
                         </div>
                      </div>
-                     <p className={`flex items-center gap-1 text-[14px] font-medium tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-fn-income' : 'text-fn-expense'}`}>
-                        {tx.transaction_type === 'Inflow' ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                        R$ {tx.total_amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                     </p>
+                     <div className="text-right shrink-0">
+                        <p className={`text-[15px] font-semibold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-fn-income' : 'text-fn-expense'}`}>
+                           {tx.transaction_type === 'Inflow' ? '+' : '-'}{formatCurrency(tx.total_amount)}
+                         </p>
+                        <p className="text-[10px] text-ds-text-tertiary uppercase tracking-wide">{tx.category}</p>
+                     </div>
                   </div>
                ))}
+               {recentReceipts.length === 0 && (
+                  <p className="text-[12px] text-ds-text-tertiary text-center py-4">Nenhum comprovante registrado.</p>
+               )}
             </div>
          </div>
       )}
@@ -559,42 +700,64 @@ function ExpenseTracker() {
                   </div>
                </div>
 
-               {/* Top 5 Maiores Gastos */}
                <div className="space-y-6">
                   <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                     <h2 className="text-[14px] font-medium text-ds-text-primary mb-4">Top 5 Maiores Gastos</h2>
+                     <h2 className="text-[14px] font-medium text-ds-text-primary mb-4">Pessoas / empresas com mais recorrência</h2>
                      <div className="space-y-4">
-                        {transactions.filter(t => t.transaction_type === 'Outflow').sort((a,b) => b.total_amount - a.total_amount).slice(0, 5).map((tx, i) => (
-                           <div key={tx.id} className="flex items-center justify-between">
+                        {topCounterparties.map((party, i) => (
+                           <div key={party.name} className="flex items-center justify-between gap-3">
                               <div className="flex items-center gap-3">
                                  <div className="w-8 h-8 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-[12px] font-bold text-ds-text-tertiary">{i+1}</div>
                                  <div className="min-w-0 max-w-[120px]">
-                                    <p className="text-[12px] font-medium text-ds-text-primary truncate">{tx.merchant_name}</p>
-                                    <p className="text-[10px] text-ds-text-secondary truncate">{tx.category}</p>
+                                    <p className="text-[12px] font-medium text-ds-text-primary truncate">{party.name}</p>
+                                    <p className="text-[10px] text-ds-text-secondary truncate">Último movimento: {formatDate(party.lastDate)}</p>
                                  </div>
                               </div>
                               <div className="text-right">
-                                 <p className="flex items-center justify-end gap-1 text-[14px] font-medium tabular-nums text-fn-expense">
-                                    <TrendingDown size={12} /> R$ {tx.total_amount.toLocaleString('pt-BR')}
-                                 </p>
-                                 <p className="text-[10px] text-ds-text-tertiary">{totalOutflow > 0 ? ((tx.total_amount / totalOutflow) * 100).toFixed(1) : 0}% do total</p>
+                                 <p className="text-[14px] font-medium tabular-nums text-ds-text-primary">{party.count} comprovante(s)</p>
+                                 <p className="text-[10px] text-ds-text-tertiary">{formatCurrency(party.total)} movimentados</p>
                               </div>
                            </div>
                         ))}
-                        {transactions.filter(t => t.transaction_type === 'Outflow').length === 0 && (
-                           <p className="text-[12px] text-ds-text-tertiary text-center py-4">Nenhuma saída registrada.</p>
+                        {topCounterparties.length === 0 && (
+                           <p className="text-[12px] text-ds-text-tertiary text-center py-4">Nenhum relacionamento recorrente ainda.</p>
                         )}
                      </div>
                   </div>
 
-                  {/* Recent Transactions */}
                   <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
                      <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-[14px] font-medium text-ds-text-primary">Últimas Movimentações</h2>
+                        <h2 className="text-[14px] font-medium text-ds-text-primary">Bancos / instituições mais usados</h2>
+                        <Landmark size={16} className="text-ds-text-tertiary" />
+                     </div>
+                     <div className="space-y-3">
+                        {topBanks.map((bank, i) => (
+                           <div key={bank.name} className="flex items-center justify-between py-2 border-b-thin border-ds-border last:border-b-0">
+                              <div className="flex items-center gap-3 min-w-0">
+                                 <div className="w-8 h-8 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-[12px] font-bold text-ds-text-tertiary">{i + 1}</div>
+                                 <div className="min-w-0">
+                                    <p className="text-[13px] font-medium text-ds-text-primary truncate">{bank.name}</p>
+                                    <p className="text-[11px] text-ds-text-tertiary">{bank.count} uso(s)</p>
+                                 </div>
+                              </div>
+                              <p className="text-[13px] font-medium tabular-nums shrink-0 ml-2 text-ds-text-primary">
+                                 {formatCurrency(bank.total)}
+                              </p>
+                           </div>
+                        ))}
+                        {topBanks.length === 0 && (
+                           <p className="text-[12px] text-ds-text-tertiary text-center py-4">Nenhum banco identificado nos comprovantes.</p>
+                        )}
+                     </div>
+                  </div>
+
+                  <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
+                     <div className="flex items-center justify-between mb-4">
+                        <h2 className="text-[14px] font-medium text-ds-text-primary">Comprovante Mais Recente</h2>
                         <span className="text-[11px] text-ds-text-tertiary">{transactions.length} total</span>
                      </div>
                      <div className="space-y-3">
-                        {transactions.slice(0, 5).map(tx => (
+                        {recentReceipts.map(tx => (
                            <div key={tx.id} className="flex items-center justify-between py-2 border-b-thin border-ds-border last:border-b-0">
                               <div className="flex items-center gap-3 min-w-0">
                                  <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${tx.transaction_type === 'Inflow' ? 'bg-[#10B981] bg-opacity-10 text-fn-income' : 'bg-[#EF4444] bg-opacity-10 text-fn-expense'}`}>
@@ -602,7 +765,11 @@ function ExpenseTracker() {
                                  </div>
                                  <div className="min-w-0">
                                     <p className="text-[13px] font-medium text-ds-text-primary truncate">{tx.merchant_name}</p>
-                                    <p className="text-[11px] text-ds-text-tertiary">{formatDate(tx.transaction_date)}</p>
+                                    <div className="flex items-center gap-2">
+                                       <p className="text-[11px] text-ds-text-tertiary">{formatDate(tx.transaction_date)}</p>
+                                       <span className="w-1 h-0.5 bg-ds-border"></span>
+                                       <p className="text-[11px] text-ds-text-tertiary truncate max-w-[100px]">{tx.destination_institution || tx.payment_method || 'N/A'}</p>
+                                    </div>
                                  </div>
                               </div>
                               <p className={`text-[13px] font-medium tabular-nums shrink-0 ml-2 ${tx.transaction_type === 'Inflow' ? 'text-fn-income' : 'text-fn-expense'}`}>
@@ -610,7 +777,7 @@ function ExpenseTracker() {
                               </p>
                            </div>
                         ))}
-                        {transactions.length === 0 && (
+                        {recentReceipts.length === 0 && (
                            <p className="text-[12px] text-ds-text-tertiary text-center py-4">Nenhuma movimentação registrada.</p>
                         )}
                      </div>
@@ -726,10 +893,12 @@ function ExpenseTracker() {
                </div>
             </div>
 
-            {/* Full Transactions Table */}
             <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
                <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-                  <h2 className="text-[14px] font-medium text-ds-text-primary">Todos os Comprovantes</h2>
+                  <div>
+                    <h2 className="text-[14px] font-medium text-ds-text-primary">Todos os Comprovantes</h2>
+                    <p className="text-[11px] text-ds-text-tertiary mt-1">Cada comprovante mostra todos os campos que foram extraídos e armazenados.</p>
+                  </div>
                   <div className="flex items-center gap-2">
                      <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-ds-bg-primary border-thin border-ds-border">
                         <Search size={14} className="text-ds-text-tertiary" />
@@ -744,38 +913,10 @@ function ExpenseTracker() {
                      </select>
                   </div>
                </div>
-               <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
-                    <thead>
-                      <tr>
-                        {["Data", "Destino", "Categoria", "Tipo", "Valor"].map(h => (
-                          <th key={h} className="text-[11px] text-left px-3 py-2 font-medium text-ds-text-tertiary uppercase tracking-wider border-b-thin border-ds-border">{h}</th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paginatedTransactions.length > 0 ? paginatedTransactions.map(tx => (
-                        <tr key={tx.id} className="hover:bg-ds-bg-tertiary transition-colors">
-                           <td className="px-3 py-2.5 text-[13px] text-ds-text-primary border-b-thin border-ds-border whitespace-nowrap">{formatDate(tx.transaction_date)}</td>
-                           <td className="px-3 py-2.5 text-[13px] text-ds-text-primary border-b-thin border-ds-border truncate max-w-[180px]">{tx.merchant_name}</td>
-                           <td className="px-3 py-2.5 text-[12px] text-ds-text-secondary border-b-thin border-ds-border">{tx.category}</td>
-                           <td className="px-3 py-2.5 border-b-thin border-ds-border">
-                              <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-full ${tx.transaction_type === 'Inflow' ? 'bg-[#10B981] bg-opacity-10 text-fn-income' : 'bg-[#EF4444] bg-opacity-10 text-fn-expense'}`}>
-                                 {tx.transaction_type === 'Inflow' ? <TrendingUp size={10} /> : <TrendingDown size={10} />}
-                                 {tx.transaction_type === 'Inflow' ? 'Entrada' : 'Saída'}
-                              </span>
-                           </td>
-                           <td className="px-3 py-2.5 text-[13px] tabular-nums font-medium border-b-thin border-ds-border text-right">
-                              <span className={tx.transaction_type === 'Inflow' ? 'text-fn-income' : 'text-fn-expense'}>
-                                 {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', {minimumFractionDigits: 2})}
-                              </span>
-                           </td>
-                        </tr>
-                      )) : (
-                        <tr><td colSpan={5} className="py-8 text-center text-[12px] text-ds-text-tertiary">Nenhum registro encontrado.</td></tr>
-                      )}
-                    </tbody>
-                  </table>
+               <div className="space-y-4">
+                  {paginatedTransactions.length > 0 ? paginatedTransactions.map(renderReceiptCard) : (
+                    <div className="py-8 text-center text-[12px] text-ds-text-tertiary">Nenhum registro encontrado.</div>
+                  )}
                </div>
                {totalPages > 1 && (
                   <div className="flex items-center justify-between mt-4 pt-3 border-t-thin border-ds-border">

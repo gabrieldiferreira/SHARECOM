@@ -17,6 +17,7 @@ interface ExtractedData {
   transaction_date: string;
   transaction_type: "Inflow" | "Outflow";
   payment_method: string;
+  description?: string;
   destination_institution?: string;
   transaction_id?: string;
   masked_cpf?: string;
@@ -91,6 +92,7 @@ export default function ScannerPage() {
           transaction_date: ai.transaction_date || new Date().toISOString(),
           transaction_type: ai.transaction_type || "Outflow",
           payment_method: ai.payment_method || "Desconhecido",
+          description: ai.description,
           destination_institution: ai.destination_institution,
           transaction_id: ai.transaction_id,
           masked_cpf: ai.masked_cpf,
@@ -111,6 +113,7 @@ export default function ScannerPage() {
             transaction_date: extracted.transaction_date,
             transaction_type: extracted.transaction_type,
             payment_method: extracted.payment_method,
+            description: extracted.description,
             destination_institution: extracted.destination_institution,
             transaction_id: extracted.transaction_id,
             masked_cpf: extracted.masked_cpf,

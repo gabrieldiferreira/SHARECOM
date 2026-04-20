@@ -2,6 +2,8 @@ import os
 import httpx
 import json
 import base64
+import re
+import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -9,9 +11,31 @@ load_dotenv()
 MODEL_LIST = [
     "google/gemini-2.0-flash-001",
     "google/gemini-2.0-flash-exp:free",
-    "meta-llama/llama-3.2-11b-vision-instruct:free",
-    "google/gemini-2.0-pro-exp-02-05:free"
+    "meta-llama/llama-3.2-11b-vision-instruct:free"
 ]
+
+def _extract_svg_text(image_content: bytes) -> str:
+    try:
+        decoded = image_content.decode("utf-8", errors="ignore")
+        root = ET.fromstring(decoded)
+        texts: list[str] = []
+
+        for elem in root.iter():
+            tag_name = elem.tag.split("}")[-1].lower()
+            if tag_name in {"text", "tspan", "title", "desc"}:
+                content = " ".join("".join(elem.itertext()).split())
+                if content:
+                    texts.append(content)
+
+        if not texts:
+            stripped = re.sub(r"<[^>]+>", " ", decoded)
+            stripped = re.sub(r"\s+", " ", stripped).strip()
+            return stripped[:3000]
+
+        unique_texts = list(dict.fromkeys(texts))
+        return "\n".join(unique_texts)[:3000]
+    except Exception:
+        return ""
 
 async def analyze_receipt_with_ai(image_content: bytes, extension: str, ocr_text: str = None):
     """
@@ -49,6 +73,11 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str, ocr_text
         plain_text = _re.sub(r'<[^>]+>', ' ', html_text)  # remove tags HTML
         plain_text = _re.sub(r'\s+', ' ', plain_text).strip()[:3000]  # limita tamanho
         content_list[0]["text"] += f"\n\nCONTEÚDOM DA PÁGINA WEB (EXTRAÍDO DE HTML):\n{plain_text}"
+    elif extension.lower() == ".svg":
+        svg_text = _extract_svg_text(image_content)
+        content_list[0]["text"] += f"\n\nCONTEUDO EXTRAIDO DE SVG:\n{svg_text or '[sem texto extraivel]'}"
+        if ocr_text:
+            content_list[0]["text"] += f"\n\nTEXTO EXTRAIDO VIA OCR/REGEX:\n{ocr_text}"
     elif extension.lower() != ".txt":
         base64_image = base64.b64encode(image_content).decode('utf-8')
         mime_type = "image/jpeg" if extension.lower() in [".jpg", ".jpeg"] else "image/png"

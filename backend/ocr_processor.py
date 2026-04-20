@@ -3,6 +3,7 @@ import re
 import fitz # PyMuPDF
 from PIL import Image
 import io
+import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
 # Ensure .env values override empty shell vars
@@ -23,6 +24,34 @@ def get_easyocr_reader():
         except Exception as e:
             print(f"Failed to initialize EasyOCR: {e}")
     return EASYOCR_READER
+
+def _extract_svg_text(file_bytes: bytes) -> str:
+    """Extrai texto de SVGs sem depender de rasterização.
+    Funciona bem para exports vetoriais com <text>, <tspan>, <title> e <desc>.
+    """
+    try:
+        decoded = file_bytes.decode("utf-8", errors="ignore")
+        root = ET.fromstring(decoded)
+        texts: list[str] = []
+
+        for elem in root.iter():
+            tag_name = elem.tag.split("}")[-1].lower()
+            if tag_name in {"text", "tspan", "title", "desc"}:
+                content = " ".join("".join(elem.itertext()).split())
+                if content:
+                    texts.append(content)
+
+        if not texts:
+            # Fallback: remove tags e preserva apenas texto visível do XML.
+            stripped = re.sub(r"<[^>]+>", " ", decoded)
+            stripped = re.sub(r"\s+", " ", stripped).strip()
+            return stripped[:PDF_MAX_CHARS]
+
+        unique_texts = list(dict.fromkeys(texts))
+        return "\n".join(unique_texts)[:PDF_MAX_CHARS]
+    except Exception as e:
+        print(f"DEBUG: Falha ao extrair texto do SVG: {e}", flush=True)
+        return ""
 
 def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]:
     ext = extension.lower()
@@ -51,6 +80,10 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
             
         doc.close()
         return "pdf_text", text_context
+
+    if ext == ".svg":
+        svg_text = _extract_svg_text(file_bytes)
+        return "pdf_text", svg_text
 
     return "image", file_bytes
 
@@ -85,7 +118,7 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
     
     Args:
         file_bytes: Conteúdo do arquivo em memória
-        extension: Extensão do arquivo (.jpg, .png, .pdf, .html, .txt)
+        extension: Extensão do arquivo (.jpg, .png, .pdf, .html, .txt, .svg)
         file_path: Caminho opcional para arquivo em disco (preferido para imagens da web)
     """
     print(f"DEBUG: [ocr_processor] Extensão: {extension} | Arquivo em disco: {file_path}", flush=True)
