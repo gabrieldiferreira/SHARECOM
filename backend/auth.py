@@ -79,6 +79,7 @@ def verify_firebase_token(authorization: str | None = Header(default=None)) -> D
 
     try:
         decoded_token = firebase_auth.verify_id_token(token)
+        print(f"AuthSuccess: User {decoded_token.get('email', decoded_token.get('uid'))} authenticated via {decoded_token.get('firebase', {}).get('sign_in_provider')}", flush=True)
         return decoded_token
     except Exception as exc:
         if "default credentials were not found" in str(exc).lower():

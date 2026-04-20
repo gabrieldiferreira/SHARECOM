@@ -142,8 +142,21 @@ async def warm_up_cache():
 
 @app.middleware("http")
 async def log_requests(request, call_next):
-    print(f"DEBUG: Requisição recebida: {request.method} {request.url.path}")
-    return await call_next(request)
+    start_time = time.time()
+    path = request.url.path
+    method = request.method
+
+    # Ignora logs de endpoints de health check pra não poluir (opcional)
+    if path != "/":
+        print(f"DEBUG: REQUEST IN  | {method} {path} | Host: {request.headers.get('host')}", flush=True)
+
+    response = await call_next(request)
+
+    process_time = (time.time() - start_time) * 1000
+    if path != "/":
+        print(f"DEBUG: REQUEST OUT | {method} {path} | Status: {response.status_code} | {process_time:.2f}ms", flush=True)
+
+    return response
 
 @app.get("/")
 def read_root():
