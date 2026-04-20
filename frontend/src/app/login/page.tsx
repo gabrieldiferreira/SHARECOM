@@ -24,47 +24,38 @@ export default function LoginPage() {
     setMounted(true);
     console.log("Login: Componente montado. Auth disponível:", !!auth);
 
-    // SAÍDA DE EMERGÊNCIA: Se em 5 segundos o Firebase não responder, liberamos a tela.
-    const safetyTimeout = setTimeout(() => {
-      if (isCheckingRedirect) {
-        console.warn("Login: Timeout de segurança atingido. Liberando tela.");
+    const checkRedirect = async () => {
+      if (!auth) {
         setIsCheckingRedirect(false);
+        return;
       }
-    }, 5000);
+
+      try {
+        console.log("Login V2: Verificando resultado de redirecionamento...");
+        const result = await getRedirectResult(auth);
+        console.log("Login V2: getRedirectResult concluído. Usuário:", result?.user?.email || "Nenhum");
+        if (result?.user) {
+          window.location.href = "/";
+          return;
+        }
+      } catch (error: any) {
+        console.error("Login V2: Erro no redirect check:", error);
+        setErrorMessage(`Erro no redirect: ${error.code || error.message}`);
+      }
+      
+      setIsCheckingRedirect(false);
+    };
+
+    checkRedirect();
 
     if (auth) {
-      // 1. Ouvinte de estado de autenticação
       const unsubscribe = onAuthStateChanged(auth, (user) => {
-        console.log("Login: onAuthStateChanged disparado. Usuário:", user?.email || "Nenhum");
+        console.log("Login V2: onAuthStateChanged. Usuário:", user?.email || "Nenhum");
         if (user) {
           window.location.href = "/";
-        } else {
-          // 2. Tentar capturar resultado de redirect
-          getRedirectResult(auth)
-            .then((result) => {
-              console.log("Login: getRedirectResult concluído. Resultado:", !!result);
-              if (result?.user) {
-                window.location.href = "/";
-              } else {
-                setIsCheckingRedirect(false);
-                clearTimeout(safetyTimeout);
-              }
-            })
-            .catch((error) => {
-              console.error("Login: Erro no redirect check:", error);
-              setErrorMessage(`Erro: ${error.code}`);
-              setIsCheckingRedirect(false);
-              clearTimeout(safetyTimeout);
-            });
         }
       });
-      return () => {
-        unsubscribe();
-        clearTimeout(safetyTimeout);
-      };
-    } else {
-      setIsCheckingRedirect(false);
-      clearTimeout(safetyTimeout);
+      return () => unsubscribe();
     }
   }, []);
 
@@ -79,24 +70,46 @@ export default function LoginPage() {
     setShowTransition(true);
 
     try {
-      console.log("Login: Iniciando fluxo de autenticação...");
+      console.log("Login V2: Iniciando fluxo de autenticação...");
       await setPersistence(auth, browserLocalPersistence);
 
+      const hostname = window.location.hostname;
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+      const isLocalhost = hostname === "localhost" || 
+                          hostname === "127.0.0.1" || 
+                          hostname.startsWith("192.168.") || 
+                          hostname.startsWith("10.") ||
+                          hostname.endsWith(".local");
 
-      if (isMobile) {
-        console.log("Login: Usando Redirect (Mobile)");
+      console.log("Login V2: Hostname:", hostname, "Mobile:", isMobile, "Local:", isLocalhost);
+
+      // No localhost ou ambiente de desenvolvimento, Redirect costuma falhar ou entrar em loop.
+      // Forçamos Popup se estivermos em ambiente local ou se o redirect falhou antes.
+      if (isMobile && !isLocalhost) {
+        console.log("Login V2: Usando Redirect (Mobile/Production)");
         await signInWithRedirect(auth, provider);
       } else {
-        console.log("Login: Usando Popup (Desktop)");
+        console.log("Login V2: Usando Popup (Desktop/Local/Emulator)");
         const result = await signInWithPopup(auth, provider);
+        console.log("Login V2: Resultado Popup:", !!result.user);
         if (result.user) window.location.href = "/";
+        else {
+          setIsSigningIn(false);
+          setShowTransition(false);
+        }
       }
     } catch (error: any) {
-      console.error("Login: Erro ao autenticar:", error);
+      console.error("Login V2: Erro ao autenticar:", error);
       setIsSigningIn(false);
       setShowTransition(false);
-      setErrorMessage(error.message || "Falha no login.");
+      
+      if (error.code === 'auth/popup-blocked') {
+        setErrorMessage("O popup foi bloqueado pelo navegador. Por favor, libere popups para este site.");
+      } else if (error.code === 'auth/cancelled-popup-request') {
+        setErrorMessage("Login cancelado pelo usuário.");
+      } else {
+        setErrorMessage(error.message || "Falha no login.");
+      }
     }
   };
 
