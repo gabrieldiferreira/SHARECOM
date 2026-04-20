@@ -4,7 +4,8 @@ import { useState, useEffect } from "react";
 import { 
   signInWithPopup, 
   signInWithRedirect, 
-  onAuthStateChanged, 
+  getRedirectResult,
+  onAuthStateChanged,
   browserLocalPersistence, 
   setPersistence 
 } from "firebase/auth";
@@ -19,7 +20,17 @@ export default function LoginPage() {
     setMounted(true);
     if (!auth) return;
 
-    // O próprio Firebase redireciona se detectar que o usuário logou
+    // Captura o resultado do redirecionamento
+    getRedirectResult(auth).then((result) => {
+      if (result?.user) {
+        console.log("Login: Sucesso via Redirect");
+        window.location.href = "/";
+      }
+    }).catch((error) => {
+      console.error("Erro no Redirect Result:", error);
+      setErrorMessage(error.message);
+    });
+
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (user) {
         console.log("Login: Usuário detectado, redirecionando...");
@@ -44,10 +55,7 @@ export default function LoginPage() {
       
       const hostname = window.location.hostname;
       const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      // No localhost, o Redirect costuma falhar por causa do erro 404 init.json do Firebase.
-      // Forçamos Popup no localhost para garantir que funcione no seu ambiente de teste.
+
       if (isLocalhost) {
         console.log("Login: Ambiente Local. Usando Popup.");
         const result = await signInWithPopup(auth, provider);
@@ -56,17 +64,10 @@ export default function LoginPage() {
         } else {
            setIsSigningIn(false);
         }
-      } else if (isMobile) {
-        console.log("Login: Mobile Produção. Usando Redirect.");
-        await signInWithRedirect(auth, provider);
       } else {
-        console.log("Login: Desktop Produção. Usando Popup.");
-        const result = await signInWithPopup(auth, provider);
-        if (result.user) {
-           window.location.href = "/";
-        } else {
-           setIsSigningIn(false);
-        }
+        // EM PRODUÇÃO: Sempre use Redirect para evitar problemas de Frame e Popup com domínio customizado
+        console.log("Login: Produção. Usando Redirect.");
+        await signInWithRedirect(auth, provider);
       }
     } catch (error: any) {
       console.error("Erro no login:", error);

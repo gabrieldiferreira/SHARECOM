@@ -12,18 +12,11 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
-  // Removemos turbopack vazio para evitar conflitos no build da Vercel
   reactStrictMode: true,
-  compress: true, // Enables gzip/brotli compression
-  poweredByHeader: false, // Remove X-Powered-By header
-  eslint: {
-    // Desativamos para que o build passe mesmo com avisos de <img> e <a>
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    // Garante que o build não trave por tipos no ambiente da Vercel
-    ignoreBuildErrors: true,
-  },
+  compress: true,
+  poweredByHeader: false,
+  eslint: { ignoreDuringBuilds: true },
+  typescript: { ignoreBuildErrors: true },
   async rewrites() {
     return [
       {
@@ -35,31 +28,12 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
-        // Cache longo para assets estáticos imutáveis (ícones, fontes, SW)
-        source: "/(icon-192x192|icon-512x512|logo|manifest)\\.(png|svg|json|ico)$",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=31536000, immutable",
-          },
-        ],
-      },
-      {
-        // Cache do Service Worker não deve ser longo (precisa ser re-baixado)
-        source: "/sw.js",
-        headers: [
-          {
-            key: "Cache-Control",
-            value: "public, max-age=0, must-revalidate",
-          },
-        ],
-      },
-      {
-        // Segurança para todas as rotas
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "X-Frame-Options", value: "SAMEORIGIN" },
+          // Removemos o X-Frame-Options global para permitir que o auth funcione
+          // A segurança por frame será feita via CSP frame-ancestors
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self' http://localhost:3000 https://app.sharecom.com.br https://auth.sharecom.com.br https://unidoc-493609.firebaseapp.com;" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
         ],
       },
