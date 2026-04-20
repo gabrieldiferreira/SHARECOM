@@ -2,7 +2,6 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import Layout from "@/components/Layout";
-import AuthGate from "@/components/AuthGate";
 import ErrorSentinel from "@/components/ErrorSentinel";
 import InstallPrompt from "@/components/InstallPrompt";
 
@@ -65,9 +64,7 @@ export default function RootLayout({
       </head>
       <body className={`${inter.variable} font-sans`}>
         <ErrorSentinel>
-          <AuthGate>
-            <Layout>{children}</Layout>
-          </AuthGate>
+          <Layout>{children}</Layout>
           <InstallPrompt />
         </ErrorSentinel>
       </body>

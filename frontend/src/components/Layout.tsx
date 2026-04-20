@@ -263,6 +263,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     try {
       await signOut(auth);
+      // Forçar redirecionamento manual após logout
+      window.location.href = "/login";
     } catch (error) {
       console.error("Logout failed:", error);
       alert("Não foi possível encerrar sua sessão.");
