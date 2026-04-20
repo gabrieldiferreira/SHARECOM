@@ -1,9 +1,9 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
-import { Auth, getAuth, GoogleAuthProvider } from "firebase/auth";
+import { Auth, getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
-// Função para obter o domínio de auth de forma dinâmica e estável
+// Função para obter o domínio de auth de forma dinâmica e invisível
 const getAuthDomain = () => {
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
@@ -11,9 +11,10 @@ const getAuthDomain = () => {
     if (hostname === "localhost" || hostname === "127.0.0.1") {
       return "unidoc-493609.firebaseapp.com";
     }
+    // Em produção, usamos o domínio atual para garantir que o login seja "same-origin"
+    return hostname;
   }
-  // Em produção, usamos o seu domínio customizado
-  return "auth.sharecom.com.br";
+  return "sharecom.com.br";
 };
 
 const firebaseConfig = {
@@ -43,6 +44,12 @@ let analytics: Analytics | null = null;
 if (hasFirebaseConfig) {
   const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
   auth = getAuth(app);
+
+  // Garantir persistência local
+  if (typeof window !== "undefined") {
+    setPersistence(auth, browserLocalPersistence);
+  }
+
   provider = new GoogleAuthProvider();
   db = getFirestore(app);
   if (typeof window !== "undefined") {
