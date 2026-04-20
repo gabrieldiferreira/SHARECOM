@@ -227,20 +227,32 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   emptyTrash: async () => {
+    // 1. Chama o endpoint otimizado no backend primeiro
+    try {
+      await authenticatedFetch(getApiUrl("/expenses/clear-all?only_trash=true"), {
+        method: 'POST'
+      });
+    } catch (e) {
+      console.error("Erro ao limpar lixeira no backend:", e);
+    }
+
+    // 2. Limpa o IndexedDB local
     const db = await getDB();
     if (!db) return;
 
     const txs = await db.getAll('transactions');
-    const txSet = db.transaction('transactions', 'readwrite');
-    for (const tx of txs) {
-      if (tx.deleted_at && tx.id) {
-        try {
-          await authenticatedFetch(getApiUrl(`/expenses/${tx.id}`), { method: 'DELETE' });
-        } catch (e) {}
-        await txSet.store.delete(tx.id);
+    const idsToDelete = txs
+      .filter(tx => tx.deleted_at && tx.id)
+      .map(tx => tx.id as number);
+
+    if (idsToDelete.length > 0) {
+      const txSet = db.transaction('transactions', 'readwrite');
+      for (const id of idsToDelete) {
+        await txSet.store.delete(id);
       }
+      await txSet.done;
     }
-    await txSet.done;
+
     get().fetchTransactions();
   },
 
