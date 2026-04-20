@@ -39,16 +39,28 @@ export default function LoginPage() {
     setErrorMessage("");
 
     try {
-      console.log("Login: Iniciando autenticação...");
+      console.log("Login: Iniciando fluxo de autenticação...");
       await setPersistence(auth, browserLocalPersistence);
       
+      const hostname = window.location.hostname;
+      const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
-      if (isMobile) {
-        console.log("Login: Usando Redirect (Mobile)");
+      // No localhost, o Redirect costuma falhar por causa do erro 404 init.json do Firebase.
+      // Forçamos Popup no localhost para garantir que funcione no seu ambiente de teste.
+      if (isLocalhost) {
+        console.log("Login: Ambiente Local. Usando Popup.");
+        const result = await signInWithPopup(auth, provider);
+        if (result.user) {
+           window.location.href = "/";
+        } else {
+           setIsSigningIn(false);
+        }
+      } else if (isMobile) {
+        console.log("Login: Mobile Produção. Usando Redirect.");
         await signInWithRedirect(auth, provider);
       } else {
-        console.log("Login: Usando Popup (Desktop)");
+        console.log("Login: Desktop Produção. Usando Popup.");
         const result = await signInWithPopup(auth, provider);
         if (result.user) {
            window.location.href = "/";
@@ -58,14 +70,12 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       console.error("Erro no login:", error);
-      // Se o popup for bloqueado, tenta via redirect como fallback
       if (error.code === 'auth/popup-blocked') {
-        console.log("Login: Popup bloqueado, tentando Redirect...");
-        await signInWithRedirect(auth, provider);
+        setErrorMessage("Popup bloqueado pelo navegador.");
       } else {
         setErrorMessage(error.message || "Falha ao autenticar.");
-        setIsSigningIn(false);
       }
+      setIsSigningIn(false);
     }
   };
 
