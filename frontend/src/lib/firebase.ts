@@ -3,11 +3,16 @@ import { Auth, getAuth, GoogleAuthProvider } from "firebase/auth";
 import { Firestore, getFirestore } from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
-// Função para obter o domínio de auth de forma dinâmica
+// Função para obter o domínio de auth de forma dinâmica e estável
 const getAuthDomain = () => {
   if (typeof window !== "undefined") {
-    return window.location.host; // Usa o domínio atual (app.sharecom.com.br ou localhost:3000)
+    const hostname = window.location.hostname;
+    // No localhost, usamos o domínio padrão para evitar erros de HTTPS/Frames locais
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "unidoc-493609.firebaseapp.com";
+    }
   }
+  // Em produção, usamos o seu domínio customizado
   return "auth.sharecom.com.br";
 };
 

@@ -31,10 +31,16 @@ const nextConfig: NextConfig = {
         source: "/(.*)",
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          // Removemos o X-Frame-Options global para permitir que o auth funcione
-          // A segurança por frame será feita via CSP frame-ancestors
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self' http://localhost:3000 https://app.sharecom.com.br https://auth.sharecom.com.br https://unidoc-493609.firebaseapp.com;" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self' http://localhost:3000 https://app.sharecom.com.br https://auth.sharecom.com.br https://unidoc-493609.firebaseapp.com;" },
+        ],
+      },
+      {
+        // Regra específica para o domínio de Auth: remover restrição de frame
+        source: "/(.*)",
+        has: [{ type: "host", value: "auth.sharecom.com.br" }],
+        headers: [
+          { key: "X-Frame-Options", value: "ALLOWALL" },
         ],
       },
     ];
