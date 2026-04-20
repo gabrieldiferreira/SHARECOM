@@ -28,18 +28,26 @@ const nextConfig: NextConfig = {
   async headers() {
     return [
       {
+        // 1. REGRAS GERAIS (Para o app principal)
+        // Aplicado a tudo, EXCETO quando o host for o de autenticação
         source: "/(.*)",
+        missing: [{ type: "host", value: "auth.sharecom.com.br" }],
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "X-Frame-Options", value: "SAMEORIGIN" },
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self' http://localhost:3000 https://app.sharecom.com.br https://auth.sharecom.com.br https://unidoc-493609.firebaseapp.com;" },
         ],
       },
       {
-        // Regra específica para o domínio de Auth: remover restrição de frame
+        // 2. REGRAS ESPECÍFICAS PARA AUTH (Permissivo para o Firebase)
+        // Aplicado APENAS quando o host for auth.sharecom.com.br
         source: "/(.*)",
         has: [{ type: "host", value: "auth.sharecom.com.br" }],
         headers: [
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          // frame-ancestors * permite que qualquer uma das suas origens autorizadas carregue o login
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self' http://localhost:3000 https://localhost:3000 https://app.sharecom.com.br https://auth.sharecom.com.br https://unidoc-493609.firebaseapp.com" },
+          // Desativa o X-Frame-Options antigo que conflita com o CSP moderno
           { key: "X-Frame-Options", value: "ALLOWALL" },
         ],
       },
