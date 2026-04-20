@@ -24,6 +24,14 @@ const nextConfig: NextConfig = {
     // Garante que o build não trave por tipos no ambiente da Vercel
     ignoreBuildErrors: true,
   },
+  async rewrites() {
+    return [
+      {
+        source: "/__/auth/:path*",
+        destination: "https://unidoc-493609.firebaseapp.com/__/auth/:path*",
+      },
+    ];
+  },
   async headers() {
     return [
       {
