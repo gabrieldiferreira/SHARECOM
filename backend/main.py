@@ -203,6 +203,37 @@ def create_expense(
     db.add(db_expense)
     db.commit()
     db.refresh(db_expense)
+    cache_invalidate_all()
+    return db_expense
+
+@app.patch("/expenses/{expense_id}", response_model=schemas.Expense)
+def update_expense(
+    expense_id: int,
+    updates: dict,
+    db: Session = Depends(get_db),
+    _: dict = Depends(verify_firebase_token),
+):
+    db_expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
+    if not db_expense:
+        raise HTTPException(status_code=404, detail="Gasto não encontrado")
+    
+    for key, value in updates.items():
+        if hasattr(db_expense, key):
+            if key == 'deleted_at' and value:
+                from datetime import datetime as dt
+                try:
+                    if isinstance(value, str):
+                        setattr(db_expense, key, dt.fromisoformat(value.replace('Z', '')))
+                    else:
+                        setattr(db_expense, key, value)
+                except:
+                    setattr(db_expense, key, dt.utcnow())
+            else:
+                setattr(db_expense, key, value)
+    
+    db.commit()
+    db.refresh(db_expense)
+    cache_invalidate_all()
     return db_expense
 
 @app.post("/process-ata")
@@ -433,6 +464,14 @@ async def process_ata(
                 "note": existing.note,
                 "database_id": existing.id
             }
+        
+        # Se re-enviar um documento que estava na lixeira, restaura ele
+        if existing.deleted_at:
+            existing.deleted_at = None
+            db.commit()
+            db.refresh(existing)
+            cache_invalidate_all()
+            print(f"DEBUG: Comprovante que estava na lixeira foi restaurado via re-upload.", flush=True)
 
     db_expense = models.Expense(
         date=date_obj,

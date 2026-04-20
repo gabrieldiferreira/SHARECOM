@@ -20,6 +20,7 @@ class Expense(Base):
     transaction_id = Column(String, unique=True, index=True)
     masked_cpf = Column(String)
     note = Column(String, nullable=True) # User provided notes
+    deleted_at = Column(DateTime, nullable=True) # For soft-delete synchronization
 
 class PatternLog(Base):
     __tablename__ = "pattern_logs"

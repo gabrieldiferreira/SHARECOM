@@ -3,18 +3,24 @@
 import { useState, useEffect } from "react";
 import { signInWithPopup } from "firebase/auth";
 import { auth, hasFirebaseConfig, provider } from "@/lib/firebase";
+import { motion, AnimatePresence } from "framer-motion";
 import {
   Lock,
   ShieldCheck,
   BarChart3,
   Sparkles,
   PieChart,
+  Loader2,
 } from "lucide-react";
 
 export default function LoginPage() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [mounted, setMounted] = useState(false);
+
+  const [showBridge, setShowBridge] = useState(false);
+  const [bridgeStatus, setBridgeStatus] = useState("Iniciando Protocolo...");
+  const [bridgeProgress, setBridgeProgress] = useState(0);
 
   useEffect(() => {
     setMounted(true);
@@ -26,13 +32,27 @@ export default function LoginPage() {
       return;
     }
     setErrorMessage("");
-    setIsSigningIn(true);
+    setShowBridge(true);
+    
+    // Sequência de Handshake Branded
+    const sequence = [
+      { msg: "Sincronizando com SHARECOM Gateway...", p: 20 },
+      { msg: "Validando Túnel Criptográfico...", p: 50 },
+      { msg: "Autenticando via Google Secure API...", p: 80 },
+      { msg: "Finalizando Handshake...", p: 100 },
+    ];
+
+    for (const step of sequence) {
+      setBridgeStatus(step.msg);
+      setBridgeProgress(step.p);
+      await new Promise(r => setTimeout(r, 600));
+    }
+
     try {
       await signInWithPopup(auth, provider);
     } catch (error) {
       setErrorMessage("Falha na autenticação. Tente novamente.");
-    } finally {
-      setIsSigningIn(false);
+      setShowBridge(false);
     }
   };
 
@@ -242,6 +262,57 @@ export default function LoginPage() {
         </div>
       </div>
 
+      {/* BRIDGE OVERLAY */}
+      <AnimatePresence>
+        {showBridge && (
+          <motion.div 
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[500] bg-[#020617] flex flex-col items-center justify-center p-8 font-mono"
+          >
+            <div className="absolute inset-0 opacity-10">
+               <div className="absolute top-[-10%] left-[-10%] w-64 h-64 bg-blue-600 rounded-full blur-[100px]" />
+               <div className="absolute bottom-[-10%] right-[-10%] w-64 h-64 bg-emerald-600 rounded-full blur-[100px]" />
+            </div>
+
+            <div className="relative z-10 w-full max-w-sm space-y-8">
+               <div className="flex flex-col items-center gap-4 text-center">
+                  <div className="relative">
+                    <div className="w-16 h-16 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center backdrop-blur-xl">
+                      <ShieldCheck size={32} className="text-emerald-500 animate-pulse" />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <h1 className="text-sm font-bold tracking-[0.2em] text-emerald-500 uppercase">Secure Gateway</h1>
+                    <p className="text-[10px] text-white/40 uppercase tracking-widest">Sharecom Intelligence Systems</p>
+                  </div>
+               </div>
+
+               <div className="space-y-4">
+                  <div className="flex justify-between items-end">
+                    <span className="text-[10px] text-emerald-500/80 font-bold">{bridgeStatus}</span>
+                    <span className="text-[10px] text-emerald-500/50">{bridgeProgress}%</span>
+                  </div>
+                  <div className="h-1 w-full bg-white/5 rounded-full overflow-hidden border border-white/5">
+                    <div 
+                      className="h-full bg-emerald-500 shadow-[0_0_15px_rgba(16,185,129,0.5)] transition-all duration-500"
+                      style={{ width: `${bridgeProgress}%` }}
+                    />
+                  </div>
+               </div>
+
+               <div className="bg-black/40 border border-white/5 rounded-xl p-4 h-24 overflow-hidden flex flex-col justify-end gap-1">
+                  <p className="text-[9px] text-emerald-500/60 font-mono italic">Protocol: auth.sharecom.secure_handshake</p>
+                  <p className="text-[9px] text-emerald-500/60 font-mono italic">Cipher: AES-256-GCM / 8192-bit</p>
+                  <div className="flex items-center gap-1">
+                    <span className="text-[9px] text-emerald-500 animate-pulse">_ system_ready</span>
+                  </div>
+               </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

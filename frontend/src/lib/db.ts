@@ -17,6 +17,7 @@ export interface TransactionEntity {
   receipt_hash?: string; // SHA-256
   is_synced: boolean;
   note?: string;
+  deleted_at?: string; // ISO date for trash retention
 }
 
 interface SharecomDB extends DBSchema {
