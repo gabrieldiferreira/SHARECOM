@@ -59,8 +59,6 @@ export default function RootLayout({
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link rel="dns-prefetch" href="https://firebaseapp.com" />
         <link rel="dns-prefetch" href="https://openrouter.ai" />
-        {/* Preload do ícone principal (evita LCP delay) */}
-        <link rel="preload" href="/icon-192x192.png" as="image" type="image/png" />
       </head>
       <body className={`${inter.variable} font-sans`}>
         <ErrorSentinel>

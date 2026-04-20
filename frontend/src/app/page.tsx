@@ -65,6 +65,7 @@ function ExpenseTracker() {
 
   const agent = useDashboardAgent(transactions);
 
+  const [isLoadingData, setIsLoadingData] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "success" | "duplicate" | "error">("idle");
   const [showTrash, setShowTrash] = useState(false);
@@ -94,8 +95,16 @@ function ExpenseTracker() {
 
   useEffect(() => {
     setMounted(true);
-    fetchTransactions();
-    syncWithBackend();
+    const loadData = async () => {
+      setIsLoadingData(true);
+      try {
+        await fetchTransactions();
+        await syncWithBackend();
+      } finally {
+        setIsLoadingData(false);
+      }
+    };
+    loadData();
   }, [fetchTransactions, syncWithBackend]);
 
 
@@ -505,8 +514,13 @@ function ExpenseTracker() {
     );
   };
 
-  if (!mounted) {
-    return <div className="p-8 animate-pulse text-center" style={{ color: 'var(--text-secondary)' }}>Iniciando...</div>;
+  if (!mounted || isLoadingData) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center space-y-4 bg-ds-bg-primary">
+        <Loader2 size={40} className="animate-spin text-fn-balance" />
+        <p className="text-[14px] font-medium text-ds-text-secondary animate-pulse">Sincronizando seus dados...</p>
+      </div>
+    );
   }
 
   return (

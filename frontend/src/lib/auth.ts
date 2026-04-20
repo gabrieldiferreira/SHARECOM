@@ -28,6 +28,10 @@ export async function getFirebaseAuthHeader(
 
   if (!user) {
     if (requireUser) {
+      // Se estamos no browser e o usuário é obrigatório mas não foi encontrado
+      if (typeof window !== 'undefined') {
+        window.location.href = "/login";
+      }
       throw new Error("AUTH_REQUIRED");
     }
     return {};

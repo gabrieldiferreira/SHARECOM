@@ -46,19 +46,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const handlePasteLink = async () => {
     try {
+      // 1. Tenta ler itens (imagens, arquivos) primeiro
+      const items = await navigator.clipboard.read();
+      for (const item of items) {
+        const imageType = item.types.find(type => type.startsWith('image/'));
+        if (imageType) {
+          const blob = await item.getType(imageType);
+          const extension = imageType.split('/')[1] || 'png';
+          const file = new File([blob], `pasted-image-${Date.now()}.${extension}`, { type: imageType });
+
+          setSelectedFile(file);
+          setPastedContent(""); // Limpa link se houver
+          setPendingNote("");
+          setShowModal(true);
+          setShowScanMenu(false);
+          return;
+        }
+      }
+
+      // 2. Fallback: Tenta ler como texto (Link)
       const text = await navigator.clipboard.readText();
       if (!text || text.trim() === "") {
-        setToast({ message: "Nenhum link disponível no clipboard", type: 'error' });
+        setToast({ message: "Clipboard vazio ou formato não suportado", type: 'error' });
         return;
       }
 
       setPastedContent(text);
+      setSelectedFile(null); // Limpa arquivo se houver
       setPastedAt(Date.now());
       setPendingNote("");
       setShowModal(true);
       setShowScanMenu(false);
     } catch (err) {
-      setToast({ message: "Permita o acesso à área de transferência para colar", type: 'error' });
+      setToast({ message: "Permita o acesso à área de transferência", type: 'error' });
       console.error("Erro ao ler clipboard:", err);
     }
   };

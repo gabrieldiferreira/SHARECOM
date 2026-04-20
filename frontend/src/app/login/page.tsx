@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signInWithPopup, signInWithRedirect } from "firebase/auth";
+import { useRouter } from "next/navigation";
+import { signInWithPopup, signInWithRedirect, onAuthStateChanged, getRedirectResult } from "firebase/auth";
 import { auth, hasFirebaseConfig, provider } from "@/lib/firebase";
 import {
   Lock,
@@ -12,13 +13,47 @@ import {
 } from "lucide-react";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     setMounted(true);
-  }, []);
+    console.log("LoginPage: Componente montado");
+
+    // Capturar resultado de redirecionamento (Mobile/PWA)
+    if (auth) {
+      console.log("LoginPage: Verificando resultado de redirecionamento...");
+      getRedirectResult(auth)
+        .then((result) => {
+          if (result) {
+            console.log("LoginPage: Resultado de redirect capturado com sucesso para:", result.user.email);
+          } else {
+            console.log("LoginPage: Nenhum resultado de redirect pendente.");
+          }
+        })
+        .catch((error) => {
+          console.error("LoginPage: Erro no getRedirectResult:", error);
+          setErrorMessage(`Erro no redirecionamento: ${error.message}`);
+          setIsSigningIn(false);
+        });
+    }
+
+    // Monitorar estado de autenticação para redirecionar se já logado
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      if (user) {
+        console.log("LoginPage: Usuário detectado (onAuthStateChanged):", user.email);
+        console.log("LoginPage: Redirecionando para a Dashboard...");
+        // Usar window.location.href para garantir um reload limpo do estado do app
+        window.location.href = "/";
+      } else {
+        console.log("LoginPage: Nenhum usuário logado no momento.");
+      }
+    });
+
+    return () => unsubscribe();
+  }, [router]);
 
   const handleGoogleLogin = async () => {
     if (!auth || !provider) {
@@ -29,13 +64,19 @@ export default function LoginPage() {
     setIsSigningIn(true);
 
     try {
-      // Priorizar Popup, usar Redirect apenas se estiver em modo PWA Standalone (onde não há janelas)
+      // Detecção de Mobile (mais robusto para evitar problemas de COOP/Popups)
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
-      if (isStandalone) {
+      console.log("LoginPage: Iniciando fluxo de login. isMobile:", isMobile, "isStandalone:", isStandalone);
+
+      if (isMobile || isStandalone) {
+        console.log("LoginPage: Executando signInWithRedirect...");
         await signInWithRedirect(auth, provider);
       } else {
-        await signInWithPopup(auth, provider);
+        console.log("LoginPage: Executando signInWithPopup...");
+        const result = await signInWithPopup(auth, provider);
+        console.log("LoginPage: Popup concluído com sucesso para:", result.user.email);
       }
     } catch (error: any) {
       console.error("Auth Error:", error);
