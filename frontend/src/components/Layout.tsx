@@ -304,9 +304,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
         </div>
 
-        <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
-          {isDark ? <Sun size={18} /> : <Moon size={18} />}
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleLogout} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
+            <LogOut size={18} />
+          </button>
+          <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
+            {isDark ? <Sun size={18} /> : <Moon size={18} />}
+          </button>
+        </div>
       </header>
 
       {/* Header Fade Effect (Subtle & Small) */}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { signInWithPopup } from "firebase/auth";
+import { signInWithPopup, signInWithRedirect } from "firebase/auth";
 import { auth, hasFirebaseConfig, provider } from "@/lib/firebase";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -32,6 +32,7 @@ export default function LoginPage() {
       return;
     }
     setErrorMessage("");
+    setIsSigningIn(true);
     setShowBridge(true);
     
     // Sequência de Handshake Branded
@@ -49,9 +50,20 @@ export default function LoginPage() {
     }
 
     try {
-      await signInWithPopup(auth, provider);
+      // Detecção de Mobile/PWA para usar Redirect (mais robusto que Popup)
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
+                       (window.matchMedia('(display-mode: standalone)').matches);
+
+      if (isMobile) {
+        setBridgeStatus("Redirecionando para Google...");
+        await signInWithRedirect(auth, provider);
+      } else {
+        await signInWithPopup(auth, provider);
+      }
     } catch (error) {
-      setErrorMessage("Falha na autenticação. Tente novamente.");
+      console.error("Auth Error:", error);
+      setIsSigningIn(false);
+      setErrorMessage("Falha na autenticação. Verifique se pop-ups estão permitidos ou tente novamente.");
       setShowBridge(false);
     }
   };
@@ -309,6 +321,16 @@ export default function LoginPage() {
                     <span className="text-[9px] text-emerald-500 animate-pulse">_ system_ready</span>
                   </div>
                </div>
+
+               <button
+                 onClick={() => {
+                   setShowBridge(false);
+                   setIsSigningIn(false);
+                 }}
+                 className="w-full py-3 rounded-lg border border-white/10 text-[10px] text-white/40 hover:text-white transition-colors uppercase tracking-[0.2em]"
+               >
+                 Cancelar Protocolo
+               </button>
             </div>
           </motion.div>
         )}

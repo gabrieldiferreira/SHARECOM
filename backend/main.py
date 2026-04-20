@@ -207,17 +207,22 @@ def read_expenses(
     limit: int = 100,
     db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
+    include_deleted: bool = False
 ):
     uid = user.get("uid", "anonymous")
-    cache_key = f"{uid}:{skip}:{limit}"
+    cache_key = f"{uid}:{skip}:{limit}:{include_deleted}"
 
-    # CACHE HIT: retorna sem consultar o banco
+    # CACHE HIT
     cached = cache_get(cache_key)
     if cached is not None:
         return cached
 
-    # CACHE MISS: consulta o banco e armazena no cache
-    expenses = db.query(models.Expense).order_by(models.Expense.date.desc()).offset(skip).limit(limit).all()
+    # CACHE MISS
+    query = db.query(models.Expense)
+    if not include_deleted:
+        query = query.filter(models.Expense.deleted_at == None)
+
+    expenses = query.order_by(models.Expense.date.desc()).offset(skip).limit(limit).all()
     cache_set(cache_key, expenses)
     return expenses
 
@@ -551,15 +556,19 @@ def delete_expense(
 def clear_all_expenses(
     db: Session = Depends(get_db),
     _: dict = Depends(verify_firebase_token),
+    only_trash: bool = False
 ):
-    print("DEBUG: >>> LIMPANDO TODO O BANCO DE DADOS <<<", flush=True)
+    print(f"DEBUG: >>> LIMPANDO BANCO. APENAS LIXEIRA: {only_trash} <<<", flush=True)
     try:
-        num_deleted = db.query(models.Expense).delete()
+        query = db.query(models.Expense)
+        if only_trash:
+            query = query.filter(models.Expense.deleted_at != None)
+
+        num_deleted = query.delete(synchronize_session=False)
         db.commit()
         # Invalida todo o cache
         cache_invalidate_all()
-        print(f"DEBUG: BANCO LIMPO. {num_deleted} registros removidos.", flush=True)
-        return {"message": "Banco de dados resetado com sucesso"}
+        return {"message": f"{num_deleted} registros removidos com sucesso"}
 
     except Exception as e:
         print(f"DEBUG: ERRO AO LIMPAR BANCO: {e}", flush=True)

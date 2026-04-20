@@ -96,17 +96,20 @@ def _extract_text_easyocr(image_bytes: bytes, file_path: str = None) -> str:
         print("DEBUG: ERRO - Falha ao obter o reader do EasyOCR.")
         return ""
     try:
+        import numpy as np
         if file_path and os.path.exists(file_path):
-            # Leitura direta do arquivo — mais estavel para imagens baixadas da web
+            # Leitura direta do arquivo com pré-processamento para grayscale
             print(f"DEBUG: EasyOCR lendo de arquivo: {file_path}")
-            result = reader.readtext(file_path, detail=0)
+            img = Image.open(file_path).convert("L")
+            result = reader.readtext(np.array(img), detail=0, paragraph=True)
         else:
             # Fallback: leitura de bytes em memória
-            import numpy as np
             print(f"DEBUG: EasyOCR lendo de bytes ({len(image_bytes)} bytes)")
-            image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-            result = reader.readtext(np.array(image), detail=0)
+            img = Image.open(io.BytesIO(image_bytes)).convert("L") # Escala de cinza para melhor precisão
+            result = reader.readtext(np.array(img), detail=0, paragraph=True)
+
         text = "\n".join(result)
+        print(f"--- DEBUG OCR ---\n{text}\n-----------------")
         print(f"DEBUG: EasyOCR concluído. Caracteres: {len(text)}")
         return text
     except Exception as e:
