@@ -20,6 +20,12 @@ import schemas
 # Create tables
 Base.metadata.create_all(bind=engine)
 
+app = FastAPI(
+    title="SHARECOM API",
+    version="1.0.0",
+    redirect_slashes=True
+)
+
 # Migração Automática: Garante que colunas novas existam (Útil para Render/Postgres)
 @app.on_event("startup")
 async def apply_migrations():
@@ -116,11 +122,6 @@ def cache_set(key: str, data): _cache.set(key, data)
 def cache_invalidate(key: str): _cache.invalidate_all()  # Simples: invalida tudo
 def cache_invalidate_all(): _cache.invalidate_all()
 
-app = FastAPI(
-    title="SHARECOM API", 
-    version="1.0.0",
-    redirect_slashes=True
-)
 app.include_router(export_router)
 
 @app.on_event("startup")
