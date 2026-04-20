@@ -29,7 +29,7 @@ app = FastAPI(
 # Migração Automática: Garante que colunas novas existam (Útil para Render/Postgres)
 @app.on_event("startup")
 async def apply_migrations():
-    from sqlalchemy import text
+    from sqlalchemy import text, inspect
     columns_to_ensure = [
         ("transaction_type", "TEXT DEFAULT 'Outflow'"),
         ("payment_method", "TEXT"),
@@ -37,22 +37,21 @@ async def apply_migrations():
         ("transaction_id", "TEXT"),
         ("masked_cpf", "TEXT"),
         ("note", "TEXT"),
-        ("deleted_at", "TIMESTAMP") # PostgreSQL usa TIMESTAMP
+        ("deleted_at", "TIMESTAMP")
     ]
 
-    with engine.connect() as conn:
-        for col_name, col_def in columns_to_ensure:
-            try:
-                # Verifica se a coluna existe
-                conn.execute(text(f"SELECT {col_name} FROM expenses LIMIT 1"))
-            except Exception:
-                # Se falhar, tenta adicionar
-                try:
+    try:
+        inspector = inspect(engine)
+        existing_columns = [c["name"] for c in inspector.get_columns("expenses")]
+
+        with engine.begin() as conn: # engine.begin() abre e commita automaticamente
+            for col_name, col_def in columns_to_ensure:
+                if col_name not in existing_columns:
                     print(f"MIGRAÇÃO: Adicionando coluna {col_name}...")
                     conn.execute(text(f"ALTER TABLE expenses ADD COLUMN {col_name} {col_def}"))
-                    conn.commit()
-                except Exception as e:
-                    print(f"MIGRAÇÃO: Erro ao adicionar {col_name}: {e}")
+        print("MIGRAÇÃO: Verificação concluída com sucesso.")
+    except Exception as e:
+        print(f"MIGRAÇÃO: Erro crítico durante migração: {e}")
 
 # =============================================================================
 # CACHE EM MEMÓRIA — LRU + TTL + STATS + WARM-UP
