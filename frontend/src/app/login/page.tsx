@@ -35,35 +35,40 @@ export default function LoginPage() {
     setIsSigningIn(true);
     setShowBridge(true);
     
-    // Sequência de Handshake Branded
+    // Sequência de Handshake mais rápida para não perder o "User Activation Context"
     const sequence = [
-      { msg: "Sincronizando com SHARECOM Gateway...", p: 20 },
-      { msg: "Validando Túnel Criptográfico...", p: 50 },
-      { msg: "Autenticando via Google Secure API...", p: 80 },
+      { msg: "Sincronizando Gateway...", p: 25 },
+      { msg: "Validando Túnel...", p: 50 },
+      { msg: "Autenticando via Google...", p: 75 },
       { msg: "Finalizando Handshake...", p: 100 },
     ];
 
     for (const step of sequence) {
       setBridgeStatus(step.msg);
       setBridgeProgress(step.p);
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 150)); // Reduzido de 600ms para 150ms
     }
 
     try {
-      // Detecção de Mobile/PWA para usar Redirect (mais robusto que Popup)
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent) ||
-                       (window.matchMedia('(display-mode: standalone)').matches);
+      // Priorizar Popup, usar Redirect apenas se estiver em modo PWA Standalone (onde não há janelas)
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
 
-      if (isMobile) {
-        setBridgeStatus("Redirecionando para Google...");
+      if (isStandalone) {
         await signInWithRedirect(auth, provider);
       } else {
         await signInWithPopup(auth, provider);
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Auth Error:", error);
       setIsSigningIn(false);
-      setErrorMessage("Falha na autenticação. Verifique se pop-ups estão permitidos ou tente novamente.");
+
+      if (error.code === 'auth/popup-blocked') {
+        setErrorMessage("O navegador bloqueou o pop-up. Por favor, autorize pop-ups para este site.");
+      } else if (error.code === 'auth/unauthorized-domain') {
+        setErrorMessage("Este domínio não está autorizado no Firebase Console. Adicione seu IP/Domínio lá.");
+      } else {
+        setErrorMessage("Falha na autenticação. Verifique sua conexão ou tente novamente.");
+      }
       setShowBridge(false);
     }
   };
