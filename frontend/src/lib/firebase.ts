@@ -9,7 +9,10 @@ const getAuthDomain = () => {
   if (typeof window !== "undefined") {
     const hostname = window.location.hostname;
     if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return "unidoc-493609.firebaseapp.com";
+      // During local development, use the local host as authDomain so the
+      // Firebase client doesn't try to fetch hosted init.json from
+      // unidoc-493609.firebaseapp.com which may not exist.
+      return hostname;
     }
   }
 
