@@ -1,10 +1,10 @@
 import { auth } from "./firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
 
-async function waitForUser(timeoutMs = 5000): Promise<User | null> {
+async function waitForUser(timeoutMs = 10000): Promise<User | null> {
   if (!auth) return null;
+  // Se já temos o usuário no objeto auth, retornamos imediatamente
   if (auth.currentUser) return auth.currentUser;
-  const firebaseAuth = auth;
 
   return await new Promise((resolve) => {
     const timeout = setTimeout(() => {
@@ -12,7 +12,7 @@ async function waitForUser(timeoutMs = 5000): Promise<User | null> {
       resolve(null);
     }, timeoutMs);
 
-    const unsubscribe = onAuthStateChanged(firebaseAuth, (user) => {
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       clearTimeout(timeout);
       unsubscribe();
       resolve(user);
@@ -24,12 +24,15 @@ export async function getFirebaseAuthHeader(
   options: { requireUser?: boolean; forceRefresh?: boolean } = {}
 ): Promise<Record<string, string>> {
   const { requireUser = true, forceRefresh = false } = options;
+  
+  // Aguarda o Firebase carregar o estado do usuário
   const user = await waitForUser();
 
   if (!user) {
     if (requireUser) {
-      // Se estamos no browser e o usuário é obrigatório mas não foi encontrado
+      // Só redirecionamos se estivermos no lado do cliente e NÃO estivermos na página de login
       if (typeof window !== 'undefined' && window.location.pathname !== "/login") {
+        console.warn("AUTH: Usuário não encontrado, redirecionando para login...");
         window.location.href = "/login";
       }
       throw new Error("AUTH_REQUIRED");
