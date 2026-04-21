@@ -4,6 +4,7 @@ import { useState, useEffect, useMemo } from "react";
 import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, ChevronLeft, ChevronRight, Calendar, ArrowDownLeft, ArrowUpRight, } from "lucide-react";
 import GlassCard from "@/components/GlassCard";
 import GlassFAB from "@/components/GlassFAB";
+import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { useTransactionStore } from "../../store/useTransactionStore";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -58,6 +59,58 @@ export default function TimelinePage() {
         });
     });
   }, [fetchTransactions]);
+
+  // Pull-to-refresh for mobile
+  usePullToRefresh(fetchTransactions);
+
+  // Swipe-to-delete handlers (touch)
+  useEffect(() => {
+    let startX: number | null = null;
+    let activeId: string | null = null;
+    let moved = false;
+
+    const onTouchStart = (e: TouchEvent) => {
+      const target = e.target as HTMLElement;
+      const el = target.closest('[data-swipeable]') as HTMLElement | null;
+      if (!el) return;
+      const scrollTop = document.scrollingElement?.scrollTop || 0;
+      if (scrollTop !== 0) return;
+      activeId = el.getAttribute('data-id');
+      startX = e.touches[0].clientX;
+      moved = false;
+    };
+
+    const onTouchMove = (e: TouchEvent) => {
+      if (!activeId || startX === null) return;
+      const currentX = e.touches[0].clientX;
+      const delta = currentX - startX;
+      if (delta < -80) moved = true;
+    };
+
+    const onTouchEnd = () => {
+      if (activeId && moved) {
+        const id = activeId;
+        if (id && window.confirm('Excluir transação?')) {
+          deleteTransaction(id);
+        }
+      }
+      activeId = null;
+      startX = null;
+      moved = false;
+    };
+
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onTouchEnd);
+    window.addEventListener('touchcancel', onTouchEnd);
+
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+      window.removeEventListener('touchcancel', onTouchEnd);
+    };
+  }, [deleteTransaction]);
 
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
@@ -226,7 +279,7 @@ export default function TimelinePage() {
                 {txs.map((tx, idx) => (
                   <div
                     key={tx.id}
-                    className="flex items-center gap-3 group cursor-default relative"
+                    data-swipeable={true} data-id={tx.id} className="flex items-center gap-3 group cursor-default relative"
                     style={{
                       padding: '12px 16px',
                       borderBottom: idx < txs.length - 1 ? '0.5px solid var(--ds-border)' : 'none',
@@ -341,5 +394,6 @@ export default function TimelinePage() {
         </div>
       )}
     </div>
+    <GlassFAB icon={<Plus size={20} />} onClick={() => window.location.href = '/transactions/new'} />
   );
 }

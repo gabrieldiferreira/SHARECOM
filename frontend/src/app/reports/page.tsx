@@ -11,6 +11,8 @@ import {
   ChevronDown, Loader2, Info, CheckCircle2, X
 } from "lucide-react";
 import { useTransactionStore } from "../../store/useTransactionStore";
+import GlassFAB from "@/components/GlassFAB";
+import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { getApiUrl } from "../../lib/api";
 import { auth } from "../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
@@ -33,6 +35,7 @@ interface DateRange { start: string; end: string }
 
 export default function ReportsPage() {
   const { transactions, fetchTransactions } = useTransactionStore();
+  usePullToRefresh(fetchTransactions);
   const [mounted, setMounted] = useState(false);
   const [activeReport, setActiveReport] = useState<ReportType>("overview");
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
@@ -664,5 +667,6 @@ export default function ReportsPage() {
         )}
       </div>
     </div>
+    <GlassFAB icon={<Download size={18} />} onClick={() => handleExport("pdf")} />
   );
 }

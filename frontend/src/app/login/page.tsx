@@ -11,6 +11,7 @@ import {
 } from "firebase/auth";
 import { auth, provider } from "@/lib/firebase";
 import GlassCard from "@/components/GlassCard";
+import { Fingerprint } from "lucide-react";
 
 export default function LoginPage() {
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -147,18 +148,29 @@ export default function LoginPage() {
                     <p className="text-slate-400 text-sm">Conecte sua conta para acessar o painel.</p>
                   </div>
 
-                  <button
-                    onClick={handleGoogleLogin}
-                    disabled={isSigningIn}
-                    className="relative w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-black rounded-2xl font-bold text-sm transition-all hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-xl group pointer-events-auto z-10"
-                  >
-                    {isSigningIn ? (
-                      <div className="w-5 h-5 border-2 border-black/10 border-t-black animate-spin rounded-full" />
-                    ) : (
-                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 group-hover:scale-110 transition-transform" alt="Google" />
-                    )}
-                    {isSigningIn ? "AUTENTICANDO..." : "ENTRAR COM GOOGLE"}
-                  </button>
+                  <div className="relative">
+                    <button
+                      onClick={handleGoogleLogin}
+                      disabled={isSigningIn}
+                      className="relative w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-black rounded-2xl font-bold text-sm transition-all hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-xl group pointer-events-auto z-10"
+                    >
+                      {isSigningIn ? (
+                        <div className="w-5 h-5 border-2 border-black/10 border-t-black animate-spin rounded-full" />
+                      ) : (
+                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 group-hover:scale-110 transition-transform" alt="Google" />
+                      )}
+                      {isSigningIn ? "AUTENTICANDO..." : "ENTRAR COM GOOGLE"}
+                    </button>
+
+                    <button
+                      type="button"
+                      className="absolute -right-3 -top-6 w-12 h-12 rounded-full flex items-center justify-center bg-white/6 border border-white/10 text-white shadow-md"
+                      onClick={() => alert('Autenticação biométrica (simulada)')}
+                      title="Biometria"
+                    >
+                      <Fingerprint size={18} />
+                    </button>
+                  </div>
 
                   {errorMessage && (
                     <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
