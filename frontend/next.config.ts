@@ -23,6 +23,10 @@ const nextConfig: NextConfig = {
         source: "/__/auth/:path*",
         destination: "https://unidoc-493609.firebaseapp.com/__/auth/:path*",
       },
+      {
+        source: "/__/firebase/:path*",
+        destination: "https://unidoc-493609.firebaseapp.com/__/firebase/:path*",
+      },
     ];
   },
   async headers() {
@@ -45,7 +49,7 @@ const nextConfig: NextConfig = {
         has: [{ type: "host", value: "auth.sharecom.com.br" }],
         headers: [
           { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Content-Security-Policy", value: "frame-ancestors 'self' http://localhost:3000 https://localhost:3000 https://app.sharecom.com.br https://auth.sharecom.com.br https://unidoc-493609.firebaseapp.com" },
+          { key: "Content-Security-Policy", value: "frame-ancestors 'self' http://localhost:3000 https://localhost:3000 https://app.sharecom.com.br https://auth.sharecom.com.br https://unidoc-493609.firebaseapp.com https://www.sharecom.com.br" },
           { key: "X-Frame-Options", value: "ALLOWALL" },
           // No domínio de auth, a política deve ser relaxada para o Google processar o login
           { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
