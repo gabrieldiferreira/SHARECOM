@@ -17,39 +17,56 @@ export default function LoginPage() {
   const [errorMessage, setErrorMessage] = useState("");
   const [mounted, setMounted] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
-  const redirectStartedRef = useRef(false);
+  const initCheckDoneRef = useRef(false);
 
-  useEffect(() => {
-    if (!mounted) return;
-    setIsCheckingSession(false);
-  }, [mounted]);
-
+  // SINGLE effect: Initialize auth state once on mount
   useEffect(() => {
     setMounted(true);
-    if (!auth) return;
+    if (!auth || initCheckDoneRef.current) return;
 
-    // Captura o resultado do redirecionamento
-    getRedirectResult(auth).then((result) => {
-      if (result?.user) {
-        console.log("Login: Sucesso via Redirect");
-        window.location.href = "/";
+    let isMounted = true;
+    initCheckDoneRef.current = true;
+
+    const initAuth = async () => {
+      // Check if returning from OAuth redirect
+      try {
+        const result = await getRedirectResult(auth);
+        if (!isMounted) return;
+        
+        if (result?.user) {
+          console.log("Login: Authenticated via redirect");
+          window.location.href = "/";
+          return;
+        }
+      } catch (error: any) {
+        if (!isMounted) return;
+        console.error("Redirect result check failed:", error?.code);
       }
-    }).catch((error) => {
-      console.error("Erro no Redirect Result:", error);
-      if (error.code !== 'auth/redirect-cancelled-by-user') {
-        setErrorMessage(error.message);
-      }
+
+      // Monitor ongoing auth state
+      const unsubscribe = onAuthStateChanged(auth, (user) => {
+        if (!isMounted) return;
+        
+        if (user) {
+          console.log("Login: User authenticated");
+          window.location.href = "/";
+        } else {
+          setIsCheckingSession(false);
+        }
+      });
+
+      return unsubscribe;
+    };
+
+    let unsubscribe: any;
+    initAuth().then(unsub => {
+      unsubscribe = unsub;
     });
 
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        console.log("Login: Usuário detectado, redirecionando...");
-        window.location.href = "/";
-      } else {
-        setIsCheckingSession(false);
-      }
-    });
-    return () => unsubscribe();
+    return () => {
+      isMounted = false;
+      if (unsubscribe) unsubscribe();
+    };
   }, []);
 
   const handleGoogleLogin = async () => {
