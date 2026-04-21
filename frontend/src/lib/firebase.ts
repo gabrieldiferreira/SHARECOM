@@ -3,19 +3,12 @@ import { Auth, getAuth, GoogleAuthProvider, setPersistence, browserLocalPersiste
 import { Firestore, getFirestore } from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
-// Função para obter o domínio de auth de forma dinâmica e invisível
+// Função para obter o domínio de auth de forma dinâmica
 const getAuthDomain = () => {
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    // No localhost, usamos o domínio padrão para não exigir SSL (HTTPS) local
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      return "unidoc-493609.firebaseapp.com";
-    }
-    // Em produção, usamos o seu domínio de marca para encapsulamento total
-    // Certifique-se de que este domínio está autorizado no Console do Firebase e no Google Cloud
-    return "auth.sharecom.com.br";
-  }
-  return "unidoc-493609.firebaseapp.com";
+  // Usamos o seu domínio de marca em todos os ambientes (inclusive localhost)
+  // Isso garante que o usuário sempre veja o seu domínio no popup de login.
+  // IMPORTANTE: auth.sharecom.com.br deve estar autorizado no Firebase e Google Cloud.
+  return "auth.sharecom.com.br";
 };
 
 const firebaseConfig = {
