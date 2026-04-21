@@ -51,23 +51,23 @@ export default function LoginPage() {
 
     try {
       console.log("Login: Iniciando fluxo de autenticação...");
-      await setPersistence(auth, browserLocalPersistence);
       
+      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       const hostname = window.location.hostname;
       const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
-
-      if (isLocalhost) {
-        console.log("Login: Ambiente Local. Usando Popup.");
+      
+      // No mobile, o redirect é mais estável. No desktop/localhost, o popup é melhor.
+      if (isMobile && !isLocalhost) {
+        console.log("Login: Mobile Produção. Usando Redirect.");
+        await signInWithRedirect(auth, provider);
+      } else {
+        console.log("Login: Usando Popup.");
         const result = await signInWithPopup(auth, provider);
         if (result.user) {
            window.location.href = "/";
         } else {
            setIsSigningIn(false);
         }
-      } else {
-        // EM PRODUÇÃO: Sempre use Redirect para evitar problemas de Frame e Popup com domínio customizado
-        console.log("Login: Produção. Usando Redirect.");
-        await signInWithRedirect(auth, provider);
       }
     } catch (error: any) {
       console.error("Erro no login:", error);
