@@ -21,6 +21,12 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!mounted) return;
+    // If OAuth callback params are present, skip auto-redirect to avoid redirect loops
+    const qp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
+    if (qp.has('code') || qp.has('state') || qp.has('authuser') || qp.has('g_callback') || qp.has('oauth')) {
+      return;
+    }
+
     if (!isCheckingSession && !redirectStartedRef.current) {
       redirectStartedRef.current = true;
       setIsSigningIn(true);
