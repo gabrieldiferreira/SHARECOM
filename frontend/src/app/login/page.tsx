@@ -10,6 +10,8 @@ import {
   setPersistence 
 } from "firebase/auth";
 import { auth, provider } from "@/lib/firebase";
+import GlassCard from "@/components/GlassCard";
+import { Fingerprint } from "lucide-react";
 
 export default function LoginPage() {
   const [isSigningIn, setIsSigningIn] = useState(false);
@@ -86,7 +88,7 @@ export default function LoginPage() {
   if (!mounted) return null;
 
   return (
-    <div className="min-h-screen flex flex-col lg:flex-row bg-[#020617] text-white">
+    <div className="min-h-screen flex flex-col lg:flex-row hero-gradient text-white">
       {/* Lado Esquerdo / Mobile Top */}
       <div className="flex-1 flex flex-col p-8 justify-center items-center relative overflow-hidden">
         <div className="absolute inset-0 z-0 opacity-20">
@@ -103,7 +105,7 @@ export default function LoginPage() {
             <p className="text-blue-400/60 font-medium tracking-widest text-[10px] uppercase">Intelligence Control Systems</p>
           </div>
 
-          <div className="bg-white/5 backdrop-blur-2xl border border-white/10 p-10 rounded-[40px] shadow-2xl relative overflow-hidden group">
+          <GlassCard className="p-10 rounded-[40px] shadow-2xl relative overflow-hidden group" style={{ border: '1px solid rgba(255,255,255,0.10)' }}>
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             
             <div className="relative z-10 space-y-6">
@@ -120,19 +122,33 @@ export default function LoginPage() {
                   </div>
 
                   <button
-                    onClick={handleGoogleLogin}
-                    disabled={isSigningIn}
-                    className="w-full h-16 bg-white text-slate-900 rounded-2xl font-bold flex items-center justify-center gap-4 hover:bg-slate-100 transition-all active:scale-[0.98] disabled:opacity-50 shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
-                  >
-                    {isSigningIn ? (
-                      <div className="w-6 h-6 border-4 border-slate-900/10 border-t-blue-600 animate-spin rounded-full" />
-                    ) : (
-                      <>
-                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G" />
-                        <span className="uppercase tracking-tight">Continuar com Google</span>
-                      </>
-                    )}
-                  </button>
+  onClick={handleGoogleLogin}
+  disabled={isSigningIn}
+  className="w-full h-16 glass-card border-2 border-white/30 text-slate-900 font-bold flex items-center justify-center gap-4 rounded-2xl hover:bg-white/10 transition-all active:scale-[0.98] disabled:opacity-50 shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
+  style={{ backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }}
+>
+  {isSigningIn ? (
+    <div className="w-6 h-6 border-4 border-slate-900/10 border-t-blue-600 animate-spin rounded-full" />
+  ) : (
+    <>
+      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G" />
+      <span className="uppercase tracking-tight">Continuar com Google</span>
+    </>
+  )}
+</button>
+
+<div className="flex flex-col gap-2 mt-4">
+  <button
+    type="button"
+    className="w-full h-14 glass-card border-2 border-fuchsia-500/40 text-fuchsia-500 font-bold flex items-center justify-center gap-3 rounded-2xl hover:bg-fuchsia-500/10 transition-all active:scale-[0.98] shadow-[0_10px_30px_rgba(168,85,247,0.1)]"
+    style={{ backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }}
+    disabled={isSigningIn}
+  >
+    <Fingerprint size={22} />
+    <span className="uppercase tracking-tight">Entrar com biometria</span>
+  </button>
+  <a href="#" className="text-xs text-blue-400/80 hover:underline text-center mt-2">Esqueci minha senha</a>
+</div>
 
                   {errorMessage && (
                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">

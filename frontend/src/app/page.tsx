@@ -2,13 +2,23 @@
 
 import { useState, useEffect, Suspense, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
-import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, BarChart3, Plus, Loader2, CheckCircle2, TrendingUp, TrendingDown, Landmark, Clock, Award, MessageSquare, Search, Filter, ChevronLeft, ChevronRight, FileText, Info, Trash2, RotateCcw } from "lucide-react";
+import { 
+  Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, BarChart3, Plus, Loader2, CheckCircle2, 
+  TrendingUp, TrendingDown, Landmark, Clock, Award, MessageSquare, Search, Filter, ChevronLeft, 
+  ChevronRight, FileText, Info, Trash2, RotateCcw, CreditCard, Banknote, Smartphone, Users, 
+  ShieldCheck, Fingerprint, FileSearch, Scale, Zap, Bell, ShieldAlert, Calendar, History, Tag, 
+  Target, Activity, Layers, Cpu, Database, Settings, PieChart as PieChartIcon, Globe
+} from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTransactionStore } from "../store/useTransactionStore";
 import { TransactionEntity } from "../lib/db";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
 import { useDashboardAgent, TemplateSentinel } from "../components/DashboardAgent";
+import { useI18n } from "../i18n/client";
+import { LanguageSwitcher } from "../components/LanguageSwitcher";
+import { ThemeToggle } from "../components/ThemeToggle";
+import { useHaptics } from "../hooks/useHaptics";
 
 // Lazy load recharts — reduz o bundle inicial em ~200 KB
 // Os gráficos só carregam após o conteúdo principal estar visível
@@ -18,30 +28,34 @@ const ChartPlaceholder = () => (
   </div>
 );
 
-const { BarChart, Bar, LineChart, Line, PieChart, Pie, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid } = {
-  BarChart: dynamic(() => import('recharts').then(m => ({ default: m.BarChart })), { ssr: false, loading: ChartPlaceholder }),
-  Bar: dynamic(() => import('recharts').then(m => ({ default: m.Bar })), { ssr: false }),
-  LineChart: dynamic(() => import('recharts').then(m => ({ default: m.LineChart })), { ssr: false }),
-  Line: dynamic(() => import('recharts').then(m => ({ default: m.Line })), { ssr: false }),
-  PieChart: dynamic(() => import('recharts').then(m => ({ default: m.PieChart })), { ssr: false }),
-  Pie: dynamic(() => import('recharts').then(m => ({ default: m.Pie })), { ssr: false }),
-  XAxis: dynamic(() => import('recharts').then(m => ({ default: m.XAxis })), { ssr: false }),
-  YAxis: dynamic(() => import('recharts').then(m => ({ default: m.YAxis })), { ssr: false }),
-  ResponsiveContainer: dynamic(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })), { ssr: false }),
-  Cell: dynamic(() => import('recharts').then(m => ({ default: m.Cell })), { ssr: false }),
-  Tooltip: dynamic(() => import('recharts').then(m => ({ default: m.Tooltip })), { ssr: false }),
-  CartesianGrid: dynamic(() => import('recharts').then(m => ({ default: m.CartesianGrid })), { ssr: false }),
+const { BarChart, Bar, LineChart, Line, PieChart, Pie, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid, AreaChart, Area } = {
+  BarChart: dynamic(() => import('recharts').then(m => m.BarChart as any), { ssr: false, loading: ChartPlaceholder }),
+  Bar: dynamic(() => import('recharts').then(m => m.Bar as any), { ssr: false }),
+  LineChart: dynamic(() => import('recharts').then(m => m.LineChart as any), { ssr: false }),
+  Line: dynamic(() => import('recharts').then(m => m.Line as any), { ssr: false }),
+  PieChart: dynamic(() => import('recharts').then(m => m.PieChart as any), { ssr: false }),
+  Pie: dynamic(() => import('recharts').then(m => m.Pie as any), { ssr: false }),
+  XAxis: dynamic(() => import('recharts').then(m => m.XAxis as any), { ssr: false }),
+  YAxis: dynamic(() => import('recharts').then(m => m.YAxis as any), { ssr: false }),
+  ResponsiveContainer: dynamic(() => import('recharts').then(m => m.ResponsiveContainer as any), { ssr: false }),
+  Cell: dynamic(() => import('recharts').then(m => m.Cell as any), { ssr: false }),
+  Tooltip: dynamic(() => import('recharts').then(m => m.Tooltip as any), { ssr: false }),
+  CartesianGrid: dynamic(() => import('recharts').then(m => m.CartesianGrid as any), { ssr: false }),
+  AreaChart: dynamic(() => import('recharts').then(m => m.AreaChart as any), { ssr: false, loading: ChartPlaceholder }),
+  Area: dynamic(() => import('recharts').then(m => m.Area as any), { ssr: false }),
 };
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
-  "Alimentação": <Coffee size={20} />,
-  "Compras": <ShoppingBag size={20} />,
-  "Transporte": <Car size={20} />,
-  "Casa": <HomeIcon size={20} />,
-  "Serviços": <HomeIcon size={20} />,
-  "Lazer": <ShoppingBag size={20} />,
-  "Receita": <Plus size={20} />,
-  "Outros": <Receipt size={20} />,
+  "eatingOut": <Coffee size={20} />,
+  "groceries": <ShoppingBag size={20} />,
+  "transport": <Car size={20} />,
+  "home": <HomeIcon size={20} />,
+  "services": <HomeIcon size={20} />,
+  "leisure": <ShoppingBag size={20} />,
+  "income": <Plus size={20} />,
+  "others": <Receipt size={20} />,
+  "health": <Receipt size={20} />,
+  "education": <Receipt size={20} />,
 };
 
 function ExpenseTracker() {
@@ -65,7 +79,12 @@ function ExpenseTracker() {
 
   const agent = useDashboardAgent(transactions);
 
-  const [isLoadingData, setIsLoadingData] = useState(true);
+  // i18n — locale-aware translations, currency & date formatting
+  const { t, formatCurrency, formatDate: formatDateI18n, locale } = useI18n();
+
+  // PWA Native Haptics
+  const haptics = useHaptics();
+
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "success" | "duplicate" | "error">("idle");
   const [showTrash, setShowTrash] = useState(false);
@@ -74,8 +93,12 @@ function ExpenseTracker() {
   const [uploadType, setUploadType] = useState<"Inflow" | "Outflow">("Outflow");
   const [showManualModal, setShowManualModal] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [isLoadingData, setIsLoadingData] = useState(false);
   
-  const [dashboardMode, setDashboardMode] = useState<"minimal" | "main" | "surgical" | "entities">("minimal");
+  type DashboardMode = "cashflow" | "entities" | "payment" | "temporal" | "category" | "forensics" | "tax" | "alerts";
+  const [dashboardMode, setDashboardMode] = useState<DashboardMode>("cashflow");
+  type ActiveTab = "home" | "analytics" | "goals" | "settings";
+  const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all"); 
   const [currentPage, setCurrentPage] = useState(1);
@@ -85,9 +108,9 @@ function ExpenseTracker() {
   const [manualTx, setManualTx] = useState({
     merchant_name: "",
     total_amount: "",
-    category: "Outros",
+    category: "others",
     transaction_type: "Outflow" as "Inflow" | "Outflow",
-    payment_method: "Dinheiro",
+    payment_method: "pix",
     note: ""
   });
   
@@ -149,6 +172,7 @@ function ExpenseTracker() {
         note: manualTx.note || undefined
      };
      await addTransaction(newTx);
+     haptics.success();
      setShowManualModal(false);
      setManualTx({ merchant_name: "", total_amount: "", category: "Outros", transaction_type: "Outflow", payment_method: "Dinheiro", note: "" });
   };
@@ -163,6 +187,7 @@ function ExpenseTracker() {
 
   const executeUpload = async () => {
     if (!selectedFile) return;
+    haptics.mediumTap();
     setShowModal(false);
     setIsUploading(true);
     const formData = new FormData();
@@ -211,9 +236,11 @@ function ExpenseTracker() {
         };
 
         const result = await addTransaction(newTx);
+        haptics.success();
         setUploadStatus(result.isDuplicate ? "duplicate" : "success");
         setTimeout(() => setUploadStatus("idle"), 3000);
       } else {
+        haptics.error();
         if (response.status === 401) {
           alert("Sua sessão expirou. Faça login novamente para continuar.");
           return;
@@ -240,12 +267,9 @@ function ExpenseTracker() {
     }
   };
 
-  const formatDate = (dateStr: string) => {
-    const d = new Date(dateStr);
-    return new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d);
-  };
+  // Use i18n-aware formatting — locale switches automatically on language change
+  const formatDate = (dateStr: string) => formatDateI18n(dateStr, 'PP p');
 
-  const formatCurrency = (value: number) => `R$ ${value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`;
 
   const normalizeBusinessName = (value?: string) => {
     if (!value) return null;
@@ -262,8 +286,7 @@ function ExpenseTracker() {
       const name = normalizeBusinessName(tx.merchant_name) || 'Desconhecido';
       
       // Heurística para detectar PJ: Palavras-chave ou nome muito curto/longo com termos corporativos
-      const isLegal = legalKeywords.some(k => name.toUpperCase().includes(k)) || 
-                      (tx.masked_cpf && tx.masked_cpf.length > 14); // CNPJ tem mais caracteres que CPF
+      const isLegal = !!(tx.masked_cnpj || tx.merchant_name?.toUpperCase().includes(' LTDA') || tx.merchant_name?.toUpperCase().includes(' S.A'));
       
       if (!map[name]) {
         map[name] = { name, count: 0, total: 0, lastDate: tx.transaction_date, isLegal };
@@ -321,20 +344,20 @@ function ExpenseTracker() {
 
   const getReceiptFields = (tx: TransactionEntity) => {
     const fields = [
-      { label: 'Estabelecimento', value: tx.merchant_name },
-      { label: 'Categoria', value: tx.category },
-      { label: 'Valor', value: formatCurrency(tx.total_amount) },
-      { label: 'Data da transação', value: formatDate(tx.transaction_date) },
-      { label: 'Tipo', value: tx.transaction_type === 'Inflow' ? 'Entrada' : 'Saída' },
-      { label: 'Meio de pagamento', value: tx.payment_method },
-      { label: 'Instituição / banco', value: tx.destination_institution },
-      { label: 'ID da transação', value: tx.transaction_id },
-      { label: 'CPF mascarado', value: tx.masked_cpf },
-      { label: 'Descrição extraída', value: tx.description },
-      { label: 'Nota', value: tx.note },
-      { label: 'Hash do comprovante', value: tx.receipt_hash },
-      { label: 'Sincronização', value: tx.is_synced ? 'Sincronizado' : 'Pendente local' },
-      { label: 'Revisão manual', value: tx.needs_manual_review ? 'Necessária' : undefined },
+      { label: t('fields.merchant'), value: tx.merchant_name },
+      { label: t('fields.category'), value: t(`categories.${tx.category}`).replace('categories.', '') },
+      { label: t('fields.amount'), value: formatCurrency(tx.total_amount) },
+      { label: t('fields.date'), value: formatDate(tx.transaction_date) },
+      { label: t('fields.type'), value: tx.transaction_type === 'Inflow' ? t('fields.inflow') : t('fields.outflow') },
+      { label: t('fields.payment'), value: tx.payment_method },
+      { label: t('fields.institution'), value: tx.destination_institution },
+      { label: t('fields.transactionId'), value: tx.transaction_id },
+      { label: t('fields.maskedCpf'), value: tx.masked_cpf },
+      { label: t('fields.description'), value: tx.description },
+      { label: t('fields.note'), value: tx.note },
+      { label: t('fields.hash'), value: tx.receipt_hash },
+      { label: t('fields.sync'), value: tx.is_synced ? t('fields.synced') : t('fields.pending') },
+      { label: t('fields.review'), value: tx.needs_manual_review ? t('fields.needed') : undefined },
     ];
 
     return fields.filter((field) => field.value !== undefined && field.value !== null && String(field.value).trim() !== '');
@@ -373,20 +396,23 @@ function ExpenseTracker() {
     const delta = todayInflow - todayOutflow;
     return {
       delta, absDelta: Math.abs(delta),
-      message: delta > 0 ? "Você está mais rico do que ontem." : (delta < 0 ? "Houve redução de patrimônio hoje." : "Patrimônio estável hoje."),
+      message: delta > 0 ? t('dashboard.richer') : (delta < 0 ? t('dashboard.poorer') : t('dashboard.stable')),
       isPositive: delta >= 0
     };
   }, [transactions]);
 
   const weekdayIntensity = useMemo(() => {
-    const days = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date(2023, 0, 1 + i); // Jan 1, 2023 was a Sunday
+      return formatDate(d, 'EEEEEE');
+    });
     const intensity = [0, 0, 0, 0, 0, 0, 0];
     transactions.forEach(tx => {
       const date = new Date(tx.transaction_date);
       if (!isNaN(date.getTime())) intensity[date.getDay()] += tx.total_amount;
     });
     return days.map((day, i) => ({ day, val: intensity[i] }));
-  }, [transactions]);
+  }, [transactions, formatDate]);
 
   const paymentMethodsData = useMemo(() => {
     const map: Record<string, number> = {};
@@ -404,21 +430,162 @@ function ExpenseTracker() {
   const avgOutflow = outflowCount > 0 ? totalOutflow / outflowCount : 0;
   const avgInflow = inflowCount > 0 ? totalInflow / inflowCount : 0;
 
-  const alerts = useMemo(() => {
-    const list: {id:string; color:string; icon:React.ReactNode; title:string; message:string}[] = [];
-    const transportTotal = transactions.filter(t => t.category === "Transporte").reduce((a, t) => a + t.total_amount, 0);
-    if (transportTotal > 1500) {
-      list.push({ id: 'transp', color: '#F59E0B', icon: <Award size={20} />, title: 'Gasto com Transporte elevado',
-        message: `Você acumulou R$ ${transportTotal.toLocaleString('pt-BR')} em Transporte.` });
-    }
-    const reviewPending = transactions.filter(t => t.needs_manual_review);
-    if (reviewPending.length > 0) {
-      const amt = reviewPending.reduce((a, t) => a + t.total_amount, 0);
-      list.push({ id: 'review', color: '#EF4444', icon: <FileText size={20} />, title: `${reviewPending.length} comprovante(s) aguardando revisão`,
-        message: `Total de R$ ${amt.toLocaleString('pt-BR')} em registros que precisam de verificação manual.` });
-    }
-    return list;
+  const temporalData = useMemo(() => {
+    const hourlyMap = Array(24).fill(0);
+    const dayOfMonthMap: Record<number, number> = {};
+    const monthlyMap: Record<string, number> = {};
+    
+    transactions.forEach(tx => {
+      const date = new Date(tx.transaction_date);
+      if (isNaN(date.getTime())) return;
+      
+      const hour = date.getHours();
+      hourlyMap[hour] += tx.total_amount;
+      
+      const dom = date.getDate();
+      dayOfMonthMap[dom] = (dayOfMonthMap[dom] || 0) + tx.total_amount;
+
+      const month = date.toLocaleString('pt-BR', { month: 'short' });
+      monthlyMap[month] = (monthlyMap[month] || 0) + tx.total_amount;
+    });
+
+    return {
+      hourly: hourlyMap.map((val, hour) => ({ hour: `${hour}h`, val })),
+      daily: Object.entries(dayOfMonthMap).map(([day, val]) => ({ day: parseInt(day), val })).sort((a,b) => a.day - b.day),
+      seasonal: Object.entries(monthlyMap).map(([month, val]) => ({ month, val }))
+    };
   }, [transactions]);
+
+  const forensicsData = useMemo(() => {
+    const duplicates = transactions.filter((tx, idx) => 
+      transactions.findIndex(t => t.merchant_name === tx.merchant_name && t.total_amount === tx.total_amount && t.transaction_date.split('T')[0] === tx.transaction_date.split('T')[0]) !== idx
+    );
+
+    const highReliability = transactions.filter(t => t.is_synced && !t.needs_manual_review).length;
+    const lowReliability = transactions.filter(t => t.needs_manual_review).length;
+
+    return {
+      duplicates,
+      reliabilityScore: transactions.length > 0 ? (highReliability / transactions.length) * 100 : 0,
+      totalReviewPending: lowReliability,
+      authCodes: transactions.filter(t => t.transaction_id).map(t => ({ id: t.id, code: t.transaction_id, merchant: t.merchant_name }))
+    };
+  }, [transactions]);
+
+  const taxData = useMemo(() => {
+    const map: Record<string, { total: number; count: number; name: string }> = {};
+    transactions.forEach(tx => {
+      const key = tx.masked_cpf || "N/A";
+      if (!map[key]) map[key] = { total: 0, count: 0, name: tx.merchant_name || 'N/A' };
+      map[key].total += tx.total_amount;
+      map[key].count += 1;
+    });
+    
+    const deductibleKeywords = ['SAUDE', 'MEDICO', 'CLINICA', 'DENTISTA', 'HOSPITAL', 'EDUCACAO', 'ESCOLA', 'FACULDADE', 'LIVRARIA'];
+    const deductibleCandidates = transactions.filter(tx => 
+      deductibleKeywords.some(k => (tx.merchant_name || '').toUpperCase().includes(k)) || 
+      ['health', 'education'].includes(tx.category)
+    );
+
+    return {
+      byEntity: Object.entries(map).map(([id, data]) => ({ id, ...data })).sort((a,b) => b.total - a.total),
+      deductibleTotal: deductibleCandidates.reduce((acc, tx) => acc + tx.total_amount, 0),
+      deductibleCandidates
+    };
+  }, [transactions]);
+
+  const smartAlerts = useMemo(() => {
+    const list: {id:string; type:'warning'|'info'|'critical'; title:string; message:string; icon:React.ReactNode}[] = [];
+    
+    // Anomaly Detection: Unusual high amount (> 3x average)
+    const avg = totalOutflow / (outflowCount || 1);
+    transactions.forEach(tx => {
+      if (tx.transaction_type === 'Outflow' && tx.total_amount > avg * 3 && tx.total_amount > 500) {
+        list.push({
+          id: `anomaly-${tx.id}`,
+          type: 'warning',
+          title: 'Valor Incomum Detectado',
+          message: `${tx.merchant_name}: R$ ${tx.total_amount.toLocaleString('pt-BR')} (3x acima da sua média).`,
+          icon: <ShieldAlert className="text-amber-500" />
+        });
+      }
+    });
+
+    // First time recipient
+    const counts: Record<string, number> = {};
+    transactions.forEach(tx => { counts[tx.merchant_name] = (counts[tx.merchant_name] || 0) + 1; });
+    const newest = mostRecentReceipt;
+    if (newest && counts[newest.merchant_name] === 1) {
+      list.push({
+        id: 'new-recipient',
+        type: 'info',
+        title: 'Novo Destinatário',
+        message: `Esta é sua primeira transação com ${newest.merchant_name}.`,
+        icon: <Zap className="text-blue-500" />
+      });
+    }
+
+    // High Frequency Detector (e.g., > 2 tx to same merchant in last 48h)
+    const merchantActivity: Record<string, number> = {};
+    const twoDaysAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+    transactions.forEach(tx => {
+      if (new Date(tx.transaction_date) > twoDaysAgo) {
+        merchantActivity[tx.merchant_name] = (merchantActivity[tx.merchant_name] || 0) + 1;
+      }
+    });
+
+    Object.entries(merchantActivity).forEach(([merchant, count]) => {
+      if (count > 2) {
+        list.push({
+          id: `freq-${merchant}`,
+          type: 'warning',
+          title: 'Alta Frequência Detectada',
+          message: `Detectamos ${count} transações para ${merchant} em menos de 48h.`,
+          icon: <Activity className="text-amber-500" />
+        });
+      }
+    });
+
+    // Recurring Transaction Detector
+    const recurringMap: Record<string, number[]> = {};
+    transactions.forEach(tx => {
+      if (tx.transaction_type === 'Outflow') {
+        if (!recurringMap[tx.merchant_name]) recurringMap[tx.merchant_name] = [];
+        recurringMap[tx.merchant_name].push(tx.total_amount);
+      }
+    });
+
+    Object.entries(recurringMap).forEach(([merchant, amounts]) => {
+      if (amounts.length >= 2) {
+        const first = amounts[0];
+        const allSame = amounts.every(a => Math.abs(a - first) < 2); // Within R$ 2 margin
+        if (allSame) {
+          list.push({
+            id: `recur-${merchant}`,
+            type: 'info',
+            title: 'Assinatura/Recorrência',
+            message: `Identificamos padrão de recorrência para ${merchant}.`,
+            icon: <History className="text-blue-500" />
+          });
+        }
+      }
+    });
+
+    // Balance threshold
+    if (balance < 500 && balance > 0) {
+      list.push({
+        id: 'low-balance',
+        type: 'critical',
+        title: 'Saldo em Alerta',
+        message: 'Seu saldo atual está abaixo de R$ 500,00.',
+        icon: <Bell className="text-red-500" />
+      });
+    }
+
+    return list;
+  }, [transactions, totalOutflow, outflowCount, balance, mostRecentReceipt]);
+
+  const alerts = smartAlerts; // Refactor the old alerts to use smartAlerts logic
 
   const CHART_COLORS = ['#8B5CF6', '#3B82F6', '#F59E0B', '#EC4899', '#14B8A6', '#6B7280'];
 
@@ -447,23 +614,27 @@ function ExpenseTracker() {
           dragConstraints={{ left: -100, right: 0 }}
           onDragEnd={(_, info) => {
             if (info.offset.x < -80 && tx.id) {
+              haptics.swipe();
               moveToTrash(tx.id);
             }
           }}
-          onClick={() => setExpandedTxId(isExpanded ? null : (tx.id || null))}
+          onClick={() => {
+            haptics.lightTap();
+            setExpandedTxId(isExpanded ? null : (tx.id || null));
+          }}
           className={`relative z-10 rounded-xl border-thin border-ds-border bg-ds-bg-secondary p-4 space-y-4 cursor-pointer transition-all hover:border-fn-balance/30 ${isExpanded ? 'ring-1 ring-fn-balance/20' : ''}`}
         >
           <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div className="min-w-0 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-ds-text-tertiary shrink-0">
-                {CATEGORY_ICONS[tx.category] || <Receipt size={18} />}
+              <div className="min-w-0 flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-ds-text-tertiary shrink-0">
+                  {CATEGORY_ICONS[tx.category] || <Receipt size={18} />}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-[10px] text-ds-text-tertiary uppercase tracking-widest font-bold mb-0.5">Destinatário</p>
+                  <p className="text-[16px] font-semibold text-ds-text-primary truncate leading-tight">{tx.merchant_name || 'Desconhecido'}</p>
+                  <p className="text-[12px] text-ds-text-tertiary mt-0.5 truncate">{formatDate(tx.transaction_date)}</p>
+                </div>
               </div>
-              <div className="min-w-0">
-                <p className="text-[10px] text-ds-text-tertiary uppercase tracking-widest font-bold mb-0.5">Destinatário</p>
-                <p className="text-[16px] font-semibold text-ds-text-primary break-words leading-tight">{tx.merchant_name || 'Desconhecido'}</p>
-                <p className="text-[12px] text-ds-text-tertiary mt-0.5">{formatDate(tx.transaction_date)}</p>
-              </div>
-            </div>
             <div className="flex items-center justify-between md:flex-col md:items-end gap-2">
               <p className={`text-[18px] font-bold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-fn-income' : 'text-fn-expense'}`}>
                 {tx.transaction_type === 'Inflow' ? '+' : '-'}{formatCurrency(tx.total_amount)}
@@ -518,13 +689,17 @@ function ExpenseTracker() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center space-y-4 bg-ds-bg-primary">
         <Loader2 size={40} className="animate-spin text-fn-balance" />
-        <p className="text-[14px] font-medium text-ds-text-secondary animate-pulse">Sincronizando seus dados...</p>
+        <p className="text-[14px] font-medium text-ds-text-secondary animate-pulse">{t('common.syncingData')}</p>
       </div>
     );
   }
 
   return (
-    <div className="p-4 md:p-6 space-y-6 font-sans w-full max-w-full">
+    <div className="px-4 pb-20 md:px-6 md:pb-6 space-y-6 font-sans w-full max-w-[100vw] overflow-x-hidden relative" style={{ 
+      paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)',
+      paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+      paddingRight: 'max(1rem, env(safe-area-inset-right))',
+    }}>
       
       {/* Loading Bar & Toast Notification */}
       <div className={`fixed top-0 left-0 w-full h-1 z-50 transition-opacity duration-300 ${(isUploading || uploadStatus !== "idle") ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -552,492 +727,554 @@ function ExpenseTracker() {
       {/* DASHBOARD CONTENT SWITCHER - EXPOSTO APENAS SE HOUVER DADOS */}
       {transactions.length > 0 ? (
         <>
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 mb-2">
-            <div>
-                <h1 className="text-2xl font-medium text-ds-text-primary">Meus Comprovantes</h1>
-                <p className="text-[12px] mt-1 text-ds-text-secondary">Inteligência Financeira Avançada</p>
+          <div className="flex flex-col gap-6 mb-8">
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+              <div>
+                  <h1 className="text-2xl font-medium text-ds-text-primary">{t('dashboard.title')}</h1>
+                  <p className="text-[12px] mt-1 text-ds-text-secondary uppercase tracking-[0.2em] font-bold">{t('dashboard.subtitle')}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                  <button 
+                    onClick={() => setShowTrash(true)}
+                    className="relative p-2.5 rounded-xl bg-ds-bg-secondary border-thin border-ds-border text-ds-text-secondary hover:text-fn-expense transition-all hover:bg-ds-bg-primary"
+                  >
+                    <Trash2 size={20} />
+                    {trashTransactions.length > 0 && (
+                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-ds-bg-primary shadow-lg">
+                        {trashTransactions.length}
+                      </span>
+                    )}
+                  </button>
+                  <button 
+                    onClick={() => fileInputRef.current?.click()}
+                    className="flex items-center gap-2 px-5 py-2.5 bg-fn-balance text-white rounded-xl font-bold text-[13px] shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
+                    <Plus size={18} />
+                    NOVO COMPROVANTE
+                  </button>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-                <button 
-                  onClick={() => setShowTrash(true)}
-                  className="relative p-2 rounded-lg bg-ds-bg-secondary border-thin border-ds-border text-ds-text-secondary hover:text-fn-expense transition-colors"
-                >
-                  <Trash2 size={20} />
-                  {trashTransactions.length > 0 && (
-                    <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-ds-bg-primary">
-                      {trashTransactions.length}
-                    </span>
-                  )}
-                </button>
-                <div className="flex items-center gap-2 bg-ds-bg-secondary p-1 rounded-lg border-thin border-ds-border">
-                  <button onClick={() => setDashboardMode("minimal")} className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${dashboardMode === "minimal" ? "bg-ds-bg-primary text-ds-text-primary shadow-sm" : "text-ds-text-secondary"}`}>Minimalista</button>
-                  <button onClick={() => setDashboardMode("main")} className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${dashboardMode === "main" ? "bg-ds-bg-primary text-ds-text-primary shadow-sm" : "text-ds-text-secondary"}`}>Principal</button>
-                  <button onClick={() => setDashboardMode("surgical")} className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${dashboardMode === "surgical" ? "bg-ds-bg-primary text-ds-text-primary shadow-sm" : "text-ds-text-secondary"}`}>Cirúrgico</button>
-                  <button onClick={() => setDashboardMode("entities")} className={`px-3 py-1.5 text-[12px] font-medium rounded-md transition-all ${dashboardMode === "entities" ? "bg-ds-bg-primary text-ds-text-primary shadow-sm" : "text-ds-text-secondary"}`}>Pessoas</button>
+
+            {/* DESKTOP TOP NAVIGATION BAR */}
+            <div className="hidden md:flex flex-col gap-2">
+              <div className="flex items-center gap-2 mb-1">
+                <Cpu size={14} className="text-brand-cyan" />
+                <span className="text-[10px] font-black text-text-tertiary uppercase tracking-[0.3em]">Navigation</span>
+              </div>
+              <div className="flex items-center gap-2 bg-glass-card p-1.5 rounded-2xl border-thin border-glass-border">
+                {[
+                  { id: "home", label: t('nav.home'), icon: <HomeIcon size={14} /> },
+                  { id: "analytics", label: t('nav.analytics'), icon: <PieChartIcon size={14} /> },
+                  { id: "goals", label: t('nav.goals'), icon: <Target size={14} /> },
+                  { id: "settings", label: t('nav.settings'), icon: <Settings size={14} /> }
+                ].map((tab) => (
+                  <button 
+                    key={tab.id}
+                    onClick={() => setActiveTab(tab.id as ActiveTab)} 
+                    className={`flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold rounded-xl transition-all whitespace-nowrap ${activeTab === tab.id ? "bg-glass-highlight text-text-primary shadow-glow ring-1 ring-white/10" : "text-text-secondary hover:text-text-primary hover:bg-white/5"}`}
+                  >
+                    {tab.icon}
+                    {tab.label}
+                  </button>
+                ))}
+                {/* Compact controls: language + theme */}
+                <div className="ml-auto pl-2 border-l border-glass-border flex items-center gap-1.5">
+                  <LanguageSwitcher compact />
+                  <ThemeToggle variant="compact" />
                 </div>
+              </div>
             </div>
           </div>
 
-          {dashboardMode === "minimal" && (
-            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-12">
-                <div className="text-center space-y-2">
-                  <p className="text-[14px] font-medium text-ds-text-secondary uppercase tracking-widest">Saldo Atual</p>
-                  <h1 className="text-[48px] md:text-[64px] font-medium tabular-nums tracking-tight text-fn-balance">
-                      R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </h1>
-                </div>
 
-                <div className="flex items-center gap-8 text-center">
-                  <div>
-                      <p className="text-[12px] text-ds-text-secondary mb-1">Burn Rate Diário</p>
-                      <div className="flex items-center justify-center gap-1.5">
-                        <TrendingDown size={16} className="text-fn-income" />
-                        <span className="text-[22px] font-medium tabular-nums text-ds-text-primary">R$ {(totalOutflow / Math.max(1, new Date().getDate())).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}</span>
-                      </div>
+          {/* TAB 1: HOME */}
+          {activeTab === "home" && (
+            <div className="@container space-y-6 stagger-children">
+              
+              {/* (1) HERO BALANCE CARD */}
+              <div className="relative overflow-hidden rounded-[20px] p-6 md:p-8 text-white shadow-glass-lg bg-brand-bg border-thin border-glass-border">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-brand-purple/40 via-brand-pink/15 to-transparent"></div>
+                <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-brand-purple/10 blur-3xl"></div>
+                <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-brand-pink/10 blur-3xl"></div>
+                
+                <div className="relative z-10 flex flex-col items-center py-4 md:py-8 text-center">
+                  <span className="text-[12px] font-semibold text-text-tertiary mb-3 uppercase tracking-[0.3em]">{t('dashboard.totalBalance')}</span>
+                  <div className="text-[40px] md:text-hero font-black tracking-tight leading-none text-shadow-glow tabular-nums">
+                    <span className="text-text-primary">R$ {Math.floor(balance).toLocaleString('pt-BR')}</span>
+                    <span className="text-text-tertiary">,{(balance % 1).toFixed(2).substring(2)}</span>
                   </div>
-                  <div className="w-[1px] h-10 bg-ds-border"></div>
-                  <div>
-                      <p className="text-[12px] text-ds-text-secondary mb-1">Transações</p>
-                      <div className="flex items-center justify-center gap-1.5">
-                        <Award size={16} className="text-fn-balance" />
-                        <span className="text-[22px] font-medium tabular-nums text-ds-text-primary">{transactions.length}</span>
-                      </div>
+                  <div className={`mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-glass-highlight border-thin border-glass-border text-[12px] font-semibold backdrop-blur-md ${dailyInsights.isPositive ? 'text-brand-green' : 'text-brand-red'}`}>
+                    {dailyInsights.isPositive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                    <span>{dailyInsights.isPositive ? '+' : '-'}R$ {dailyInsights.absDelta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {t('common.today').toLowerCase()}</span>
                   </div>
                 </div>
 
-                <div className="w-full max-w-md mx-auto space-y-3">
-                  <div className="flex items-center justify-between mb-2">
-                      <h3 className="text-[12px] font-medium text-ds-text-secondary uppercase tracking-wider">Comprovante Mais Recente</h3>
-                      <button onClick={() => setShowManualModal(true)} className="text-[12px] text-fn-balance font-medium">Adicionar +</button>
-                  </div>
-                  {recentReceipts.map(tx => (
-                      <div key={tx.id} className="flex items-center justify-between p-4 bg-ds-bg-secondary border-thin border-ds-border rounded-xl">
-                        <div className="flex items-center gap-3 min-w-0">
-                            <div className="w-10 h-10 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-ds-text-tertiary shrink-0">
-                              <Landmark size={16} />
-                            </div>
-                            <div className="min-w-0">
-                              <p className="text-[10px] text-ds-text-tertiary uppercase tracking-wider font-bold">Enviado para</p>
-                              <p className="text-[14px] font-medium text-ds-text-primary truncate">{tx.merchant_name}</p>
-                              <div className="flex items-center gap-2 mt-0.5">
-                                  <span className="text-[11px] text-ds-text-tertiary">{formatDate(tx.transaction_date)}</span>
-                                  <span className="w-1 h-1 rounded-full bg-ds-border"></span>
-                                  <span className="text-[11px] text-ds-text-tertiary truncate max-w-[120px]">
-                                    {tx.destination_institution || tx.payment_method || 'Instituição não identificada'}
-                                  </span>
-                              </div>
-                            </div>
+                {/* Mini Accounts Carousel */}
+                <div className="relative z-10 mt-6 -mx-6 px-6 overflow-x-auto no-scrollbar snap-x snap-mandatory flex gap-3 pb-2">
+                  {[
+                    { name: 'Nubank', balance: totalInflow * 0.6, mask: '•••• 1234', color: '#8B5CF6' },
+                    { name: 'Itaú', balance: totalInflow * 0.3, mask: '•••• 8876', color: '#FB923C' },
+                    { name: 'Inter', balance: totalInflow * 0.1, mask: '•••• 0092', color: '#06B6D4' }
+                  ].map((acc, i) => (
+                    <div key={i} className="snap-center shrink-0 w-[160px] p-4 rounded-2xl bg-glass-card border-thin border-glass-border backdrop-blur-md flex flex-col hover:-translate-y-1 transition-transform cursor-pointer group">
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: acc.color }}></div>
+                          <span className="text-[12px] font-bold text-text-secondary">{acc.name}</span>
                         </div>
-                        <div className="text-right shrink-0">
-                            <p className={`text-[15px] font-semibold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-fn-income' : 'text-fn-expense'}`}>
-                              {tx.transaction_type === 'Inflow' ? '+' : '-'}{formatCurrency(tx.total_amount)}
-                            </p>
-                            <p className="text-[10px] text-ds-text-tertiary uppercase tracking-wide">{tx.category}</p>
-                        </div>
+                        <Settings size={10} className="text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
+                      <span className="text-[16px] font-bold text-text-primary tabular-nums">R$ {acc.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      <span className="text-[10px] text-text-tertiary font-mono mt-1">{acc.mask}</span>
+                    </div>
                   ))}
                 </div>
+              </div>
+
+              {/* (2) METRIC GRID */}
+              <div className="grid grid-cols-2 gap-4 md:gap-6">
+                {[
+                  { label: t('common.income'), value: totalInflow, trend: inflowCount > 0 ? `${inflowCount} tx` : "0", icon: <TrendingUp size={12} />, color: "#10B981" },
+                  { label: t('common.expense'), value: totalOutflow, trend: outflowCount > 0 ? `${outflowCount} tx` : "0", icon: <TrendingDown size={12} />, color: "#EF4444" },
+                  { label: t('dashboard.avgTicket'), value: avgOutflow, trend: t('dashboard.perTx'), icon: <BarChart3 size={12} />, color: "#8B5CF6" },
+                  { label: t('dashboard.netFlow'), value: Math.abs(balance), trend: balance >= 0 ? t('dashboard.positive') : t('dashboard.negative'), icon: balance >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />, color: balance >= 0 ? "#10B981" : "#EF4444" }
+                ].map((metric, i) => (
+                  <div key={i} className="glass-card p-4 md:p-5 flex flex-col justify-between group">
+                    <div className="flex justify-between items-start">
+                      <span className="text-[12px] md:text-[14px] font-medium text-text-secondary">{metric.label}</span>
+                      <div className="flex items-center gap-1 text-[10px] font-bold" style={{ color: metric.color }}>
+                        {metric.icon} {metric.trend}
+                      </div>
+                    </div>
+                    <div className="mt-3 mb-1">
+                      <span className="text-[20px] md:text-val-xl font-semibold text-text-primary leading-none tabular-nums">R$ {metric.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    </div>
+                    <div className="h-[50px] md:h-[60px] w-full mt-2 opacity-40 group-hover:opacity-100 transition-opacity">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={growthData.slice(-10)}>
+                          <defs>
+                            <linearGradient id={`grad${i}`} x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor={metric.color} stopOpacity={0.5}/>
+                              <stop offset="95%" stopColor={metric.color} stopOpacity={0}/>
+                            </linearGradient>
+                          </defs>
+                          <Area type="monotone" dataKey="capital" stroke={metric.color} strokeWidth={2} fillOpacity={1} fill={`url(#grad${i})`} />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* (5) TRANSACTIONS TABLE */}
+              <div className="glass-card-static overflow-hidden">
+                <div className="p-5 border-b border-glass-border flex justify-between items-center">
+                  <h3 className="text-[16px] font-semibold text-text-primary">{t('dashboard.recentTransactions')}</h3>
+                  <button onClick={() => setActiveTab("analytics")} className="text-[12px] font-medium text-brand-cyan hover:underline" aria-label="View all transactions">{t('common.viewAll')}</button>
+                </div>
+                <div className="divide-y divide-[rgba(255,255,255,0.05)] stagger-children">
+                  {transactions.slice(0, 6).map(tx => (
+                    <div key={tx.id} className="p-4 flex items-center gap-4 hover:bg-glass-highlight transition-colors cursor-pointer group">
+                      <div className="w-10 h-10 rounded-full bg-glass-card border-thin border-glass-border flex items-center justify-center text-text-primary shrink-0 group-hover:scale-110 transition-transform">
+                         {CATEGORY_ICONS[tx.category] || <ShoppingBag size={16} />}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[14px] font-medium text-text-primary truncate">{tx.merchant_name}</p>
+                        <p className="text-[12px] text-text-tertiary mt-0.5">{formatDate(tx.transaction_date)}</p>
+                      </div>
+                      <div className="hidden md:block">
+                        <span className="text-[11px] text-text-tertiary">{t(`categories.${tx.category}`).replace('categories.', '')}</span>
+                      </div>
+                      <div className="text-right">
+                        <p className={`text-[16px] font-semibold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-brand-green' : 'text-text-primary'}`}>
+                          {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             </div>
           )}
 
-          {dashboardMode === "main" && (
-            <div className="space-y-6">
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="bg-ds-bg-secondary p-4 rounded-xl border-thin border-ds-border">
-                      <p className="text-[11px] font-medium text-ds-text-tertiary uppercase tracking-wider mb-2">Entradas</p>
-                      <p className="text-[22px] font-medium tabular-nums text-fn-income">R$ {totalInflow.toLocaleString('pt-BR', {maximumFractionDigits:0})}</p>
-                      <p className="text-[11px] text-ds-text-tertiary mt-1">{inflowCount} transação(ões)</p>
-                  </div>
-                  <div className="bg-ds-bg-secondary p-4 rounded-xl border-thin border-ds-border">
-                      <p className="text-[11px] font-medium text-ds-text-tertiary uppercase tracking-wider mb-2">Saídas</p>
-                      <p className="text-[22px] font-medium tabular-nums text-fn-expense">R$ {totalOutflow.toLocaleString('pt-BR', {maximumFractionDigits:0})}</p>
-                      <p className="text-[11px] text-ds-text-tertiary mt-1">{outflowCount} transação(ões)</p>
-                  </div>
-                  <div className="bg-ds-bg-secondary p-4 rounded-xl border-thin border-ds-border">
-                      <p className="text-[11px] font-medium text-ds-text-tertiary uppercase tracking-wider mb-2">Saldo Líquido</p>
-                      <p className={`text-[22px] font-medium tabular-nums ${balance >= 0 ? 'text-fn-income' : 'text-fn-expense'}`}>R$ {balance.toLocaleString('pt-BR', {maximumFractionDigits:0})}</p>
-                      <p className="text-[11px] text-ds-text-tertiary mt-1">{dailyInsights.message}</p>
-                  </div>
-                  <div className="bg-ds-bg-secondary p-4 rounded-xl border-thin border-ds-border">
-                      <p className="text-[11px] font-medium text-ds-text-tertiary uppercase tracking-wider mb-2">Ticket Médio Saída</p>
-                      <p className="text-[22px] font-medium tabular-nums text-ds-text-primary">R$ {avgOutflow.toLocaleString('pt-BR', {maximumFractionDigits:0})}</p>
-                      <p className="text-[11px] text-ds-text-tertiary mt-1">por comprovante</p>
+          {/* TAB 2: ANALYTICS */}
+          {activeTab === "analytics" && (
+            <div className="@container space-y-6 stagger-children">
+              {/* (3) SPENDING CHART */}
+              <div className="glass-card-static p-5 md:p-6">
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className="text-[16px] font-semibold text-text-primary">{t('dashboard.spendingOverview')}</h2>
+                  <div className="px-3 py-1.5 rounded-full bg-brand-orange/20 text-brand-orange text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer hover:bg-brand-orange/30 transition-colors">
+                    <Calendar size={12} />
+                    <span>{t('common.thisMonth')}</span>
+                    <X size={10} className="opacity-60" />
                   </div>
                 </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  <div className="lg:col-span-2 space-y-6">
-                      <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                        <div className="flex flex-col md:flex-row md:justify-between md:items-start mb-4 gap-3">
-                            <div>
-                              <p className="text-[12px] font-medium text-ds-text-secondary uppercase tracking-widest mb-1">Evolução Patrimonial</p>
-                              <h2 className="text-[28px] md:text-[32px] font-medium tabular-nums text-ds-text-primary truncate">R$ {balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</h2>
-                            </div>
-                            <TemplateSentinel id="hasInsights" agent={agent}>
-                              <div className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[12px] font-medium self-start ${dailyInsights.isPositive ? 'bg-[#10B981] bg-opacity-10 text-fn-income' : 'bg-[#EF4444] bg-opacity-10 text-fn-expense'}`}>
-                                  {dailyInsights.isPositive ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
-                                  {dailyInsights.isPositive ? '+' : '-'}R$ {dailyInsights.absDelta.toLocaleString('pt-BR', {maximumFractionDigits:0})} hoje
-                              </div>
-                            </TemplateSentinel>
-                        </div>
-                        <TemplateSentinel id="hasGrowth" agent={agent}>
-                            <div className="h-[200px] w-full">
-                              <ResponsiveContainer width="100%" height="100%">
-                                  <LineChart data={growthData} margin={{ left: -20, right: 10, top: 10, bottom: 0 }}>
-                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--ds-border)" />
-                                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dy={10} />
-                                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} dx={-10} />
-                                    <Tooltip contentStyle={tooltipStyle} />
-                                    <Line type="monotone" dataKey="capital" stroke="#3B82F6" strokeWidth={3} dot={false} activeDot={{ r: 6, fill: '#3B82F6' }} />
-                                  </LineChart>
-                              </ResponsiveContainer>
-                            </div>
-                        </TemplateSentinel>
-                      </div>
-
-                      <TemplateSentinel id="hasCategories" agent={agent}>
-                        <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                            <h2 className="text-[14px] font-medium text-ds-text-primary mb-4">Gastos por Categoria</h2>
-                            <div className="space-y-3">
-                              {categoriesData.slice(0, 6).map((cat, i) => {
-                                  const pct = totalOutflow > 0 ? (cat.value / totalOutflow) * 100 : 0;
-                                  return (
-                                    <div key={cat.name}>
-                                        <div className="flex items-center justify-between mb-1">
-                                          <div className="flex items-center gap-2">
-                                              <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-                                              <span className="text-[13px] font-medium text-ds-text-primary">{cat.name}</span>
-                                          </div>
-                                          <span className="text-[13px] tabular-nums font-medium text-ds-text-secondary">R$ {cat.value.toLocaleString('pt-BR', {maximumFractionDigits:0})} <span className="text-ds-text-tertiary">({pct.toFixed(0)}%)</span></span>
-                                        </div>
-                                        <div className="w-full h-2 rounded-full bg-ds-bg-tertiary overflow-hidden">
-                                          <div className="h-full rounded-full transition-all duration-500" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-                                        </div>
-                                    </div>
-                                  );
-                              })}
-                            </div>
-                        </div>
-                      </TemplateSentinel>
-                  </div>
-
-                  <div className="space-y-6">
-                      <TemplateSentinel id="hasCounterparties" agent={agent}>
-                        <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                            <h2 className="text-[14px] font-medium text-ds-text-primary mb-4">Pessoas / empresas com mais recorrência</h2>
-                            <div className="space-y-4">
-                              {topCounterparties.map((party, i) => (
-                                  <div key={party.name} className="flex items-center justify-between gap-3">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-[12px] font-bold text-ds-text-tertiary">{i+1}</div>
-                                        <div className="min-w-0 max-w-[120px]">
-                                          <p className="text-[12px] font-medium text-ds-text-primary truncate">{party.name}</p>
-                                          <p className="text-[10px] text-ds-text-secondary truncate">Último movimento: {formatDate(party.lastDate)}</p>
-                                        </div>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-[14px] font-medium tabular-nums text-ds-text-primary">{party.count} comprovante(s)</p>
-                                        <p className="text-[10px] text-ds-text-tertiary">{formatCurrency(party.total)} movimentados</p>
-                                    </div>
-                                  </div>
-                              ))}
-                            </div>
-                        </div>
-                      </TemplateSentinel>
-
-                      <TemplateSentinel id="hasBanks" agent={agent}>
-                        <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                            <div className="flex items-center justify-between mb-4">
-                              <h2 className="text-[14px] font-medium text-ds-text-primary">Bancos / instituições mais usados</h2>
-                              <Landmark size={16} className="text-ds-text-tertiary" />
-                            </div>
-                            <div className="space-y-3">
-                              {topBanks.map((bank, i) => (
-                                  <div key={bank.name} className="flex items-center justify-between py-2 border-b-thin border-ds-border last:border-b-0">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className="w-8 h-8 rounded-full bg-ds-bg-primary border-thin border-ds-border flex items-center justify-center text-[12px] font-bold text-ds-text-tertiary">{i + 1}</div>
-                                        <div className="min-w-0">
-                                          <p className="text-[13px] font-medium text-ds-text-primary truncate">{bank.name}</p>
-                                          <p className="text-[11px] text-ds-text-tertiary">{bank.count} uso(s)</p>
-                                        </div>
-                                    </div>
-                                    <p className="text-[13px] font-medium tabular-nums shrink-0 ml-2 text-ds-text-primary">
-                                        {formatCurrency(bank.total)}
-                                    </p>
-                                  </div>
-                              ))}
-                            </div>
-                        </div>
-                      </TemplateSentinel>
-
-                      <TemplateSentinel id="hasRecent" agent={agent}>
-                        <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                            <div className="flex items-center justify-between mb-4">
-                              <h2 className="text-[14px] font-medium text-ds-text-primary">Comprovante Mais Recente</h2>
-                              <span className="text-[11px] text-ds-text-tertiary">{transactions.length} total</span>
-                            </div>
-                            <div className="space-y-3">
-                              {recentReceipts.map(tx => (
-                                  <div key={tx.id} className="flex items-center justify-between py-2 border-b-thin border-ds-border last:border-b-0">
-                                    <div className="flex items-center gap-3 min-w-0">
-                                        <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${tx.transaction_type === 'Inflow' ? 'bg-[#10B981] bg-opacity-10 text-fn-income' : 'bg-[#EF4444] bg-opacity-10 text-fn-expense'}`}>
-                                          {tx.transaction_type === 'Inflow' ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
-                                        </div>
-                                        <div className="min-w-0">
-                                          <p className="text-[13px] font-medium text-ds-text-primary truncate">{tx.merchant_name}</p>
-                                          <div className="flex items-center gap-2">
-                                              <p className="text-[11px] text-ds-text-tertiary">{formatDate(tx.transaction_date)}</p>
-                                              <span className="w-1 h-0.5 bg-ds-border"></span>
-                                              <p className="text-[11px] text-ds-text-tertiary truncate max-w-[100px]">{tx.destination_institution || tx.payment_method || 'N/A'}</p>
-                                          </div>
-                                        </div>
-                                    </div>
-                                    <p className={`text-[13px] font-medium tabular-nums shrink-0 ml-2 ${tx.transaction_type === 'Inflow' ? 'text-fn-income' : 'text-fn-expense'}`}>
-                                        {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', {minimumFractionDigits:2})}
-                                    </p>
-                                  </div>
-                              ))}
-                            </div>
-                        </div>
-                      </TemplateSentinel>
-                  </div>
+                <div className="h-[200px] md:h-[300px] xl:h-[400px] w-full min-w-0">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={temporalData.hourly} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+                      <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} cursor={{ fill: 'rgba(139,92,246,0.08)' }} />
+                      <Bar dataKey="val" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
                 </div>
-            </div>
-          )}
+              </div>
 
-          {dashboardMode === "entities" && (
-            <div className="space-y-12 animate-in fade-in duration-500">
-                <div className="space-y-4">
-                  <h2 className="text-[20px] font-medium text-ds-text-primary">Distribuição de Relacionamentos</h2>
-                  <p className="text-[12px] text-ds-text-secondary">Análise visual da concentração de movimentações por natureza jurídica.</p>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                  <TemplateSentinel id="hasCounterparties" agent={agent}>
-                      <div className="bg-ds-bg-secondary p-6 rounded-2xl border-thin border-ds-border">
-                        <h3 className="text-[14px] font-bold uppercase tracking-widest text-ds-text-primary mb-6">Volume por Natureza (R$)</h3>
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <PieChart>
-                                  <Pie
-                                    data={[
-                                        { name: 'Pessoas Físicas', value: counterpartiesData.physical.reduce((acc, p) => acc + p.total, 0) },
-                                        { name: 'Empresas / Bancos', value: counterpartiesData.legal.reduce((acc, p) => acc + p.total, 0) }
-                                    ]}
-                                    cx="50%"
-                                    cy="50%"
-                                    innerRadius={60}
-                                    outerRadius={80}
-                                    paddingAngle={5}
-                                    dataKey="value"
-                                  >
-                                    <Cell fill="#3B82F6" />
-                                    <Cell fill="#8B5CF6" />
-                                  </Pie>
-                                  <Tooltip contentStyle={tooltipStyle} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <div className="flex justify-center gap-6 mt-4">
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-[#3B82F6]"></div>
-                              <span className="text-[12px] text-ds-text-secondary">Pessoas Físicas</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-3 h-3 rounded-full bg-[#8B5CF6]"></div>
-                              <span className="text-[12px] text-ds-text-secondary">Empresas / Bancos</span>
-                            </div>
-                        </div>
-                      </div>
-                  </TemplateSentinel>
-
-                  <TemplateSentinel id="hasPhysicalEntities" agent={agent}>
-                      <div className="bg-ds-bg-secondary p-6 rounded-2xl border-thin border-ds-border">
-                        <h3 className="text-[14px] font-bold uppercase tracking-widest text-ds-text-primary mb-6">Frequência: Top Pessoas Físicas</h3>
-                        <div className="h-[250px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={counterpartiesData.physical.slice(0, 5)} layout="vertical" margin={{ left: 20, right: 30 }}>
-                                  <XAxis type="number" hide />
-                                  <YAxis dataKey="name" type="category" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} width={80} />
-                                  <Tooltip contentStyle={tooltipStyle} />
-                                  <Bar dataKey="count" fill="#3B82F6" radius={[0, 4, 4, 0]} barSize={20} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                        <p className="text-[11px] text-ds-text-tertiary text-center mt-4 italic">Concentração por número de comprovantes enviados.</p>
-                      </div>
-                  </TemplateSentinel>
-
-                  <TemplateSentinel id="hasLegalEntities" agent={agent}>
-                      <div className="bg-ds-bg-secondary p-6 rounded-2xl border-thin border-ds-border lg:col-span-2">
-                        <h3 className="text-[14px] font-bold uppercase tracking-widest text-ds-text-primary mb-6">Volume Financeiro por Empresa / Instituição</h3>
-                        <div className="h-[300px] w-full">
-                            <ResponsiveContainer width="100%" height="100%">
-                              <BarChart data={counterpartiesData.legal.slice(0, 8)}>
-                                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--ds-border)" />
-                                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} />
-                                  <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'var(--text-secondary)' }} />
-                                  <Tooltip contentStyle={tooltipStyle} />
-                                  <Bar dataKey="total" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                              </BarChart>
-                            </ResponsiveContainer>
-                        </div>
-                      </div>
-                  </TemplateSentinel>
-                </div>
-
-                <TemplateSentinel id="hasCounterparties" agent={agent}>
-                  <div className="pt-12 border-t border-ds-border">
-                      <div className="flex items-center justify-between mb-6">
-                        <h2 className="text-[20px] font-medium text-ds-text-primary">Relacionamentos Detalhados</h2>
-                        <p className="text-[12px] text-ds-text-tertiary">Gerencie todas as notas vinculadas aos seus parceiros.</p>
-                      </div>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {transactions.slice(0, 10).map(tx => renderReceiptCard(tx))}
-                      </div>
-                  </div>
-                </TemplateSentinel>
-            </div>
-          )}
-
-          {dashboardMode === "surgical" && (
-            <div className="space-y-6">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                      <div className="flex items-center gap-2 mb-4">
-                        <Clock size={18} className="text-cat-4" />
-                        <h2 className="text-[14px] font-medium text-ds-text-primary">Gastos por Dia da Semana</h2>
-                      </div>
-                      <div className="h-[200px]">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={weekdayIntensity}>
-                              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="var(--ds-border)" />
-                              <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} />
-                              <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: 'var(--text-tertiary)' }} />
-                              <Tooltip cursor={{fill: 'var(--bg-tertiary)'}} contentStyle={tooltipStyle} formatter={(val: number) => `R$ ${Number(val).toLocaleString('pt-BR')}`} />
-                              <Bar dataKey="val" fill="#8B5CF6" radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                      </div>
-                  </div>
-
-                  <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                      <h2 className="text-[14px] font-medium text-ds-text-primary mb-4">Categorias de Saída</h2>
-                      {categoriesData.length > 0 ? (
-                        <>
-                            <div className="h-[180px]">
-                              <ResponsiveContainer width="100%" height="100%">
-                                  <PieChart>
-                                    <Pie data={categoriesData.slice(0, 6)} innerRadius={45} outerRadius={75} dataKey="value" paddingAngle={2}>
-                                        {categoriesData.slice(0, 6).map((_, index) => (
-                                          <Cell key={`c-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
-                                        ))}
-                                    </Pie>
-                                    <Tooltip contentStyle={tooltipStyle} formatter={(val: number) => `R$ ${Number(val).toLocaleString('pt-BR')}`} />
-                                  </PieChart>
-                              </ResponsiveContainer>
-                            </div>
-                            <div className="grid grid-cols-2 gap-1.5 mt-3">
-                              {categoriesData.slice(0, 6).map((c, i) => (
-                                  <div key={c.name} className="flex items-center gap-1.5 text-[11px] text-ds-text-secondary">
-                                    <div className="w-2 h-2 rounded-full shrink-0" style={{backgroundColor: CHART_COLORS[i % CHART_COLORS.length]}} />
-                                    <span className="truncate">{c.name}</span>
+              {/* (4) CATEGORY BREAKDOWN & (8) STATISTICS (Donut) */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                 {/* Categories */}
+                 <div className="glass-card-static p-5 md:p-6">
+                    <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.topCategories')}</h2>
+                    <div className="space-y-3 stagger-children">
+                      {categoriesData.slice(0, 5).map((cat, i) => {
+                         const pct = totalOutflow > 0 ? (cat.value / totalOutflow) * 100 : 0;
+                         return (
+                            <div key={i} className="p-4 rounded-[16px] bg-glass-highlight border-thin border-glass-border hover:border-brand-purple/30 hover:shadow-glow transition-all cursor-pointer flex items-center justify-between group">
+                               <div className="flex items-center gap-3">
+                                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}>
+                                     {CATEGORY_ICONS[cat.name] || <Tag size={16} />}
                                   </div>
-                              ))}
-                            </div>
-                        </>
-                      ) : (
-                        <p className="text-[12px] text-ds-text-tertiary text-center py-12">Sem dados de categorias.</p>
-                      )}
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                  <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                      <h2 className="text-[14px] font-medium text-ds-text-primary mb-4">Meios de Pagamento</h2>
-                      {paymentMethodsData.length > 0 ? (
-                        <div className="space-y-3">
-                            {paymentMethodsData.map((pm, i) => {
-                              const pct = totalOutflow > 0 ? (pm.value / totalOutflow) * 100 : 0;
-                              return (
-                                  <div key={pm.name} className="flex items-center justify-between">
-                                    <div className="flex items-center gap-2.5">
-                                        <div className="w-3 h-3 rounded" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }} />
-                                        <span className="text-[13px] text-ds-text-primary">{pm.name}</span>
-                                    </div>
-                                    <div className="text-right">
-                                        <span className="text-[13px] tabular-nums font-medium text-ds-text-primary">R$ {pm.value.toLocaleString('pt-BR', {maximumFractionDigits:0})}</span>
-                                        <span className="text-[11px] text-ds-text-tertiary ml-1.5">({pct.toFixed(0)}%)</span>
-                                    </div>
-                                  </div>
-                              );
-                            })}
-                        </div>
-                      ) : (
-                        <p className="text-[12px] text-ds-text-tertiary text-center py-8">Nenhum dado de pagamento disponível.</p>
-                      )}
-                  </div>
-
-                  <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                      <h2 className="text-[14px] font-medium text-ds-text-primary mb-4">Alertas Inteligentes</h2>
-                      {alerts.length > 0 ? (
-                        <div className="space-y-3">
-                            {alerts.map(a => (
-                              <div key={a.id} className="flex gap-3 p-3 rounded-lg" style={{backgroundColor: `${a.color}1A`, border: `0.5px solid ${a.color}`}}>
-                                  <div style={{color: a.color}} className="shrink-0 mt-0.5">{a.icon}</div>
                                   <div>
-                                    <p className="text-[13px] font-medium text-ds-text-primary">{a.title}</p>
-                                    <p className="text-[11px] text-ds-text-secondary mt-0.5">{a.message}</p>
+                                     <p className="text-[14px] font-semibold text-text-primary">{t(`categories.${cat.name}`).replace('categories.', '')}</p>
+                                     <p className="text-[12px] text-text-tertiary mt-0.5">R$ {cat.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
                                   </div>
-                              </div>
-                            ))}
-                        </div>
-                      ) : (
-                        <div className="flex flex-col items-center justify-center py-8 text-center">
-                            <CheckCircle2 size={28} className="text-fn-income mb-2" />
-                            <p className="text-[13px] font-medium text-ds-text-primary">Tudo certo!</p>
-                            <p className="text-[11px] text-ds-text-tertiary mt-1">Nenhum alerta no momento.</p>
-                        </div>
-                      )}
+                               </div>
+                               <div className="text-right">
+                                  <p className="text-[18px] font-bold text-text-primary tabular-nums">{pct.toFixed(0)}%</p>
+                                  {/* Mini progress bar */}
+                                  <div className="w-16 h-1.5 bg-brand-bg rounded-full overflow-hidden mt-1.5">
+                                    <div className="h-full rounded-full animate-fill-progress" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
+                                  </div>
+                               </div>
+                            </div>
+                         );
+                      })}
+                    </div>
+                 </div>
+
+                 {/* Donut Chart */}
+                 <div className="glass-card-static p-5 md:p-6 flex flex-col justify-between">
+                    <h2 className="text-[16px] font-semibold text-text-primary mb-4">{t('dashboard.distribution')}</h2>
+                    <div className="h-[220px] md:h-[250px] w-full relative">
+                       <ResponsiveContainer width="100%" height="100%">
+                         <PieChart>
+                           <Pie data={categoriesData} innerRadius="55%" outerRadius="80%" paddingAngle={4} dataKey="value" stroke="none">
+                             {categoriesData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
+                           </Pie>
+                           <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
+                         </PieChart>
+                       </ResponsiveContainer>
+                       {/* Center Text */}
+                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                          <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Total</span>
+                          <span className="text-[22px] font-bold text-text-primary tabular-nums">R$ {totalOutflow.toLocaleString('pt-BR')}</span>
+                       </div>
+                    </div>
+                    {/* Legend */}
+                    <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 justify-center">
+                       {categoriesData.slice(0, 5).map((cat, i) => (
+                          <div key={cat.name} className="flex items-center gap-1.5">
+                             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
+                             <span className="text-[11px] text-text-secondary">{t(`categories.${cat.name}`).replace('categories.', '')}</span>
+                          </div>
+                       ))}
+                    </div>
+                 </div>
+              </div>
+
+              {/* WEEKDAY INTENSITY + PAYMENT METHODS */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                {/* Weekday Chart */}
+                <div className="glass-card-static p-5 md:p-6">
+                  <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.weekdayActivity')}</h2>
+                  <div className="h-[200px] w-full">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={weekdayIntensity} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                        <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+                        <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
+                        <Bar dataKey="val" fill="#06B6D4" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
                   </div>
                 </div>
 
-                <div className="bg-ds-bg-secondary p-5 rounded-xl border-thin border-ds-border">
-                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
-                      <div>
-                        <h2 className="text-[14px] font-medium text-ds-text-primary">Todos os Comprovantes</h2>
-                        <p className="text-[11px] text-ds-text-tertiary mt-1">Cada comprovante mostra todos os campos que foram extraídos e armazenados.</p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-ds-bg-primary border-thin border-ds-border">
-                            <Search size={14} className="text-ds-text-tertiary" />
-                            <input value={searchQuery} onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }} placeholder="Buscar..." className="text-[12px] bg-transparent focus:outline-none w-32 text-ds-text-primary" />
+                {/* Payment Methods */}
+                <div className="glass-card-static p-5 md:p-6">
+                  <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.paymentMethods')}</h2>
+                  <div className="space-y-3 stagger-children">
+                    {paymentMethodsData.slice(0, 4).map((pm, i) => {
+                      const pct = totalOutflow > 0 ? (pm.value / totalOutflow) * 100 : 0;
+                      const colors = ['#8B5CF6', '#EC4899', '#FB923C', '#06B6D4'];
+                      const icons = [<Smartphone key="s" size={16} />, <CreditCard key="c" size={16} />, <Banknote key="b" size={16} />, <Layers key="l" size={16} />];
+                      return (
+                        <div key={pm.name} className="flex items-center gap-4 p-3 rounded-[12px] bg-glass-highlight border-thin border-glass-border hover:border-white/10 transition-all">
+                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0" style={{ backgroundColor: colors[i % colors.length] }}>
+                            {icons[i % icons.length]}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[13px] font-medium text-text-primary">{pm.name}</p>
+                            <div className="w-full h-1.5 bg-brand-bg rounded-full overflow-hidden mt-1.5">
+                              <div className="h-full rounded-full animate-fill-progress" style={{ width: `${pct}%`, backgroundColor: colors[i % colors.length] }}></div>
+                            </div>
+                          </div>
+                          <span className="text-[14px] font-bold text-text-primary tabular-nums">{pct.toFixed(0)}%</span>
                         </div>
-                        <select value={activeFilter} onChange={e => { setActiveFilter(e.target.value); setCurrentPage(1); }} className="text-[12px] px-2.5 py-1.5 rounded-lg bg-ds-bg-primary border-thin border-ds-border text-ds-text-primary focus:outline-none">
-                            <option value="all">Todos</option>
-                            <option value="inflow">Entradas</option>
-                            <option value="high_value">Alto valor (&gt;500)</option>
-                            <option value="with_notes">Com notas</option>
-                            <option value="today">Hoje</option>
-                        </select>
-                      </div>
+                      );
+                    })}
                   </div>
-                  <div className="space-y-4">
-                      {paginatedTransactions.length > 0 ? paginatedTransactions.map(renderReceiptCard) : (
-                        <div className="py-8 text-center text-[12px] text-ds-text-tertiary">Nenhum registro encontrado.</div>
-                      )}
-                  </div>
-                  {totalPages > 1 && (
-                      <div className="flex items-center justify-between mt-4 pt-3 border-t-thin border-ds-border">
-                        <p className="text-[11px] text-ds-text-tertiary">{filteredTransactions.length} registro(s) • Página {currentPage} de {totalPages}</p>
-                        <div className="flex items-center gap-1">
-                            <button disabled={currentPage <= 1} onClick={() => setCurrentPage(p => p - 1)} className="p-1.5 rounded-md border-thin border-ds-border text-ds-text-tertiary disabled:opacity-30"><ChevronLeft size={14} /></button>
-                            <button disabled={currentPage >= totalPages} onClick={() => setCurrentPage(p => p + 1)} className="p-1.5 rounded-md border-thin border-ds-border text-ds-text-tertiary disabled:opacity-30"><ChevronRight size={14} /></button>
-                        </div>
-                      </div>
-                  )}
                 </div>
+              </div>
+
+              {/* SMART ALERTS SECTION */}
+              {alerts.length > 0 && (
+                <div className="glass-card-static p-5 md:p-6">
+                  <div className="flex items-center gap-2 mb-5">
+                    <Bell size={16} className="text-brand-orange" />
+                    <h2 className="text-[16px] font-semibold text-text-primary">Smart Alerts</h2>
+                    <span className="ml-auto px-2.5 py-0.5 rounded-full bg-brand-orange/20 text-brand-orange text-[11px] font-bold">{alerts.length}</span>
+                  </div>
+                  <div className="space-y-3 stagger-children">
+                    {alerts.slice(0, 5).map(alert => (
+                      <div key={alert.id} className={`p-4 rounded-[12px] border-thin flex items-start gap-3 transition-all ${
+                        alert.type === 'critical' ? 'bg-brand-red/10 border-brand-red/20' :
+                        alert.type === 'warning' ? 'bg-brand-orange/10 border-brand-orange/20' :
+                        'bg-brand-cyan/10 border-brand-cyan/20'
+                      }`}>
+                        <div className="shrink-0 mt-0.5">{alert.icon}</div>
+                        <div>
+                          <p className="text-[13px] font-semibold text-text-primary">{alert.title}</p>
+                          <p className="text-[12px] text-text-secondary mt-0.5">{alert.message}</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
+          )}
+
+          {/* TAB 3: GOALS */}
+          {activeTab === "goals" && (
+             <div className="@container space-y-6 stagger-children">
+               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                 {/* Left Sidebar - Goal Cards */}
+                 <div className="lg:col-span-1 space-y-4">
+                    <div className="glass-card p-5 cursor-pointer border-brand-cyan/30 shadow-glow-cyan">
+                       <div className="flex items-center justify-between mb-3">
+                         <h3 className="text-[14px] font-semibold text-text-primary">MacBook Pro M3</h3>
+                         <span className="text-[11px] font-bold text-brand-cyan tabular-nums">45%</span>
+                       </div>
+                       <p className="text-[12px] text-text-tertiary mb-4">Target: R$ 18.000</p>
+                       <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden mb-2">
+                          <div className="h-full bg-gradient-to-r from-brand-cyan to-brand-purple rounded-full animate-fill-progress" style={{ width: '45%' }}></div>
+                       </div>
+                       <div className="flex justify-between text-[11px] font-medium">
+                          <span className="text-text-primary tabular-nums">R$ 8.100 saved</span>
+                          <span className="text-text-tertiary">Due Dec 2026</span>
+                       </div>
+                    </div>
+                    <div className="glass-card p-5 cursor-pointer opacity-60 hover:opacity-100 transition-opacity">
+                       <div className="flex items-center justify-between mb-3">
+                         <h3 className="text-[14px] font-semibold text-text-primary">Emergency Fund</h3>
+                         <span className="text-[11px] font-bold text-brand-purple tabular-nums">12%</span>
+                       </div>
+                       <p className="text-[12px] text-text-tertiary mb-4">Target: R$ 50.000</p>
+                       <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden mb-2">
+                          <div className="h-full bg-gradient-to-r from-brand-purple to-brand-pink rounded-full animate-fill-progress" style={{ width: '12%' }}></div>
+                       </div>
+                       <div className="flex justify-between text-[11px] font-medium">
+                          <span className="text-text-primary tabular-nums">R$ 6.000 saved</span>
+                          <span className="text-text-tertiary">No deadline</span>
+                       </div>
+                    </div>
+                    <div className="glass-card p-5 cursor-pointer opacity-60 hover:opacity-100 transition-opacity">
+                       <div className="flex items-center justify-between mb-3">
+                         <h3 className="text-[14px] font-semibold text-text-primary">Vacation Trip</h3>
+                         <span className="text-[11px] font-bold text-brand-pink tabular-nums">68%</span>
+                       </div>
+                       <p className="text-[12px] text-text-tertiary mb-4">Target: R$ 8.000</p>
+                       <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden mb-2">
+                          <div className="h-full bg-gradient-to-r from-brand-pink to-brand-orange rounded-full animate-fill-progress" style={{ width: '68%' }}></div>
+                       </div>
+                       <div className="flex justify-between text-[11px] font-medium">
+                          <span className="text-text-primary tabular-nums">R$ 5.440 saved</span>
+                          <span className="text-text-tertiary">Due Jul 2026</span>
+                       </div>
+                    </div>
+                    <button className="w-full p-4 rounded-[16px] border-thin border-dashed border-text-tertiary text-text-secondary font-medium text-[13px] hover:text-text-primary hover:border-text-secondary hover:bg-glass-highlight transition-all flex items-center justify-center gap-2" aria-label="Create new goal">
+                       <Plus size={16} /> Create New Goal
+                    </button>
+                 </div>
+                 
+                 {/* Right Form */}
+                 <div className="lg:col-span-2 glass-card-static p-6 md:p-8">
+                    <h2 className="text-[20px] font-bold text-text-primary mb-6">Edit Goal</h2>
+                    <form className="space-y-5" onSubmit={e => e.preventDefault()}>
+                       <div>
+                          <label className="block text-[12px] text-text-tertiary mb-2 font-medium">Goal Name</label>
+                          <input type="text" defaultValue="MacBook Pro M3" className="glass-input w-full" />
+                       </div>
+                       <div className="grid grid-cols-2 gap-4">
+                          <div>
+                             <label className="block text-[12px] text-text-tertiary mb-2 font-medium">Target Amount (R$)</label>
+                             <input type="text" defaultValue="18000" className="glass-input w-full" />
+                          </div>
+                          <div>
+                             <label className="block text-[12px] text-text-tertiary mb-2 font-medium">Deadline</label>
+                             <input type="date" defaultValue="2026-12-31" className="glass-input w-full [color-scheme:dark]" />
+                          </div>
+                       </div>
+                       <div className="pt-4 border-t border-glass-border mt-6">
+                          <h3 className="text-[14px] font-semibold text-text-primary mb-4">Saving Rules</h3>
+                          <div className="flex items-center justify-between p-4 bg-glass-highlight rounded-[12px] mb-3 hover:bg-white/[0.07] transition-colors">
+                             <div>
+                                <p className="text-[13px] font-medium text-text-primary">Round-up Change</p>
+                                <p className="text-[11px] text-text-tertiary mt-0.5">Save spare change to the nearest R$ 10</p>
+                             </div>
+                             <div className="w-10 h-6 bg-brand-purple rounded-full relative cursor-pointer transition-colors"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
+                          </div>
+                          <div className="flex items-center justify-between p-4 bg-glass-highlight rounded-[12px] hover:bg-white/[0.07] transition-colors">
+                             <div>
+                                <p className="text-[13px] font-medium text-text-primary">Monthly Auto-Transfer</p>
+                                <p className="text-[11px] text-text-tertiary mt-0.5">Transfer R$ 500 on the 5th of every month</p>
+                             </div>
+                             <div className="w-10 h-6 bg-glass-border rounded-full relative cursor-pointer transition-colors"><div className="w-4 h-4 bg-text-tertiary rounded-full absolute left-1 top-1"></div></div>
+                          </div>
+                       </div>
+                       <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 mt-2">
+                          <button className="px-5 py-2.5 rounded-[12px] text-[13px] font-bold text-brand-red border-thin border-brand-red/30 hover:bg-brand-red/10 transition-colors glass-btn">Delete</button>
+                          <button className="px-5 py-2.5 rounded-[12px] text-[13px] font-bold text-text-primary border-thin border-glass-border hover:bg-glass-highlight transition-colors glass-btn">Duplicate</button>
+                          <button className="btn-primary">Save Goal</button>
+                       </div>
+                    </form>
+                 </div>
+               </div>
+             </div>
+          )}
+
+          {/* TAB 4: SETTINGS */}
+          {activeTab === "settings" && (
+             <div className="@container max-w-2xl mx-auto space-y-6 stagger-children">
+               {/* Profile */}
+               <div className="glass-card-static p-6">
+                 <div className="flex items-center gap-4 mb-6">
+                   <div className="w-14 h-14 rounded-full bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center text-white text-[20px] font-bold shrink-0">
+                     G
+                   </div>
+                   <div>
+                     <h2 className="text-[18px] font-bold text-text-primary">Gabriel Ferreira</h2>
+                     <p className="text-[13px] text-text-tertiary">SHARECOM Premium</p>
+                   </div>
+                 </div>
+                 <div className="space-y-3">
+                   <div className="flex justify-between items-center py-3 border-b border-glass-border">
+                     <span className="text-[13px] text-text-secondary">{t('settings.email')}</span>
+                     <span className="text-[13px] text-text-primary font-medium">gabriel@email.com</span>
+                   </div>
+                   <div className="flex justify-between items-center py-3 border-b border-glass-border">
+                     <span className="text-[13px] text-text-secondary">{t('common.transactions', { count: transactions.length })}</span>
+                     <span className="text-[13px] text-text-primary font-bold tabular-nums">{transactions.length}</span>
+                   </div>
+                   <div className="flex justify-between items-center py-3">
+                     <span className="text-[13px] text-text-secondary">{t('settings.memberSince')}</span>
+                     <span className="text-[13px] text-text-primary font-medium">{formatDateI18n(new Date('2026-04-01'), 'MMMM yyyy')}</span>
+                   </div>
+                 </div>
+               </div>
+
+               {/* Language */}
+               <div className="glass-card-static p-6">
+                 <div className="flex items-center gap-2 mb-5">
+                   <Globe size={16} className="text-brand-purple" />
+                   <h3 className="text-[16px] font-semibold text-text-primary">{t('common.language')}</h3>
+                 </div>
+                 <div className="space-y-5">
+                   <LanguageSwitcher />
+                   <div className="border-t border-glass-border pt-5">
+                     <ThemeToggle variant="full" />
+                   </div>
+                 </div>
+               </div>
+
+               {/* Preferences */}
+               <div className="glass-card-static p-6">
+                 <h3 className="text-[16px] font-semibold text-text-primary mb-5">{t('settings.preferences')}</h3>
+                 <div className="space-y-4">
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-[13px] font-medium text-text-primary">{t('settings.aiCategorization')}</p>
+                       <p className="text-[11px] text-text-tertiary mt-0.5">{t('settings.aiCategorizationDesc')}</p>
+                     </div>
+                     <div className="w-10 h-6 bg-brand-purple rounded-full relative cursor-pointer"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
+                   </div>
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-[13px] font-medium text-text-primary">{t('settings.smartAlertsToggle')}</p>
+                       <p className="text-[11px] text-text-tertiary mt-0.5">{t('settings.smartAlertsDesc')}</p>
+                     </div>
+                     <div className="w-10 h-6 bg-brand-purple rounded-full relative cursor-pointer"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
+                   </div>
+                   <div className="flex items-center justify-between">
+                     <div>
+                       <p className="text-[13px] font-medium text-text-primary">{t('settings.currency')}</p>
+                       <p className="text-[11px] text-text-tertiary mt-0.5">{locale}</p>
+                     </div>
+                     <span className="px-3 py-1.5 rounded-lg bg-glass-highlight border-thin border-glass-border text-[12px] font-bold text-text-primary">{locale === 'pt-BR' ? 'BRL (R$)' : 'USD ($)'}</span>
+                   </div>
+                 </div>
+               </div>
+
+               {/* Data Management */}
+               <div className="glass-card-static p-6">
+                 <h3 className="text-[16px] font-semibold text-text-primary mb-5">{t('settings.dataManagement')}</h3>
+                 <div className="space-y-3">
+                   <button className="w-full p-4 rounded-[12px] bg-glass-highlight border-thin border-glass-border text-left hover:bg-white/[0.07] transition-colors flex items-center justify-between group">
+                     <div className="flex items-center gap-3">
+                       <Database size={16} className="text-brand-cyan" />
+                       <span className="text-[13px] font-medium text-text-primary">{t('settings.exportData')}</span>
+                     </div>
+                     <ChevronRight size={14} className="text-text-tertiary group-hover:text-text-primary transition-colors" />
+                   </button>
+                   <button 
+                     disabled={isLoadingData}
+                     onClick={async () => {
+                       setIsLoadingData(true);
+                       try { await syncWithBackend(); } finally { setIsLoadingData(false); }
+                     }}
+                     className="w-full p-4 rounded-[12px] bg-glass-highlight border-thin border-glass-border text-left hover:bg-white/[0.07] transition-colors flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed"
+                   >
+                     <div className="flex items-center gap-3">
+                       {isLoadingData ? <Loader2 size={16} className="text-brand-orange animate-spin" /> : <RotateCcw size={16} className="text-brand-orange" />}
+                       <span className="text-[13px] font-medium text-text-primary">{t('settings.syncBackend')}</span>
+                     </div>
+                     <ChevronRight size={14} className="text-text-tertiary group-hover:text-text-primary transition-colors" />
+                   </button>
+                   <button 
+                     disabled={isLoadingData}
+                     onClick={async () => { 
+                       if(window.confirm(t('settings.clearDataConfirm'))) {
+                         setIsLoadingData(true);
+                         try { await clearAllData(); } finally { setIsLoadingData(false); }
+                       }
+                     }}
+                     className="w-full p-4 rounded-[12px] bg-brand-red/5 border-thin border-brand-red/20 text-left hover:bg-brand-red/10 transition-colors flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed"
+                   >
+                     <div className="flex items-center gap-3">
+                       <Trash2 size={16} className="text-brand-red" />
+                       <span className="text-[13px] font-medium text-brand-red">{t('settings.clearData')}</span>
+                     </div>
+                     <ChevronRight size={14} className="text-brand-red/50 group-hover:text-brand-red transition-colors" />
+                   </button>
+                 </div>
+               </div>
+
+               <p className="text-center text-[11px] text-text-tertiary py-4">{t('settings.version')} • Built with 🧠 by Neural Analytics</p>
+             </div>
           )}
         </>
       ) : (
@@ -1109,8 +1346,8 @@ function ExpenseTracker() {
                     <Trash2 size={20} />
                   </div>
                   <div>
-                    <h3 className="text-[16px] font-bold text-ds-text-primary">Lixeira</h3>
-                    <p className="text-[11px] text-ds-text-tertiary">Itens serão apagados após 15 dias.</p>
+                    <h3 className="text-[16px] font-bold text-ds-text-primary">{t('trash.title')}</h3>
+                    <p className="text-[11px] text-ds-text-tertiary">{t('trash.subtitle')}</p>
                   </div>
                 </div>
                 <button onClick={() => setShowTrash(false)} className="p-2 text-ds-text-tertiary hover:text-ds-text-primary">
@@ -1124,7 +1361,7 @@ function ExpenseTracker() {
                     <div className="w-12 h-12 bg-ds-bg-secondary rounded-full flex items-center justify-center mx-auto opacity-20">
                       <Trash2 size={24} />
                     </div>
-                    <p className="text-[13px] text-ds-text-tertiary">Lixeira vazia.</p>
+                    <p className="text-[13px] text-ds-text-tertiary">{t('trash.empty')}</p>
                   </div>
                 ) : (
                   trashTransactions.map(tx => (
@@ -1135,16 +1372,26 @@ function ExpenseTracker() {
                       </div>
                       <div className="flex items-center gap-2">
                         <button 
-                          onClick={() => tx.id && restoreFromTrash(tx.id)}
+                          onClick={() => {
+                            if(tx.id) {
+                              haptics.success();
+                              restoreFromTrash(tx.id);
+                            }
+                          }}
                           className="p-2 rounded-lg hover:bg-emerald-500/10 text-emerald-500 transition-colors"
-                          title="Restaurar"
+                          title={t('trash.restore')}
                         >
                           <RotateCcw size={18} />
                         </button>
                         <button 
-                          onClick={() => tx.id && permanentDelete(tx.id)}
+                          onClick={() => {
+                            if(tx.id) {
+                              haptics.heavyTap();
+                              permanentDelete(tx.id);
+                            }
+                          }}
                           className="p-2 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors"
-                          title="Excluir Permanentemente"
+                          title={t('trash.deletePermanently')}
                         >
                           <X size={18} />
                         </button>
@@ -1156,14 +1403,15 @@ function ExpenseTracker() {
 
               {trashTransactions.length > 0 && (
                 <div className="p-4 bg-ds-bg-secondary/50 border-t border-ds-border flex justify-between items-center">
-                  <p className="text-[11px] text-ds-text-tertiary">{trashTransactions.length} item(ns) na lixeira</p>
+                  <p className="text-[11px] text-ds-text-tertiary">{t('trash.viewTrash', { count: trashTransactions.length })}</p>
                   <button 
                     onClick={() => {
-                      if(window.confirm("Deseja esvaziar a lixeira permanentemente?")) emptyTrash();
+                      haptics.heavyTap();
+                      if(window.confirm(t('trash.confirmEmpty'))) emptyTrash();
                     }}
                     className="text-[12px] font-bold text-red-500 hover:underline"
                   >
-                    ESVAZIAR LIXEIRA
+                    {t('trash.emptyTrash')}
                   </button>
                 </div>
               )}
@@ -1171,6 +1419,113 @@ function ExpenseTracker() {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* UPLOAD TYPE MODAL */}
+      <AnimatePresence>
+        {showModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-sm bg-ds-bg-primary border-thin border-ds-border rounded-2xl p-6 shadow-2xl">
+              <h3 className="text-[18px] font-bold text-ds-text-primary mb-2">{t('upload.processReceipt')}</h3>
+              <p className="text-[13px] text-ds-text-secondary mb-6">{t('upload.classifyReceipt')}</p>
+              
+              <div className="space-y-3 mb-6">
+                <button onClick={() => setUploadType("Outflow")} className={`w-full p-4 rounded-xl border-thin flex items-center justify-between transition-all ${uploadType === "Outflow" ? "bg-fn-expense/10 border-fn-expense" : "bg-ds-bg-secondary border-ds-border"}`}>
+                  <div className="flex items-center gap-3">
+                    <TrendingDown className={uploadType === "Outflow" ? "text-fn-expense" : "text-ds-text-tertiary"} size={20} />
+                    <span className={`font-bold ${uploadType === "Outflow" ? "text-fn-expense" : "text-ds-text-primary"}`}>{t('upload.outflow')}</span>
+                  </div>
+                  {uploadType === "Outflow" && <CheckCircle2 size={18} className="text-fn-expense" />}
+                </button>
+                <button onClick={() => setUploadType("Inflow")} className={`w-full p-4 rounded-xl border-thin flex items-center justify-between transition-all ${uploadType === "Inflow" ? "bg-fn-income/10 border-fn-income" : "bg-ds-bg-secondary border-ds-border"}`}>
+                  <div className="flex items-center gap-3">
+                    <TrendingUp className={uploadType === "Inflow" ? "text-fn-income" : "text-ds-text-tertiary"} size={20} />
+                    <span className={`font-bold ${uploadType === "Inflow" ? "text-fn-income" : "text-ds-text-primary"}`}>{t('upload.inflow')}</span>
+                  </div>
+                  {uploadType === "Inflow" && <CheckCircle2 size={18} className="text-fn-income" />}
+                </button>
+              </div>
+
+              <div className="flex gap-3">
+                <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-3 rounded-xl border-thin border-ds-border text-ds-text-secondary font-bold hover:bg-ds-bg-secondary">{t('common.cancel').toUpperCase()}</button>
+                <button onClick={executeUpload} className="flex-1 px-4 py-3 rounded-xl bg-fn-balance text-white font-bold shadow-lg hover:scale-105 transition-all">{t('upload.process')}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MANUAL TRANSACTION MODAL */}
+      <AnimatePresence>
+        {showManualModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="w-full max-w-md bg-ds-bg-primary border-thin border-ds-border rounded-2xl shadow-2xl overflow-hidden">
+              <div className="p-6 border-b border-ds-border flex items-center justify-between">
+                <h3 className="text-[18px] font-bold text-ds-text-primary">{t('manual.title')}</h3>
+                <button onClick={() => setShowManualModal(false)} className="p-2 text-ds-text-tertiary hover:text-ds-text-primary"><X size={20} /></button>
+              </div>
+              <div className="p-6 space-y-4">
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black text-ds-text-tertiary uppercase tracking-widest">{t('manual.merchant')}</label>
+                  <input type="text" value={manualTx.merchant_name} onChange={e => setManualTx({...manualTx, merchant_name: e.target.value})} className="w-full p-3 bg-ds-bg-secondary border-thin border-ds-border rounded-xl text-ds-text-primary focus:border-fn-balance outline-none transition-all" placeholder={t('manual.merchantPlaceholder')} />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-ds-text-tertiary uppercase tracking-widest">{t('manual.amount')}</label>
+                    <input type="number" value={manualTx.total_amount} onChange={e => setManualTx({...manualTx, total_amount: e.target.value})} className="w-full p-3 bg-ds-bg-secondary border-thin border-ds-border rounded-xl text-ds-text-primary focus:border-fn-balance outline-none transition-all" placeholder="0.00" />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-ds-text-tertiary uppercase tracking-widest">{t('manual.type')}</label>
+                    <select value={manualTx.transaction_type} onChange={e => setManualTx({...manualTx, transaction_type: e.target.value as any})} className="w-full p-3 bg-ds-bg-secondary border-thin border-ds-border rounded-xl text-ds-text-primary focus:border-fn-balance outline-none transition-all">
+                      <option value="Outflow">{t('manual.outflow')}</option>
+                      <option value="Inflow">{t('manual.inflow')}</option>
+                    </select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-ds-text-tertiary uppercase tracking-widest">{t('manual.category')}</label>
+                    <select value={manualTx.category} onChange={e => setManualTx({...manualTx, category: e.target.value})} className="w-full p-3 bg-ds-bg-secondary border-thin border-ds-border rounded-xl text-ds-text-primary focus:border-fn-balance outline-none transition-all">
+                      {Object.keys(CATEGORY_ICONS).map(cat => <option key={cat} value={cat}>{t(`categories.${cat}`).replace('categories.', '')}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[11px] font-black text-ds-text-tertiary uppercase tracking-widest">{t('manual.payment')}</label>
+                    <input type="text" value={manualTx.payment_method} onChange={e => setManualTx({...manualTx, payment_method: e.target.value})} className="w-full p-3 bg-ds-bg-secondary border-thin border-ds-border rounded-xl text-ds-text-primary focus:border-fn-balance outline-none transition-all" placeholder={t('manual.paymentPlaceholder')} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[11px] font-black text-ds-text-tertiary uppercase tracking-widest">{t('manual.note')}</label>
+                  <textarea value={manualTx.note} onChange={e => setManualTx({...manualTx, note: e.target.value})} className="w-full p-3 bg-ds-bg-secondary border-thin border-ds-border rounded-xl text-ds-text-primary focus:border-fn-balance outline-none transition-all h-20 resize-none" placeholder={t('manual.notePlaceholder')} />
+                </div>
+                <button onClick={handleManualAdd} className="w-full py-4 bg-fn-balance text-white rounded-xl font-bold shadow-xl hover:scale-[1.02] active:scale-[0.98] transition-all mt-4">{t('manual.save')}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* FINWAVE BOTTOM NAVIGATION BAR */}
+      <div className="md:hidden fixed bottom-0 left-0 w-full glass-card rounded-b-none border-b-0 border-x-0 pb-[max(1rem,env(safe-area-inset-bottom))] z-50 flex justify-around p-4 shadow-glass backdrop-blur-xl">
+        {[
+          { id: "home", label: t('nav.home'), icon: <HomeIcon size={24} /> },
+          { id: "analytics", label: t('nav.analytics'), icon: <PieChartIcon size={24} /> },
+          { id: "goals", label: t('nav.goals'), icon: <Target size={24} /> },
+          { id: "settings", label: t('nav.settings'), icon: <Settings size={24} /> }
+        ].map((tab) => (
+          <button 
+            key={tab.id}
+            onClick={() => { 
+              haptics.lightTap();
+              setActiveTab(tab.id as ActiveTab); 
+              setDashboardMode(tab.id as any); 
+            }}
+            className={`flex flex-col items-center gap-1 min-w-[48px] min-h-[48px] transition-colors ${activeTab === tab.id ? "text-brand-orange" : "text-text-tertiary hover:text-text-secondary"}`}
+          >
+            {tab.icon}
+            <span className="text-[10px] font-medium">{tab.label}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

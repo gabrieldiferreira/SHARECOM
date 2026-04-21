@@ -1,0 +1,180 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model User {
+  id           String        @id @default(uuid())
+  name         String?
+  email        String        @unique
+  cpf_hash     String?
+  locale       String        @default("pt-BR") // i18n: pt-BR | en | es
+  created_at   DateTime      @default(now())
+  
+  accounts     Account[]
+  transactions Transaction[]
+  goals        Goal[]
+  budgets      Budget[]
+  alerts       Alert[]
+
+  @@map("users")
+}
+
+enum AccountType {
+  checking
+  savings
+  credit
+}
+
+model Account {
+  id             String        @id @default(uuid())
+  user_id        String
+  institution    String
+  masked_number  String?
+  balance_cents  Int           @default(0)
+  type           AccountType
+  currency       String        @default("BRL")
+  
+  user           User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  transactions   Transaction[]
+
+  @@map("accounts")
+}
+
+enum TransactionType {
+  income
+  expense
+}
+
+enum PaymentMethod {
+  pix
+  card
+  cash
+  transfer
+}
+
+model Transaction {
+  id                      String          @id @default(uuid())
+  user_id                 String
+  account_id              String?
+  amount_cents            Int
+  type                    TransactionType
+  category_id             String?
+  merchant_name           String?
+  merchant_logo_url       String?
+  description             String?
+  datetime                DateTime
+  payment_method          PaymentMethod?
+  pix_key                 String?
+  authentication_code     String?
+  transaction_external_id String?         @unique
+  location_lat            Float?
+  location_lng            Float?
+  tags                    Json?
+  is_recurring            Boolean         @default(false)
+  recurrence_pattern      String?
+  created_at              DateTime        @default(now())
+  deleted_at              DateTime?
+
+  user                    User            @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  account                 Account?        @relation(fields: [account_id], references: [id], onDelete: SetNull)
+  category                Category?       @relation(fields: [category_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id, datetime])
+  @@index([user_id, category_id])
+  @@index([user_id, merchant_name])
+  @@index([pix_key])
+  @@index([transaction_external_id])
+  @@map("transactions")
+}
+
+model Category {
+  id            String        @id @default(uuid())
+  name          String        // default (pt-BR) name
+  icon          String?
+  color         String?
+  parent_id     String?
+  is_deductible Boolean       @default(false)
+
+  parent        Category?            @relation("Subcategories", fields: [parent_id], references: [id])
+  subcategories Category[]           @relation("Subcategories")
+  transactions  Transaction[]
+  budgets       Budget[]
+  translations  CategoryTranslation[]
+
+  @@map("categories")
+}
+
+model CategoryTranslation {
+  id          String   @id @default(uuid())
+  category_id String
+  locale      String   // pt-BR | en | es
+  name        String
+
+  category    Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  @@unique([category_id, locale])
+  @@map("category_translations")
+}
+
+model Goal {
+  id                   String   @id @default(uuid())
+  user_id              String
+  name                 String
+  target_amount_cents  Int
+  current_amount_cents Int      @default(0)
+  deadline             DateTime?
+  saving_rules         Json?
+  created_at           DateTime @default(now())
+
+  user                 User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("goals")
+}
+
+model Budget {
+  id                 String   @id @default(uuid())
+  user_id            String
+  category_id        String
+  month              String   // format: YYYY-MM
+  limit_amount_cents Int
+
+  user               User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+  category           Category @relation(fields: [category_id], references: [id], onDelete: Cascade)
+
+  @@map("budgets")
+}
+
+enum AlertType {
+  unusual_amount
+  first_time_recipient
+  high_frequency
+  balance_threshold
+  duplicate_payment
+  fraud_suspect
+}
+
+enum AlertSeverity {
+  info
+  warning
+  critical
+}
+
+model Alert {
+  id         String        @id @default(uuid())
+  user_id    String
+  type       AlertType
+  severity   AlertSeverity
+  message    String
+  metadata   Json?
+  is_read    Boolean       @default(false)
+  created_at DateTime      @default(now())
+
+  user       User          @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@map("alerts")
+}

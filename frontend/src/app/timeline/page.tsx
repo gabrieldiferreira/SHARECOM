@@ -1,7 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
-import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, ChevronLeft, ChevronRight, Calendar, ArrowDownLeft, ArrowUpRight } from "lucide-react";
+import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, ChevronLeft, ChevronRight, Calendar, ArrowDownLeft, ArrowUpRight, } from "lucide-react";
+import GlassCard from "@/components/GlassCard";
+import GlassFAB from "@/components/GlassFAB";
 import { useTransactionStore } from "../../store/useTransactionStore";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
@@ -158,42 +160,38 @@ export default function TimelinePage() {
         </div>
       </div>
 
-      {/* Search & Filters */}
-      <div className="p-3 rounded-lg flex flex-col md:flex-row gap-3 items-center justify-between" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '8px' }}>
-        <div className="relative w-full md:w-80">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
-          <input
-            type="text"
-            placeholder="Pesquisar por nome, nota, categoria ou banco..."
-            value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-            className="w-full py-2 pl-9 pr-3 text-sm focus:outline-none"
-            style={{ backgroundColor: 'var(--bg-primary)', border: '0.5px solid var(--ds-border)', borderRadius: '6px', color: 'var(--text-primary)' }}
-          />
-        </div>
-        <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto no-scrollbar">
-          {[
-            { id: 'all', label: 'Tudo' },
-            { id: 'inflow', label: 'Entradas' },
-            { id: 'outflow', label: 'Saídas' },
-            { id: 'high_value', label: 'Altos Valores' },
-            { id: 'today', label: 'Hoje' },
-            { id: 'with_notes', label: 'Com Notas' }
-          ].map(f => (
-            <button
-              key={f.id}
-              onClick={() => { setActiveFilter(f.id); setCurrentPage(1); }}
-              className="px-3 py-1.5 text-label whitespace-nowrap transition-all"
-              style={{
-                backgroundColor: activeFilter === f.id ? '#3B82F6' : 'transparent',
-                color: activeFilter === f.id ? '#FFFFFF' : 'var(--text-secondary)',
-                border: activeFilter === f.id ? 'none' : '0.5px solid var(--ds-border)',
-                borderRadius: '6px',
-              }}
-            >
-              {f.label}
-            </button>
-          ))}
+      {/* Glassmorphic Sticky Header */}
+      <div className="sticky top-0 z-30 w-full">
+        <div className="glass-card-static flex flex-col md:flex-row gap-3 items-center justify-between p-3 rounded-2xl border border-white/10 shadow-lg backdrop-blur-2xl">
+          <div className="relative w-full md:w-80">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-tertiary)' }} />
+            <input
+              type="text"
+              placeholder="Pesquisar por nome, nota, categoria ou banco..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              className="glass-input w-full py-2 pl-9 pr-3 text-sm focus:outline-none"
+            />
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto no-scrollbar">
+            {[
+              { id: 'all', label: 'Tudo' },
+              { id: 'inflow', label: 'Entradas' },
+              { id: 'outflow', label: 'Saídas' },
+              { id: 'high_value', label: 'Altos Valores' },
+              { id: 'today', label: 'Hoje' },
+              { id: 'with_notes', label: 'Com Notas' }
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => { setActiveFilter(f.id); setCurrentPage(1); }}
+                className={`px-3 py-1.5 text-label whitespace-nowrap transition-all glass-input ${activeFilter === f.id ? 'bg-fuchsia-500 text-white' : 'bg-transparent text-[var(--text-secondary)]'}`}
+                style={{ borderRadius: '6px' }}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -236,14 +234,14 @@ export default function TimelinePage() {
                   >
                     {/* Category Icon */}
                     <div
-                      className="w-9 h-9 rounded-lg flex items-center justify-center shrink-0"
-                      style={{
-                        backgroundColor: `${CATEGORY_COLORS[tx.category] || '#6B7280'}15`,
-                        color: CATEGORY_COLORS[tx.category] || '#6B7280',
-                      }}
-                    >
-                      {CATEGORY_ICONS[tx.category] || <Receipt size={18} />}
-                    </div>
+  className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
+  style={{
+    backgroundColor: `${CATEGORY_COLORS[tx.category] || '#6B7280'}15`,
+    color: CATEGORY_COLORS[tx.category] || '#6B7280',
+  }}
+>
+  {CATEGORY_ICONS[tx.category] || <Receipt size={24} />}
+</div>
 
                     {/* Details */}
                     <div className="flex flex-col overflow-hidden flex-1 min-w-0">

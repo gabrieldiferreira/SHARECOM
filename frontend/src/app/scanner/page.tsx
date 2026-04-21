@@ -177,7 +177,7 @@ export default function ScannerPage() {
   /* ─── CAPTURE STEP ─── */
   if (step === "capture") {
     return (
-      <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-primary)" }}>
+      <div className="h-full flex flex-col hero-gradient">
         {/* Header */}
         <div className="flex items-center gap-3 p-4" style={{ borderBottom: "0.5px solid var(--ds-border)" }}>
           <Link href="/" className="p-1.5 rounded-md transition-colors" style={{ color: "var(--text-secondary)" }}>
@@ -186,90 +186,41 @@ export default function ScannerPage() {
           <h1 className="text-base font-medium" style={{ color: "var(--text-primary)" }}>Escanear Comprovante</h1>
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6">
-          {/* Illustration area */}
-          <div className="w-24 h-24 rounded-2xl flex items-center justify-center" style={{ backgroundColor: "var(--bg-secondary)" }}>
-            <Camera size={40} style={{ color: "#3B82F6" }} />
+        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 relative">
+          {/* Camera Viewfinder Placeholder */}
+          <div className="relative w-72 h-96 flex items-center justify-center">
+            <div className="absolute inset-0 rounded-3xl border-4 border-fuchsia-500/60 bg-black/20 flex items-center justify-center">
+              <div className="w-48 h-48 rounded-2xl border-4 border-fuchsia-500/80 bg-transparent" style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.2) inset' }} />
+            </div>
+            <Camera size={48} className="text-fuchsia-500 z-10" />
           </div>
 
-          <div className="text-center max-w-sm">
-            <h2 className="text-lg font-medium mb-2" style={{ color: "var(--text-primary)" }}>
-              Digitalize seu comprovante
-            </h2>
-            <p style={{ fontSize: "13px", color: "var(--text-secondary)", lineHeight: "1.5" }}>
-              Tire uma foto ou selecione uma imagem do comprovante. O OCR extrairá automaticamente os dados da transação via leitura óptica e RegEx.
-            </p>
-          </div>
+          {/* Large Capture Button */}
+          <button
+            onClick={() => cameraInputRef.current?.click()}
+            className="absolute bottom-12 left-1/2 -translate-x-1/2 w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center shadow-lg border-4 border-white/30 hover:scale-105 active:scale-95 transition-all"
+            style={{ backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }}
+          >
+            <Camera size={32} className="text-white" />
+          </button>
 
-          {/* Action buttons */}
-          <div className="flex flex-col gap-3 w-full max-w-xs">
-            <button
-              onClick={() => cameraInputRef.current?.click()}
-              className="flex items-center justify-center gap-2.5 w-full py-3 text-sm font-medium text-white transition-colors"
-              style={{ backgroundColor: "#3B82F6", borderRadius: "6px" }}
-            >
-              <Camera size={18} />
-              Tirar Foto
-            </button>
-
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center justify-center gap-2.5 w-full py-3 text-sm font-medium transition-colors"
-              style={{
-                backgroundColor: "var(--bg-secondary)",
-                color: "var(--text-primary)",
-                borderRadius: "6px",
-                border: "0.5px solid var(--ds-border)",
-              }}
-            >
-              <Upload size={18} />
-              Escolher Arquivo
-            </button>
-          </div>
-
-          {/* Note input */}
-          <div className="w-full max-w-xs">
-            <label className="block mb-1.5" style={{ fontSize: "12px", color: "var(--text-secondary)" }}>
-              Observação (opcional)
-            </label>
-            <input
-              type="text"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="Ex: Almoço de trabalho"
-              className="w-full px-3 py-2 text-sm outline-none transition-colors"
-              style={{
-                backgroundColor: "var(--bg-secondary)",
-                color: "var(--text-primary)",
-                borderRadius: "6px",
-                border: "0.5px solid var(--ds-border)",
-              }}
-            />
-          </div>
-
-          {/* Supported formats */}
-          <div className="flex items-center gap-4" style={{ fontSize: "11px", color: "var(--text-tertiary)" }}>
-            <span className="flex items-center gap-1"><ImageIcon size={12} /> JPG, PNG</span>
-            <span className="flex items-center gap-1"><FileText size={12} /> PDF</span>
-          </div>
+          {/* Hidden file inputs */}
+          <input
+            ref={cameraInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*,.pdf"
+            className="hidden"
+            onChange={handleFileSelect}
+          />
         </div>
-
-        {/* Hidden file inputs */}
-        <input
-          ref={cameraInputRef}
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*,.pdf"
-          className="hidden"
-          onChange={handleFileSelect}
-        />
       </div>
     );
   }

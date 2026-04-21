@@ -5,11 +5,24 @@ import { Analytics, getAnalytics } from "firebase/analytics";
 
 // Função para obter o domínio de auth de forma dinâmica
 const getAuthDomain = () => {
+  // 1. Prioridade absoluta para Localhost (evita erros de iframe/CORS localmente)
   if (typeof window !== "undefined") {
-    // Usamos o domínio atual (hostname) para garantir que a sessão 
-    // seja persistida no mesmo local onde o app está rodando.
+    const hostname = window.location.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return "unidoc-493609.firebaseapp.com";
+    }
+  }
+
+  // 2. Se houver uma variável de ambiente explícita, use-a (ex: produção com domínio customizado)
+  if (process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN && process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN !== "") {
+    return process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+  }
+
+  // 3. Fallback dinâmico para produção caso não haja env var
+  if (typeof window !== "undefined") {
     return window.location.hostname;
   }
+  
   return "unidoc-493609.firebaseapp.com";
 };
 

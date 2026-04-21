@@ -230,10 +230,14 @@ export default function ReportsPage() {
   const tooltipStyle = { backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", fontSize: "12px" };
 
   return (
-    <div className="p-4 md:p-6 space-y-6 font-sans w-full max-w-full relative">
+    <div className="px-4 pb-4 md:px-6 md:pb-6 space-y-6 font-sans w-full max-w-[100vw] overflow-x-hidden relative" style={{ 
+      paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)',
+      paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+      paddingRight: 'max(1rem, env(safe-area-inset-right))',
+    }}>
       {/* Notification Card */}
       {notification && (
-        <div className="fixed top-20 right-4 z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-[calc(env(safe-area-inset-top)+5rem)] right-[calc(env(safe-area-inset-right)+1rem)] z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
           <div className={`flex items-center gap-3 p-4 rounded-xl border-thin shadow-lg backdrop-blur-md ${
             notification.type === 'success' 
               ? 'bg-ds-bg-secondary/90 border-fn-income/30' 
@@ -341,13 +345,13 @@ export default function ReportsPage() {
           { label: "Saldo", value: fmtMoney(balance), colorClass: balance >= 0 ? "text-fn-income" : "text-fn-expense", bgClass: balance >= 0 ? "bg-[#10B981] bg-opacity-10" : "bg-[#EF4444] bg-opacity-10", icon: <DollarSign size={18} /> },
           { label: "Transações", value: String(filtered.length), colorClass: "text-fn-balance", bgClass: "bg-[#3B82F6] bg-opacity-10", icon: <Layers size={18} /> },
         ].map(c => (
-          <div key={c.label} className="p-3 rounded-lg flex items-center gap-2 sm:gap-3 bg-ds-bg-secondary border-thin border-ds-border">
+          <div key={c.label} className="p-2 sm:p-3 rounded-lg flex items-center gap-2 bg-ds-bg-secondary border-thin border-ds-border min-w-0">
             <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center shrink-0 ${c.colorClass} ${c.bgClass}`}>
               {c.icon}
             </div>
-            <div className="min-w-0">
-              <p className="text-[10px] sm:text-[12px] uppercase tracking-wider font-medium text-ds-text-secondary">{c.label}</p>
-              <p className={`tabular-nums font-medium text-[14px] sm:text-[22px] truncate ${c.colorClass}`}>{c.value}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-[11px] uppercase tracking-wider font-semibold text-ds-text-secondary truncate">{c.label}</p>
+              <p className={`tabular-nums font-bold text-[14px] sm:text-[20px] truncate ${c.colorClass}`}>{c.value}</p>
             </div>
           </div>
         ))}
@@ -383,7 +387,7 @@ export default function ReportsPage() {
                   {/* Pie: category distribution */}
                   <div className="flex flex-col items-center">
                     <p className="text-[14px] mb-4 font-medium text-center w-full text-ds-text-secondary">Distribuição por Categoria</p>
-                    <div className="w-full h-[280px]">
+                    <div className="w-full h-[280px] min-w-0">
                       <ResponsiveContainer width="100%" height="100%">
                         <PieChart>
                           <Pie
@@ -392,10 +396,10 @@ export default function ReportsPage() {
                             nameKey="name"
                             cx="50%"
                             cy="50%"
-                            outerRadius="80%"
-                            innerRadius="50%"
+                            outerRadius="70%"
+                            innerRadius="45%"
                             paddingAngle={2}
-                            label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`}
+                            label={({ percent }) => percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ""}
                             style={{ fontSize: "10px" }}
                           >
                             {categoryData.map((entry, i) => (
@@ -403,6 +407,7 @@ export default function ReportsPage() {
                             ))}
                           </Pie>
                           <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
+                          <Legend wrapperStyle={{ fontSize: "10px", paddingTop: "10px" }} />
                         </PieChart>
                       </ResponsiveContainer>
                     </div>
@@ -410,12 +415,12 @@ export default function ReportsPage() {
                   {/* Bar: inflow vs outflow by month */}
                   <div className="flex flex-col items-center">
                     <p className="text-[14px] mb-4 font-medium text-center w-full text-ds-text-secondary">Entradas vs Saídas (Mensal)</p>
-                    <div className="w-full h-[280px]">
+                    <div className="w-full h-[280px] min-w-0">
                       <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                        <BarChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--ds-border)" vertical={false} />
                           <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--text-tertiary)" }} axisLine={false} tickLine={false} />
-                          <YAxis tick={{ fontSize: 10, fill: "var(--text-tertiary)" }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: "var(--text-tertiary)" }} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} axisLine={false} tickLine={false} width={35} />
                           <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
                           <Legend wrapperStyle={{ fontSize: "10px", paddingTop: "10px" }} />
                           <Bar dataKey="inflow" name="Entradas" fill="#10B981" radius={[4, 4, 0, 0]} barSize={20} />
@@ -428,12 +433,12 @@ export default function ReportsPage() {
                 {/* Line: balance over time */}
                 <div className="pt-4">
                   <p className="text-[14px] mb-4 font-medium text-ds-text-secondary">Evolução do Saldo Mensal</p>
-                  <div className="w-full h-[220px]">
+                  <div className="w-full h-[220px] min-w-0">
                     <ResponsiveContainer width="100%" height="100%">
-                      <LineChart data={monthlyData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                      <LineChart data={monthlyData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                         <CartesianGrid strokeDasharray="3 3" stroke="var(--ds-border)" vertical={false} />
                         <XAxis dataKey="label" tick={{ fontSize: 10, fill: "var(--text-tertiary)" }} axisLine={false} tickLine={false} />
-                        <YAxis tick={{ fontSize: 10, fill: "var(--text-tertiary)" }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fontSize: 10, fill: "var(--text-tertiary)" }} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} axisLine={false} tickLine={false} width={35} />
                         <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
                         <Line type="monotone" dataKey="balance" name="Saldo" stroke="#3B82F6" strokeWidth={2} dot={{ fill: "#3B82F6", r: 4 }} activeDot={{ r: 6 }} />
                       </LineChart>
@@ -448,15 +453,16 @@ export default function ReportsPage() {
               <div className="space-y-6">
                 <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Categoria</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <div>
+                  <div className="min-w-0">
                     <ResponsiveContainer width="100%" height={300}>
                       <PieChart>
-                        <Pie data={categoryData} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={120} innerRadius={60} paddingAngle={2} label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} style={{ fontSize: "11px" }}>
+                        <Pie data={categoryData} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius="70%" innerRadius="40%" paddingAngle={2} label={({ percent }) => percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ""} style={{ fontSize: "11px" }}>
                           {categoryData.map((entry, i) => (
                             <Cell key={entry.name} fill={entry.color || PIE_COLORS[i % PIE_COLORS.length]} />
                           ))}
                         </Pie>
                         <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
+                        <Legend wrapperStyle={{ fontSize: "10px" }} />
                       </PieChart>
                     </ResponsiveContainer>
                   </div>
@@ -477,11 +483,11 @@ export default function ReportsPage() {
                   </div>
                 </div>
                 {/* Category table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
+                <div className="overflow-x-auto no-scrollbar -mx-3 sm:mx-0 px-3 sm:px-0">
+                  <table className="w-full border-collapse min-w-[600px]">
                     <thead>
                       <tr>
-                        {["Categoria", "Entradas", "Saídas", "Total", "Qtd", "% do Total"].map(h => (
+                        {["Categoria", "Entradas", "Saídas", "Total", "Qtd", "%"].map(h => (
                           <th key={h} className="text-[12px] text-left px-3 py-2 font-medium text-ds-text-secondary border-b-thin border-ds-border">{h}</th>
                         ))}
                       </tr>
@@ -534,8 +540,8 @@ export default function ReportsPage() {
                   </LineChart>
                 </ResponsiveContainer>
                 {/* Monthly table */}
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse">
+                <div className="overflow-x-auto no-scrollbar -mx-3 sm:mx-0 px-3 sm:px-0">
+                  <table className="w-full border-collapse min-w-[500px]">
                     <thead>
                       <tr>
                         {["Mês", "Entradas", "Saídas", "Saldo", "Transações"].map(h => (
@@ -564,18 +570,21 @@ export default function ReportsPage() {
               <div className="space-y-6">
                 <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Método de Pagamento</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <PieChart>
-                      <Pie data={paymentData} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius={110} innerRadius={50} paddingAngle={2} label={({ name, percent }) => `${name} ${((percent || 0) * 100).toFixed(0)}%`} style={{ fontSize: "11px" }}>
-                        {paymentData.map((_, i) => (
-                          <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
-                        ))}
-                      </Pie>
-                      <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
-                    </PieChart>
-                  </ResponsiveContainer>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
+                  <div className="min-w-0">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie data={paymentData} dataKey="total" nameKey="name" cx="50%" cy="50%" outerRadius="70%" innerRadius="40%" paddingAngle={2} label={({ percent }) => percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ""} style={{ fontSize: "11px" }}>
+                          {paymentData.map((_, i) => (
+                            <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
+                        <Legend wrapperStyle={{ fontSize: "10px" }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="overflow-x-auto no-scrollbar -mx-3 sm:mx-0 px-3 sm:px-0">
+                    <table className="w-full border-collapse min-w-[400px]">
                       <thead>
                         <tr>
                           {["Método", "Total", "Qtd", "%"].map(h => (
@@ -610,17 +619,19 @@ export default function ReportsPage() {
               <div className="space-y-6">
                 <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Instituição</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                  <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={institutionData.slice(0, 10)} layout="vertical">
-                      <CartesianGrid strokeDasharray="3 3" stroke="var(--ds-border)" />
-                      <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-tertiary)" }} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                      <YAxis dataKey="name" type="category" tick={{ fontSize: 11, fill: "var(--text-tertiary)" }} width={120} />
-                      <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
-                      <Bar dataKey="total" name="Total" fill="#8B5CF6" radius={[0, 4, 4, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                  <div className="overflow-x-auto">
-                    <table className="w-full border-collapse">
+                  <div className="min-w-0">
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={institutionData.slice(0, 10)} layout="vertical" margin={{ left: -10, right: 20 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="var(--ds-border)" horizontal={false} />
+                        <XAxis type="number" tick={{ fontSize: 11, fill: "var(--text-tertiary)" }} tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : v} />
+                        <YAxis dataKey="name" type="category" tick={{ fontSize: 10, fill: "var(--text-tertiary)" }} width={90} axisLine={false} tickLine={false} />
+                        <Tooltip contentStyle={tooltipStyle} formatter={(value) => fmtMoney(Number(value))} />
+                        <Bar dataKey="total" name="Total" fill="#8B5CF6" radius={[0, 4, 4, 0]} barSize={20} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="overflow-x-auto no-scrollbar -mx-3 sm:mx-0 px-3 sm:px-0">
+                    <table className="w-full border-collapse min-w-[400px]">
                       <thead>
                         <tr>
                           {["Instituição", "Total", "Qtd", "%"].map(h => (
