@@ -666,7 +666,7 @@ export default function ReportsPage() {
           </div>
         )}
       </div>
-    </div>
     <GlassFAB icon={<Download size={18} />} onClick={() => handleExport("pdf")} />
+    </div>
   );
 }

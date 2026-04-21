@@ -393,7 +393,7 @@ export default function TimelinePage() {
           </button>
         </div>
       )}
-    </div>
     <GlassFAB icon={<Plus size={20} />} onClick={() => window.location.href = '/transactions/new'} />
+    </div>
   );
 }
