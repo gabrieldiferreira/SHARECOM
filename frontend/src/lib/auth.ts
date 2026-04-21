@@ -58,3 +58,12 @@ export async function authenticatedFetch(
 
   return fetch(input, { ...init, headers: retryHeaders });
 }
+export async function logout() {
+  if (!auth) return;
+  try {
+    await auth.signOut();
+    window.location.href = "/login";
+  } catch (error) {
+    console.error("Erro ao deslogar:", error);
+  }
+}

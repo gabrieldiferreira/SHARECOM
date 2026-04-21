@@ -35,6 +35,8 @@ export default function LoginPage() {
       if (user) {
         console.log("Login: Usuário detectado, redirecionando...");
         window.location.href = "/";
+      } else {
+        setIsCheckingSession(false);
       }
     });
     return () => unsubscribe();
@@ -104,32 +106,41 @@ export default function LoginPage() {
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
             
             <div className="relative z-10 space-y-6">
-              <div className="text-center space-y-2 mb-8">
-                <h2 className="text-xl font-bold">Boas-vindas</h2>
-                <p className="text-slate-400 text-sm">Conecte sua conta para acessar o painel.</p>
-              </div>
-
-              <button
-                onClick={handleGoogleLogin}
-                disabled={isSigningIn}
-                className="w-full h-16 bg-white text-slate-900 rounded-2xl font-bold flex items-center justify-center gap-4 hover:bg-slate-100 transition-all active:scale-[0.98] disabled:opacity-50 shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
-              >
-                {isSigningIn ? (
-                  <div className="w-6 h-6 border-4 border-slate-900/10 border-t-blue-600 animate-spin rounded-full" />
-                ) : (
-                  <>
-                    <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G" />
-                    <span className="uppercase tracking-tight">Continuar com Google</span>
-                  </>
-                )}
-              </button>
-
-              {errorMessage && (
-                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                  <p className="text-red-400 text-[10px] text-center font-bold uppercase tracking-widest leading-relaxed">
-                    {errorMessage}
-                  </p>
+              {isCheckingSession ? (
+                <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                  <div className="w-10 h-10 border-4 border-white/10 border-t-blue-500 animate-spin rounded-full" />
+                  <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Validando Sessão...</p>
                 </div>
+              ) : (
+                <>
+                  <div className="text-center space-y-2 mb-8">
+                    <h2 className="text-xl font-bold">Boas-vindas</h2>
+                    <p className="text-slate-400 text-sm">Conecte sua conta para acessar o painel.</p>
+                  </div>
+
+                  <button
+                    onClick={handleGoogleLogin}
+                    disabled={isSigningIn}
+                    className="w-full h-16 bg-white text-slate-900 rounded-2xl font-bold flex items-center justify-center gap-4 hover:bg-slate-100 transition-all active:scale-[0.98] disabled:opacity-50 shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
+                  >
+                    {isSigningIn ? (
+                      <div className="w-6 h-6 border-4 border-slate-900/10 border-t-blue-600 animate-spin rounded-full" />
+                    ) : (
+                      <>
+                        <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G" />
+                        <span className="uppercase tracking-tight">Continuar com Google</span>
+                      </>
+                    )}
+                  </button>
+
+                  {errorMessage && (
+                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                      <p className="text-red-400 text-[10px] text-center font-bold uppercase tracking-widest leading-relaxed">
+                        {errorMessage}
+                      </p>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
