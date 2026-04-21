@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { 
   signInWithPopup, 
   signInWithRedirect, 
@@ -11,13 +11,31 @@ import {
 } from "firebase/auth";
 import { auth, provider } from "@/lib/firebase";
 import GlassCard from "@/components/GlassCard";
-import { Fingerprint } from "lucide-react";
 
 export default function LoginPage() {
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [mounted, setMounted] = useState(false);
   const [isCheckingSession, setIsCheckingSession] = useState(true);
+  const redirectStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (!mounted) return;
+    if (!isCheckingSession && !redirectStartedRef.current) {
+      redirectStartedRef.current = true;
+      setIsSigningIn(true);
+      if (!auth || !provider) {
+        setErrorMessage("Erro: Firebase não configurado.");
+        setIsSigningIn(false);
+        return;
+      }
+      signInWithRedirect(auth, provider).catch((e: any) => {
+        console.error("Auto sign-in failed", e);
+        setErrorMessage(e?.message || "Falha ao iniciar login");
+        setIsSigningIn(false);
+      });
+    }
+  }, [isCheckingSession, mounted]);
 
   useEffect(() => {
     setMounted(true);
@@ -121,34 +139,10 @@ export default function LoginPage() {
                     <p className="text-slate-400 text-sm">Conecte sua conta para acessar o painel.</p>
                   </div>
 
-                  <button
-  onClick={handleGoogleLogin}
-  disabled={isSigningIn}
-  className="w-full h-16 glass-card border-2 border-white/30 text-slate-900 font-bold flex items-center justify-center gap-4 rounded-2xl hover:bg-white/10 transition-all active:scale-[0.98] disabled:opacity-50 shadow-[0_10px_30px_rgba(255,255,255,0.1)]"
-  style={{ backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }}
->
-  {isSigningIn ? (
-    <div className="w-6 h-6 border-4 border-slate-900/10 border-t-blue-600 animate-spin rounded-full" />
-  ) : (
-    <>
-      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-6 h-6" alt="G" />
-      <span className="uppercase tracking-tight">Continuar com Google</span>
-    </>
-  )}
-</button>
-
-<div className="flex flex-col gap-2 mt-4">
-  <button
-    type="button"
-    className="w-full h-14 glass-card border-2 border-fuchsia-500/40 text-fuchsia-500 font-bold flex items-center justify-center gap-3 rounded-2xl hover:bg-fuchsia-500/10 transition-all active:scale-[0.98] shadow-[0_10px_30px_rgba(168,85,247,0.1)]"
-    style={{ backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }}
-    disabled={isSigningIn}
-  >
-    <Fingerprint size={22} />
-    <span className="uppercase tracking-tight">Entrar com biometria</span>
-  </button>
-  <a href="#" className="text-xs text-blue-400/80 hover:underline text-center mt-2">Esqueci minha senha</a>
-</div>
+                  <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                    <div className="w-10 h-10 border-4 border-white/10 border-t-blue-500 animate-spin rounded-full" />
+                    <p className="text-sm font-medium">Redirecionando para o Google — aguarde...</p>
+                  </div>
 
                   {errorMessage && (
                     <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
