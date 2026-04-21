@@ -81,26 +81,30 @@ export default function LoginPage() {
     try {
       console.log("Login: Iniciando fluxo de autenticação...");
       
+      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
       
-      // No mobile, o redirect é mais estável. No desktop, o popup é melhor.
-      if (isMobile) {
-        console.log("Login: Mobile. Usando Redirect.");
-        await signInWithRedirect(auth, provider);
-      } else {
-        console.log("Login: Desktop. Usando Popup.");
+      // On localhost, ALWAYS use popup to avoid Firebase Hosting handler issues
+      // On production mobile, use redirect if needed
+      if (isLocalhost || !isMobile) {
+        console.log("Login: Using Popup.");
         const result = await signInWithPopup(auth, provider);
         if (result.user) {
-           window.location.href = "/";
+          console.log("Login: Success via popup, redirecting...");
+          window.location.href = "/";
         } else {
-           setIsSigningIn(false);
+          setIsSigningIn(false);
         }
+      } else {
+        // Production mobile: use redirect
+        console.log("Login: Mobile. Using Redirect.");
+        await signInWithRedirect(auth, provider);
       }
     } catch (error: any) {
       console.error("Erro no login:", error);
       if (error.code === 'auth/popup-blocked') {
         setErrorMessage("O popup foi bloqueado pelo navegador. Por favor, clique novamente ou permita popups.");
-      } else {
+      } else if (error.code !== 'auth/cancelled-by-user') {
         setErrorMessage(error.message || "Falha ao autenticar.");
       }
       setIsSigningIn(false);
