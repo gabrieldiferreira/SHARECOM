@@ -1193,12 +1193,7 @@ function ExpenseTracker() {
                    <Globe size={16} className="text-brand-purple" />
                    <h3 className="text-[16px] font-semibold text-text-primary">{t('common.language')}</h3>
                  </div>
-                 <div className="space-y-5">
-                   <LanguageSwitcher />
-                   <div className="border-t border-glass-border pt-5">
-                     <ThemeToggle variant="full" />
-                   </div>
-                 </div>
+                 <LanguageSwitcher />
                </div>
 
                {/* Preferences */}
