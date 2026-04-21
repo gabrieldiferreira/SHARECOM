@@ -41,9 +41,22 @@ export default function ReportsPage() {
   const [customerName, setCustomerName] = useState("");
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
 
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
   useEffect(() => {
     setMounted(true);
-    fetchTransactions();
+    
+    // Proteção de Rota
+    import("../../lib/auth").then(({ getFirebaseAuthHeader }) => {
+      getFirebaseAuthHeader({ requireUser: true })
+        .then(() => {
+          setIsCheckingAuth(false);
+          fetchTransactions();
+        })
+        .catch(() => {
+          // O getFirebaseAuthHeader já redireciona para /login se falhar
+        });
+    });
   }, [fetchTransactions]);
 
   useEffect(() => {

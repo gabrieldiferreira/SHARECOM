@@ -39,9 +39,22 @@ export default function TimelinePage() {
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
 
+  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+
   useEffect(() => {
     setMounted(true);
-    fetchTransactions();
+    
+    // Proteção de Rota
+    import("../../lib/auth").then(({ getFirebaseAuthHeader }) => {
+      getFirebaseAuthHeader({ requireUser: true })
+        .then(() => {
+          setIsCheckingAuth(false);
+          fetchTransactions();
+        })
+        .catch(() => {
+          // O getFirebaseAuthHeader já redireciona para /login se falhar
+        });
+    });
   }, [fetchTransactions]);
 
   const formatDate = (dateStr: string) => {
