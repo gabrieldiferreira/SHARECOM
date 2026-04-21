@@ -160,7 +160,7 @@ export default function LoginPage() {
                 </>
               )}
             </div>
-          </div>
+          </GlassCard>
 
           <p className="text-center text-slate-500 text-[10px] uppercase tracking-[0.3em]">
             Secure Corporate Access
