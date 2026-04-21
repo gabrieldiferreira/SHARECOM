@@ -35,11 +35,31 @@ export default function LoginPage() {
         setIsSigningIn(false);
         return;
       }
-      signInWithRedirect(auth, provider).catch((e: any) => {
-        console.error("Auto sign-in failed", e);
-        setErrorMessage(e?.message || "Falha ao iniciar login");
-        setIsSigningIn(false);
-      });
+
+      const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+      if (isLocalhost) {
+        // Use popup in local development to avoid cross-origin handler/https issues
+        signInWithPopup(auth, provider)
+          .then((result) => {
+            if (result?.user) {
+              window.location.href = "/";
+            } else {
+              setIsSigningIn(false);
+            }
+          })
+          .catch((e: any) => {
+            console.error("Popup sign-in failed", e);
+            setErrorMessage(e?.message || "Falha ao iniciar login via popup. Permita popups ou use uma URL pública.");
+            setIsSigningIn(false);
+          });
+      } else {
+        signInWithRedirect(auth, provider).catch((e: any) => {
+          console.error("Auto sign-in failed", e);
+          setErrorMessage(e?.message || "Falha ao iniciar login");
+          setIsSigningIn(false);
+        });
+      }
     }
   }, [isCheckingSession, mounted]);
 
