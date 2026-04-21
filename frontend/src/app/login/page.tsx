@@ -21,47 +21,8 @@ export default function LoginPage() {
 
   useEffect(() => {
     if (!mounted) return;
-    // If OAuth callback params are present, skip auto-redirect to avoid redirect loops
-    const qp = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : new URLSearchParams();
-    if (qp.has('code') || qp.has('state') || qp.has('authuser') || qp.has('g_callback') || qp.has('oauth')) {
-      return;
-    }
-
-    if (!isCheckingSession && !redirectStartedRef.current) {
-      redirectStartedRef.current = true;
-      setIsSigningIn(true);
-      if (!auth || !provider) {
-        setErrorMessage("Erro: Firebase não configurado.");
-        setIsSigningIn(false);
-        return;
-      }
-
-      const isLocalhost = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-
-      if (isLocalhost) {
-        // Use popup in local development to avoid cross-origin handler/https issues
-        signInWithPopup(auth, provider)
-          .then((result) => {
-            if (result?.user) {
-              window.location.href = "/";
-            } else {
-              setIsSigningIn(false);
-            }
-          })
-          .catch((e: any) => {
-            console.error("Popup sign-in failed", e);
-            setErrorMessage(e?.message || "Falha ao iniciar login via popup. Permita popups ou use uma URL pública.");
-            setIsSigningIn(false);
-          });
-      } else {
-        signInWithRedirect(auth, provider).catch((e: any) => {
-          console.error("Auto sign-in failed", e);
-          setErrorMessage(e?.message || "Falha ao iniciar login");
-          setIsSigningIn(false);
-        });
-      }
-    }
-  }, [isCheckingSession, mounted]);
+    setIsCheckingSession(false);
+  }, [mounted]);
 
   useEffect(() => {
     setMounted(true);
@@ -75,7 +36,9 @@ export default function LoginPage() {
       }
     }).catch((error) => {
       console.error("Erro no Redirect Result:", error);
-      setErrorMessage(error.message);
+      if (error.code !== 'auth/redirect-cancelled-by-user') {
+        setErrorMessage(error.message);
+      }
     });
 
     const unsubscribe = onAuthStateChanged(auth, (user) => {
@@ -102,15 +65,13 @@ export default function LoginPage() {
       console.log("Login: Iniciando fluxo de autenticação...");
       
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      const hostname = window.location.hostname;
-      const isLocalhost = hostname === "localhost" || hostname === "127.0.0.1";
       
-      // No mobile, o redirect é mais estável. No desktop/localhost, o popup é melhor.
-      if (isMobile && !isLocalhost) {
-        console.log("Login: Mobile Produção. Usando Redirect.");
+      // No mobile, o redirect é mais estável. No desktop, o popup é melhor.
+      if (isMobile) {
+        console.log("Login: Mobile. Usando Redirect.");
         await signInWithRedirect(auth, provider);
       } else {
-        console.log("Login: Usando Popup.");
+        console.log("Login: Desktop. Usando Popup.");
         const result = await signInWithPopup(auth, provider);
         if (result.user) {
            window.location.href = "/";
@@ -121,7 +82,7 @@ export default function LoginPage() {
     } catch (error: any) {
       console.error("Erro no login:", error);
       if (error.code === 'auth/popup-blocked') {
-        setErrorMessage("Popup bloqueado pelo navegador.");
+        setErrorMessage("O popup foi bloqueado pelo navegador. Por favor, clique novamente ou permita popups.");
       } else {
         setErrorMessage(error.message || "Falha ao autenticar.");
       }
@@ -135,12 +96,12 @@ export default function LoginPage() {
     <div className="min-h-screen flex flex-col lg:flex-row hero-gradient text-white">
       {/* Lado Esquerdo / Mobile Top */}
       <div className="flex-1 flex flex-col p-8 justify-center items-center relative overflow-hidden">
-        <div className="absolute inset-0 z-0 opacity-20">
+        <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
           <img src="/ceo-mobile.png" className="w-full h-full object-cover" alt="Background" />
           <div className="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/50 to-transparent" />
         </div>
 
-        <div className="relative z-10 w-full max-w-md space-y-12">
+        <div className="relative z-50 w-full max-w-md space-y-12">
           <div className="text-center">
             <div className="w-20 h-20 mx-auto mb-6 p-4 bg-white/10 backdrop-blur-2xl rounded-3xl border border-white/20 shadow-2xl">
               <img src="/logo.png" className="w-full h-full object-contain" alt="Logo" />
@@ -165,13 +126,21 @@ export default function LoginPage() {
                     <p className="text-slate-400 text-sm">Conecte sua conta para acessar o painel.</p>
                   </div>
 
-                  <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                    <div className="w-10 h-10 border-4 border-white/10 border-t-blue-500 animate-spin rounded-full" />
-                    <p className="text-sm font-medium">Redirecionando para o Google — aguarde...</p>
-                  </div>
+                  <button
+                    onClick={handleGoogleLogin}
+                    disabled={isSigningIn}
+                    className="relative w-full flex items-center justify-center gap-3 px-6 py-4 bg-white text-black rounded-2xl font-bold text-sm transition-all hover:bg-slate-100 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed shadow-xl group pointer-events-auto z-10"
+                  >
+                    {isSigningIn ? (
+                      <div className="w-5 h-5 border-2 border-black/10 border-t-black animate-spin rounded-full" />
+                    ) : (
+                      <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5 group-hover:scale-110 transition-transform" alt="Google" />
+                    )}
+                    {isSigningIn ? "AUTENTICANDO..." : "ENTRAR COM GOOGLE"}
+                  </button>
 
                   {errorMessage && (
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
+                    <div className="mt-4 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
                       <p className="text-red-400 text-[10px] text-center font-bold uppercase tracking-widest leading-relaxed">
                         {errorMessage}
                       </p>
