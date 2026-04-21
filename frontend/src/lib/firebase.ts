@@ -5,10 +5,12 @@ import { Analytics, getAnalytics } from "firebase/analytics";
 
 // Função para obter o domínio de auth de forma dinâmica
 const getAuthDomain = () => {
-  // Usamos o seu domínio de marca em todos os ambientes (inclusive localhost)
-  // Isso garante que o usuário sempre veja o seu domínio no popup de login.
-  // IMPORTANTE: auth.sharecom.com.br deve estar autorizado no Firebase e Google Cloud.
-  return "auth.sharecom.com.br";
+  if (typeof window !== "undefined") {
+    // Usamos o domínio atual (hostname) para garantir que a sessão 
+    // seja persistida no mesmo local onde o app está rodando.
+    return window.location.hostname;
+  }
+  return "unidoc-493609.firebaseapp.com";
 };
 
 const firebaseConfig = {
