@@ -17,6 +17,21 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   eslint: { ignoreDuringBuilds: true },
   typescript: { ignoreBuildErrors: true },
+  experimental: {
+    memoryBasedWorkersCount: true,
+    optimizeCss: true,
+  },
+  env: {
+    REDIS_OPTIONAL: 'true',
+  },
+  webpack: (config: any, { isServer }: { isServer: boolean }) => {
+    if (isServer) {
+      config.ignoreWarnings = [
+        { module: /node_modules/ },
+      ];
+    }
+    return config;
+  },
   async rewrites() {
     return [
       {

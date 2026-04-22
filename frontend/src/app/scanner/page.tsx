@@ -1,12 +1,14 @@
 "use client";
 
+import NextImage from "next/image";
 import React, { useState, useRef, useCallback } from "react";
-import { Camera, Upload, X, Loader2, CheckCircle2, AlertTriangle, RotateCcw, Save, ChevronLeft, FileText, ImageIcon, Pencil } from "lucide-react";
+import { Camera, Upload, X, Loader2, CheckCircle2, AlertTriangle, RotateCcw, Save, ChevronLeft, FileText, Image as LucideImage, Pencil, Flashlight, PencilLine } from "lucide-react";
 import { getApiUrl } from "../../lib/api";
 import { authenticatedFetch } from "../../lib/auth";
 import { useTransactionStore } from "../../store/useTransactionStore";
 import { TransactionEntity } from "../../lib/db";
 import Link from "next/link";
+import { motion, AnimatePresence } from "framer-motion";
 
 type ScanStep = "capture" | "preview" | "processing" | "result" | "error";
 
@@ -36,6 +38,7 @@ export default function ScannerPage() {
   const [errorMsg, setErrorMsg] = useState("");
   const [idempotent, setIdempotent] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
+  const [flashEnabled, setFlashEnabled] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -58,7 +61,6 @@ export default function ScannerPage() {
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setSelectedFile(file);
     const url = URL.createObjectURL(file);
     setPreviewUrl(url);
@@ -174,34 +176,85 @@ export default function ScannerPage() {
     }
   };
 
-  /* ─── CAPTURE STEP ─── */
+  /* ─── CAPTURE STEP - Full-screen camera viewfinder ─── */
   if (step === "capture") {
     return (
-      <div className="h-full flex flex-col hero-gradient">
-        {/* Header */}
-        <div className="flex items-center gap-3 p-4" style={{ borderBottom: "0.5px solid var(--ds-border)" }}>
-          <Link href="/" className="p-1.5 rounded-md transition-colors" style={{ color: "var(--text-secondary)" }}>
-            <ChevronLeft size={20} />
-          </Link>
-          <h1 className="text-base font-medium" style={{ color: "var(--text-primary)" }}>Escanear Comprovante</h1>
+      <div className="h-full flex flex-col relative overflow-hidden" style={{ backgroundColor: '#0D0D12' }}>
+        {/* Full-screen gradient overlay */}
+        <div className="absolute inset-0 z-0">
+          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_rgba(139,92,246,0.15)_0%,_transparent_70%)]" />
         </div>
 
-        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 relative">
-          {/* Camera Viewfinder Placeholder */}
-          <div className="relative w-72 h-96 flex items-center justify-center">
-            <div className="absolute inset-0 rounded-3xl border-4 border-fuchsia-500/60 bg-black/20 flex items-center justify-center">
-              <div className="w-48 h-48 rounded-2xl border-4 border-fuchsia-500/80 bg-transparent" style={{ boxShadow: '0 0 0 9999px rgba(0,0,0,0.2) inset' }} />
+        {/* Header with flash toggle */}
+        <div className="flex items-center justify-between p-4 relative z-10">
+          <Link href="/" className="p-2 rounded-full transition-colors" style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}>
+            <ChevronLeft size={22} />
+          </Link>
+          <h1 className="text-base font-semibold text-white">Escanear Comprovante</h1>
+          <button 
+            onClick={() => setFlashEnabled(!flashEnabled)}
+            className="p-2 rounded-full transition-all"
+            style={{ 
+              background: flashEnabled ? 'rgba(255, 193, 7, 0.3)' : 'rgba(255,255,255,0.1)',
+              color: flashEnabled ? '#FFEB3B' : 'white',
+            }}
+          >
+            <Flashlight size={22} />
+          </button>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center p-6 gap-6 relative z-10">
+          {/* Camera Viewfinder with rounded-corner detection box */}
+          <div className="relative w-[85vw] max-w-sm h-[55vh] flex items-center justify-center">
+            <div 
+              className="absolute inset-0 rounded-[32px] border-2 border-white/20 flex items-center justify-center"
+              style={{ 
+                background: 'rgba(255, 255, 255, 0.02)',
+                boxShadow: 'inset 0 0 0 9999px rgba(0,0,0,0.3)',
+              }}
+              role="img"
+              aria-label="Camera viewfinder"
+            >
+              {/* Corner markers */}
+              <div className="absolute top-4 left-4 w-8 h-8 border-l-2 border-t-2 border-purple-500/80 rounded-tl-lg" />
+              <div className="absolute top-4 right-4 w-8 h-8 border-r-2 border-t-2 border-purple-500/80 rounded-tr-lg" />
+              <div className="absolute bottom-4 left-4 w-8 h-8 border-l-2 border-b-2 border-purple-500/80 rounded-bl-lg" />
+              <div className="absolute bottom-4 right-4 w-8 h-8 border-r-2 border-b-2 border-purple-500/80 rounded-br-lg" />
+              
+              {/* Center scan icon */}
+              <Camera size={56} className="text-purple-400/60" />
             </div>
-            <Camera size={48} className="text-fuchsia-500 z-10" />
+            
+            {/* Hint text */}
+            <p className="absolute -bottom-16 text-center text-sm text-white/50">
+              Posicione o comprovante Pix
+            </p>
           </div>
 
-          {/* Large Capture Button */}
+          {/* Large purple circle capture button */}
           <button
             onClick={() => cameraInputRef.current?.click()}
-            className="absolute bottom-12 left-1/2 -translate-x-1/2 w-20 h-20 rounded-full bg-gradient-to-br from-purple-500 to-fuchsia-500 flex items-center justify-center shadow-lg border-4 border-white/30 hover:scale-105 active:scale-95 transition-all"
-            style={{ backdropFilter: 'blur(40px)', WebkitBackdropFilter: 'blur(40px)' }}
+            className="absolute bottom-8 left-1/2 -translate-x-1/2 w-20 h-20 rounded-full flex items-center justify-center shadow-lg hover:scale-105 active:scale-95 transition-all"
+            style={{
+              background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+              boxShadow: '0 4px 30px rgba(139, 92, 246, 0.5)',
+              border: '4px solid rgba(255,255,255,0.3)',
+            }}
           >
             <Camera size={32} className="text-white" />
+          </button>
+
+          {/* Gallery button - bottom left */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            className="absolute bottom-10 left-8 p-3 rounded-full transition-all"
+            style={{ 
+              background: 'rgba(255,255,255,0.1)',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: 'white',
+            }}
+          >
+            <LucideImage size={22} />
           </button>
 
           {/* Hidden file inputs */}
@@ -249,9 +302,11 @@ export default function ScannerPage() {
             style={{ borderRadius: "8px", border: "0.5px solid var(--ds-border)", backgroundColor: "var(--bg-secondary)" }}
           >
             {isImage && previewUrl ? (
-              <img
+              <NextImage
                 src={previewUrl}
                 alt="Comprovante"
+                width={500}
+                height={500}
                 className="w-full h-auto max-h-[50vh] object-contain"
               />
             ) : (
@@ -333,167 +388,173 @@ export default function ScannerPage() {
     );
   }
 
-  /* ─── RESULT STEP ─── */
+  /* ─── RESULT STEP - Glassmorphic bottom sheet ─── */
   if (step === "result" && editData) {
     const isInflow = editData.transaction_type === "Inflow";
     const amountColor = isInflow ? "#10B981" : "#EF4444";
 
     return (
-      <div className="h-full flex flex-col" style={{ backgroundColor: "var(--bg-primary)" }}>
+      <div className="h-full flex flex-col relative" style={{ backgroundColor: "#0D0D12" }}>
+        {/* Darkened background overlay */}
+        <div className="absolute inset-0 z-0" style={{ background: 'rgba(0,0,0,0.6)' }} />
+
         {/* Header */}
-        <div className="flex items-center justify-between p-4" style={{ borderBottom: "0.5px solid var(--ds-border)" }}>
+        <div className="flex items-center justify-between p-4 relative z-10" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
           <div className="flex items-center gap-3">
-            <Link href="/" className="p-1.5 rounded-md" style={{ color: "var(--text-secondary)" }}>
+            <Link href="/" className="p-2 rounded-full" style={{ background: 'rgba(255,255,255,0.1)', color: 'white' }}>
               <ChevronLeft size={20} />
             </Link>
-            <h1 className="text-base font-medium" style={{ color: "var(--text-primary)" }}>Resultado</h1>
+            <h1 className="text-base font-semibold" style={{ color: 'white' }}>Resultado</h1>
           </div>
           {!isEditing && (
             <button
               onClick={() => setIsEditing(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium transition-colors"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium rounded-xl transition-colors"
               style={{
-                backgroundColor: "var(--bg-secondary)",
-                color: "var(--text-secondary)",
-                borderRadius: "6px",
-                border: "0.5px solid var(--ds-border)",
+                background: 'rgba(255,255,255,0.05)',
+                border: '1px solid rgba(255,255,255,0.1)',
+                color: 'rgba(255,255,255,0.7)',
               }}
             >
-              <Pencil size={13} />
+              <PencilLine size={14} />
               Editar
             </button>
           )}
         </div>
 
-        <div className="flex-1 overflow-auto p-4">
-          {/* Status badge */}
-          {idempotent && (
-            <div className="flex items-center gap-2 px-3 py-2 mb-4" style={{ backgroundColor: "rgba(245, 158, 11, 0.1)", borderRadius: "6px", fontSize: "12px", color: "#F59E0B" }}>
-              <AlertTriangle size={14} />
-              Este comprovante já foi registrado anteriormente.
-            </div>
-          )}
+        <div className="flex-1 overflow-auto p-4 relative z-10">
+          {/* Status badges */}
+          <AnimatePresence>
+            {idempotent && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-4 py-3 mb-4 rounded-xl"
+                style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)' }}
+              >
+                <AlertTriangle size={16} className="text-amber-500" />
+                <span className="text-sm text-amber-400">Comprovante duplicado</span>
+              </motion.div>
+            )}
 
-          {editData.needs_manual_review && !idempotent && (
-            <div className="flex items-center gap-2 px-3 py-2 mb-4" style={{ backgroundColor: "rgba(245, 158, 11, 0.1)", borderRadius: "6px", fontSize: "12px", color: "#F59E0B" }}>
-              <AlertTriangle size={14} />
-              Revise os dados — o OCR não teve total confiança na extração.
-            </div>
-          )}
+            {editData.needs_manual_review && !idempotent && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-4 py-3 mb-4 rounded-xl"
+                style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)' }}
+              >
+                <AlertTriangle size={16} className="text-amber-500" />
+                <span className="text-sm text-amber-400">Revise os dados extraídos</span>
+              </motion.div>
+            )}
 
-          {!idempotent && !editData.needs_manual_review && (
-            <div className="flex items-center gap-2 px-3 py-2 mb-4" style={{ backgroundColor: "rgba(16, 185, 129, 0.1)", borderRadius: "6px", fontSize: "12px", color: "#10B981" }}>
-              <CheckCircle2 size={14} />
-              Dados extraídos e salvos com sucesso!
-            </div>
-          )}
+            {!idempotent && !editData.needs_manual_review && (
+              <motion.div 
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex items-center gap-2 px-4 py-3 mb-4 rounded-xl"
+                style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)' }}
+              >
+                <CheckCircle2 size={16} className="text-emerald-500" />
+                <span className="text-sm text-emerald-400">Salvo com sucesso!</span>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
-          {/* Amount card */}
-          <div className="mb-4 p-4 text-center" style={{ backgroundColor: "var(--bg-secondary)", borderRadius: "8px" }}>
-            <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "4px" }}>
-              {isInflow ? "Valor recebido" : "Valor pago"}
-            </p>
-            {isEditing ? (
-              <input
-                type="number"
-                step="0.01"
-                value={editData.total_amount}
-                onChange={(e) => setEditData({ ...editData, total_amount: parseFloat(e.target.value) || 0 })}
-                className="w-full text-center outline-none valor-financeiro"
-                style={{
-                  fontSize: "28px",
-                  fontWeight: 500,
-                  color: amountColor,
-                  backgroundColor: "transparent",
-                  border: "none",
-                  borderBottom: "0.5px solid var(--ds-border)",
-                  paddingBottom: "4px",
-                }}
-              />
-            ) : (
-              <p className="valor-financeiro" style={{ fontSize: "28px", fontWeight: 500, color: amountColor }}>
-                {isInflow ? "" : "-"}{formatCurrency(editData.total_amount)}
+          {/* Glassmorphic Bottom Sheet */}
+          <div 
+            className="rounded-3xl overflow-hidden"
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.03)',
+              backdropFilter: 'blur(40px)',
+              WebkitBackdropFilter: 'blur(40px)',
+              border: '1px solid rgba(255, 255, 255, 0.08)',
+            }}
+          >
+            {/* Amount card */}
+            <div className="p-6 text-center">
+              <p className="text-xs text-white/50 mb-1">
+                {isInflow ? 'Valor recebido' : 'Valor pago'}
               </p>
+              {isEditing ? (
+                <input
+                  type="number"
+                  step="0.01"
+                  value={editData.total_amount}
+                  onChange={(e) => setEditData({ ...editData, total_amount: parseFloat(e.target.value) || 0 })}
+                  className="w-full text-center outline-none bg-transparent"
+                  style={{
+                    fontSize: "32px",
+                    fontWeight: 700,
+                    color: amountColor,
+                    borderBottom: '1px solid rgba(255,255,255,0.1)',
+                    paddingBottom: '8px',
+                  }}
+                />
+              ) : (
+                <p style={{ fontSize: "36px", fontWeight: 700, color: amountColor }}>
+                  {isInflow ? '+' : '-'}R$ {editData.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                </p>
+              )}
+            </div>
+
+            {/* Details - Editable fields */}
+            <div className="divide-y" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+              {[
+                { label: "Estabelecimento", key: "merchant_name" as const, value: editData.merchant_name },
+                { label: "Data", key: "transaction_date" as const, value: editData.transaction_date.slice(0, 16) },
+                { label: "Tipo", key: "transaction_type" as const, value: editData.transaction_type },
+                { label: "Forma", key: "payment_method" as const, value: editData.payment_method },
+                { label: "Categoria", key: "smart_category" as const, value: editData.smart_category },
+              ].map((field, i) => (
+                <div
+                  key={field.key}
+                  className="flex items-center justify-between px-6 py-4"
+                >
+                  <span className="text-xs text-white/50">{field.label}</span>
+                  {isEditing ? (
+                    field.key === "transaction_type" ? (
+                      <select
+                        value={editData.transaction_type}
+                        onChange={(e) => setEditData({ ...editData, transaction_type: e.target.value as "Inflow" | "Outflow" })}
+                        className="text-right bg-transparent outline-none text-white font-medium"
+                      >
+                        <option value="Outflow" className="bg-[#0D0D12]">Saída</option>
+                        <option value="Inflow" className="bg-[#0D0D12]">Entrada</option>
+                      </select>
+                    ) : (
+                      <input
+                        type="text"
+                        value={(editData as any)[field.key] || ""}
+                        onChange={(e) => setEditData({ ...editData, [field.key]: e.target.value })}
+                        className="text-right bg-transparent outline-none text-white font-medium"
+                        style={{ borderBottom: '1px solid rgba(255,255,255,0.2)' }}
+                      />
+                    )
+                  ) : (
+                    <span className="text-sm font-medium text-white">
+                      {field.key === "transaction_type"
+                        ? (field.value === "Inflow" ? "Entrada" : "Saída")
+                        : field.value}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+
+            {/* Note */}
+            {note && (
+              <div className="p-4" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
+                <p className="text-xs text-white/50 mb-1">Observação</p>
+                <p className="text-sm text-white italic">&ldquo;{note}&rdquo;</p>
+              </div>
             )}
           </div>
-
-          {/* Details */}
-          <div className="flex flex-col gap-0" style={{ backgroundColor: "var(--bg-secondary)", borderRadius: "8px", overflow: "hidden" }}>
-            {[
-              { label: "Estabelecimento", key: "merchant_name" as const, value: editData.merchant_name },
-              { label: "Categoria", key: "smart_category" as const, value: editData.smart_category },
-              { label: "Data", key: "transaction_date" as const, value: editData.transaction_date, display: formatDate(editData.transaction_date) },
-              { label: "Tipo", key: "transaction_type" as const, value: editData.transaction_type },
-              { label: "Forma de pagamento", key: "payment_method" as const, value: editData.payment_method },
-              ...(editData.destination_institution ? [{ label: "Instituição destino", key: "destination_institution" as const, value: editData.destination_institution }] : []),
-              ...(editData.transaction_id ? [{ label: "ID da transação", key: "transaction_id" as const, value: editData.transaction_id }] : []),
-              ...(editData.masked_cpf ? [{ label: "CPF", key: "masked_cpf" as const, value: editData.masked_cpf }] : []),
-            ].map((field, i, arr) => (
-              <div
-                key={field.key}
-                className="flex items-center justify-between px-4 py-3"
-                style={i < arr.length - 1 ? { borderBottom: "0.5px solid var(--ds-border)" } : {}}
-              >
-                <span style={{ fontSize: "12px", color: "var(--text-secondary)" }}>{field.label}</span>
-                {isEditing && field.key !== "transaction_id" && field.key !== "masked_cpf" ? (
-                  field.key === "transaction_type" ? (
-                    <select
-                      value={editData.transaction_type}
-                      onChange={(e) => setEditData({ ...editData, transaction_type: e.target.value as "Inflow" | "Outflow" })}
-                      className="text-right outline-none"
-                      style={{
-                        fontSize: "14px",
-                        fontWeight: 500,
-                        color: "var(--text-primary)",
-                        backgroundColor: "transparent",
-                        border: "none",
-                      }}
-                    >
-                      <option value="Outflow">Saída</option>
-                      <option value="Inflow">Entrada</option>
-                    </select>
-                  ) : (
-                    <input
-                      type={field.key === "transaction_date" ? "datetime-local" : "text"}
-                      value={
-                        field.key === "transaction_date"
-                          ? editData.transaction_date.slice(0, 16)
-                          : (editData[field.key] || "")
-                      }
-                      onChange={(e) => setEditData({ ...editData, [field.key]: e.target.value })}
-                      className="text-right outline-none max-w-[60%]"
-                      style={{
-                        fontSize: "14px",
-                        fontWeight: 500,
-                        color: "var(--text-primary)",
-                        backgroundColor: "transparent",
-                        border: "none",
-                        borderBottom: "0.5px solid var(--ds-border)",
-                      }}
-                    />
-                  )
-                ) : (
-                  <span style={{ fontSize: "14px", fontWeight: 500, color: "var(--text-primary)" }}>
-                    {field.key === "transaction_type"
-                      ? (field.value === "Inflow" ? "Entrada" : "Saída")
-                      : (field.display || field.value)}
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
-
-          {/* Note */}
-          {note && (
-            <div className="mt-4 px-4 py-3" style={{ backgroundColor: "var(--bg-secondary)", borderRadius: "8px" }}>
-              <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginBottom: "2px" }}>Observação</p>
-              <p style={{ fontSize: "14px", color: "var(--text-primary)" }}>{note}</p>
-            </div>
-          )}
         </div>
 
-        {/* Bottom actions */}
-        <div className="p-4 flex gap-3" style={{ borderTop: "0.5px solid var(--ds-border)" }}>
+        {/* Bottom CTA actions */}
+        <div className="p-4 flex gap-3 relative z-10" style={{ borderTop: '1px solid rgba(255,255,255,0.08)' }}>
           {isEditing ? (
             <>
               <button
@@ -501,20 +562,19 @@ export default function ScannerPage() {
                   setEditData(extractedData ? { ...extractedData } : null);
                   setIsEditing(false);
                 }}
-                className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold rounded-xl transition-colors"
                 style={{
-                  backgroundColor: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                  borderRadius: "6px",
-                  border: "0.5px solid var(--ds-border)",
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'white',
                 }}
               >
                 Cancelar
               </button>
               <button
                 onClick={() => setIsEditing(false)}
-                className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-white transition-colors"
-                style={{ backgroundColor: "#10B981", borderRadius: "6px" }}
+                className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold text-white rounded-xl"
+                style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}
               >
                 <CheckCircle2 size={16} />
                 Confirmar
@@ -524,12 +584,11 @@ export default function ScannerPage() {
             <>
               <button
                 onClick={resetAll}
-                className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold rounded-xl transition-colors"
                 style={{
-                  backgroundColor: "var(--bg-secondary)",
-                  color: "var(--text-primary)",
-                  borderRadius: "6px",
-                  border: "0.5px solid var(--ds-border)",
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  color: 'white',
                 }}
               >
                 <RotateCcw size={16} />
@@ -537,8 +596,11 @@ export default function ScannerPage() {
               </button>
               <Link
                 href="/"
-                className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-white transition-colors no-underline"
-                style={{ backgroundColor: "#3B82F6", borderRadius: "6px" }}
+                className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold text-white rounded-xl no-underline"
+                style={{ 
+                  background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+                  boxShadow: '0 4px 20px rgba(139, 92, 246, 0.3)',
+                }}
               >
                 <CheckCircle2 size={16} />
                 Ir ao Painel

@@ -1,31 +1,11 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { Auth, getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
-import { Firestore, getFirestore } from "firebase/firestore";
+import { Firestore, enableIndexedDbPersistence, getFirestore } from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
 // Função para obter o domínio de auth de forma dinâmica
 const getAuthDomain = () => {
-  // 1. Prioridade absoluta para Localhost (evita erros de iframe/CORS localmente)
-  if (typeof window !== "undefined") {
-    const hostname = window.location.hostname;
-    if (hostname === "localhost" || hostname === "127.0.0.1") {
-      // During local development, use the local host as authDomain so the
-      // Firebase client doesn't try to fetch hosted init.json from
-      // unidoc-493609.firebaseapp.com which may not exist.
-      return hostname;
-    }
-  }
-
-  // 2. Se houver uma variável de ambiente explícita, use-a (ex: produção com domínio customizado)
-  if (process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN && process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN !== "") {
-    return process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
-  }
-
-  // 3. Fallback dinâmico para produção caso não haja env var
-  if (typeof window !== "undefined") {
-    return window.location.hostname;
-  }
-  
+  // Always use the default Firebase domain to avoid 404s on init.json with custom domains
   return "unidoc-493609.firebaseapp.com";
 };
 
@@ -65,6 +45,9 @@ if (hasFirebaseConfig) {
   provider = new GoogleAuthProvider();
   db = getFirestore(app);
   if (typeof window !== "undefined") {
+    enableIndexedDbPersistence(db).catch((error) => {
+      console.log('Offline mode failed', error);
+    });
     analytics = getAnalytics(app);
   }
 }

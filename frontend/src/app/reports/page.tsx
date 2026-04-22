@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback } from "react";
 import {
   PieChart, Pie, BarChart, Bar, LineChart, Line,
   XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid, Legend,
@@ -30,6 +30,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 const PIE_COLORS = ["#8B5CF6", "#3B82F6", "#F59E0B", "#EC4899", "#14B8A6", "#6B7280"];
 
 type ReportType = "overview" | "category" | "monthly" | "payment" | "institution";
+type TimeRange = "monthly" | "quarterly" | "annual";
 
 interface DateRange { start: string; end: string }
 
@@ -38,29 +39,61 @@ export default function ReportsPage() {
   usePullToRefresh(fetchTransactions);
   const [mounted, setMounted] = useState(false);
   const [activeReport, setActiveReport] = useState<ReportType>("overview");
+  const [timeRange, setTimeRange] = useState<TimeRange>("monthly");
   const [exporting, setExporting] = useState<"pdf" | "excel" | null>(null);
   const [dateRange, setDateRange] = useState<DateRange>({ start: "", end: "" });
   const [typeFilter, setTypeFilter] = useState<"all" | "Inflow" | "Outflow">("all");
   const [customerName, setCustomerName] = useState("");
   const [notification, setNotification] = useState<{ type: 'success' | 'error', message: string } | null>(null);
+  const [isLoadingReports, setIsLoadingReports] = useState(false);
+  const [reportData, setReportData] = useState<any>(null);
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
   useEffect(() => {
     setMounted(true);
     
-    // Proteção de Rota
     import("../../lib/auth").then(({ getFirebaseAuthHeader }) => {
       getFirebaseAuthHeader({ requireUser: true })
         .then(() => {
           setIsCheckingAuth(false);
           fetchTransactions();
         })
-        .catch(() => {
-          // O getFirebaseAuthHeader já redireciona para /login se falhar
-        });
+        .catch(() => {});
     });
   }, [fetchTransactions]);
+
+  const loadReportData = useCallback(async () => {
+    setIsLoadingReports(true);
+    try {
+      const params = new URLSearchParams({ timeframe: timeRange });
+      if (dateRange.start) params.append('startDate', dateRange.start);
+      if (dateRange.end) params.append('endDate', dateRange.end);
+      
+      const user = auth?.currentUser;
+      if (!user) return;
+      
+      const token = await user.getIdToken();
+      const res = await fetch(`/api/reports?${params}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      
+      if (res.ok) {
+        const data = await res.json();
+        setReportData(data);
+      }
+    } catch (e) {
+      console.error('Failed to load report data:', e);
+    } finally {
+      setIsLoadingReports(false);
+    }
+  }, [timeRange, dateRange]);
+
+  useEffect(() => {
+    if (mounted && !isCheckingAuth) {
+      loadReportData();
+    }
+  }, [mounted, isCheckingAuth, loadReportData]);
 
   useEffect(() => {
     if (!auth) return;
@@ -360,13 +393,24 @@ export default function ReportsPage() {
         ))}
       </div>
 
-      {/* Report tabs */}
-      <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
+      {/* Glass Segmented Control - Top Tabs */}
+      <div 
+        className="flex items-center gap-1 p-1 rounded-2xl overflow-x-auto no-scrollbar"
+        style={{ 
+          background: 'rgba(255, 255, 255, 0.03)',
+          backdropFilter: 'blur(20px)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+        }}
+      >
         {reports.map(r => (
           <button
             key={r.id}
             onClick={() => setActiveReport(r.id)}
-            className={`flex items-center gap-1.5 px-3 py-2 text-[14px] font-medium whitespace-nowrap transition-all rounded-md ${activeReport === r.id ? 'bg-fn-balance text-white border-transparent' : 'bg-transparent text-ds-text-secondary border-thin border-ds-border'}`}
+            className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium whitespace-nowrap rounded-xl transition-all flex-1 ${activeReport === r.id ? 'text-white' : 'text-white/50 hover:text-white/70'}`}
+            style={activeReport === r.id ? { 
+              background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
+              boxShadow: '0 2px 12px rgba(139, 92, 246, 0.3)',
+            } : {}}
           >
             {r.icon}
             {r.label}
@@ -374,11 +418,41 @@ export default function ReportsPage() {
         ))}
       </div>
 
+      {/* Period tabs - Monthly/Quarterly/Annual (glass segmented) */}
+      <div 
+        className="flex items-center gap-1 p-1 rounded-xl"
+        style={{ 
+          background: 'rgba(255, 255, 255, 0.05)',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
+          width: 'fit-content',
+        }}
+      >
+        {(['monthly', 'quarterly', 'annual'] as TimeRange[]).map(t => (
+          <button
+            key={t}
+            onClick={() => setTimeRange(t)}
+            disabled={isLoadingReports}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-50 ${timeRange === t ? 'text-white' : 'text-white/50'}`}
+            style={timeRange === t ? { 
+              background: 'rgba(139, 92, 246, 0.3)',
+            } : {}}
+          >
+            {t === 'monthly' ? 'Mensal' : t === 'quarterly' ? 'Trimestral' : 'Anual'}
+          </button>
+        ))}
+        {isLoadingReports && <Loader2 size={14} className="ml-2 animate-spin text-white/50" />}
+      </div>
+
       {/* Report content */}
       <div className="rounded-lg overflow-hidden bg-ds-bg-secondary border-thin border-ds-border">
-        {filtered.length === 0 ? (
+        {isLoadingReports ? (
           <div className="py-12 text-center">
-            <p className="text-[14px] text-ds-text-secondary">Nenhuma transação encontrada com os filtros selecionados.</p>
+            <Loader2 size={32} className="animate-spin mx-auto mb-3 text-fn-balance" />
+            <p className="text-[14px] text-ds-text-secondary">Carregando dados do período...</p>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="py-12 text-center">
+            <p className="text-[14px] text-ds-text-secondary">Sem dados para este período.</p>
           </div>
         ) : (
           <div className="p-3 sm:p-6">

@@ -1,19 +1,12 @@
+// src/lib/bullmq.ts
 import { Queue } from 'bullmq';
-import IORedis from 'ioredis';
+import { getRedisConnection } from './redis-connection';
 
-let connection: IORedis | null = null;
+let connection: any = null;
 
 const getConnection = () => {
   if (!connection) {
-    connection = new IORedis(process.env.REDIS_URL || 'redis://localhost:6379', {
-      maxRetriesPerRequest: null,
-      lazyConnect: true,
-    });
-    
-    connection.on('error', (err) => {
-      // Suppress connection errors if Redis isn't up locally
-      if (err.code !== 'ECONNREFUSED') console.error('Redis error:', err);
-    });
+    connection = getRedisConnection('bullmq-lib');
   }
   return connection;
 };

@@ -1,11 +1,11 @@
 import { router } from '../trpc';
-import { transactionsRouter } from './transactions';
-import { dashboardRouter } from './dashboard';
-import { alertsRouter } from './alerts';
+import { transactionsRouter } from '../api/routers/transactions';
+import { dashboardEnhancedRouter } from '../api/routers/dashboard-enhanced';
+import { alertsRouter } from '../api/routers/alerts';
 
 export const appRouter = router({
   transactions: transactionsRouter,
-  dashboard: dashboardRouter,
+  dashboard: dashboardEnhancedRouter,
   alerts: alertsRouter,
 });
 

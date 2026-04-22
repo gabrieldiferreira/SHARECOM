@@ -1,13 +1,16 @@
 "use client";
 
-import { useState, useEffect, Suspense, useMemo, useRef } from "react";
-import dynamic from "next/dynamic";
+export const dynamic = "force-dynamic";
+
+import { useState, useEffect, Suspense, useMemo, useRef, useCallback } from "react";
+import NextDynamic from "next/dynamic";
 import { 
   Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, BarChart3, Plus, Loader2, CheckCircle2, 
   TrendingUp, TrendingDown, Landmark, Clock, Award, MessageSquare, Search, Filter, ChevronLeft, 
   ChevronRight, FileText, Info, Trash2, RotateCcw, CreditCard, Banknote, Smartphone, Users, 
-  ShieldCheck, Fingerprint, FileSearch, Scale, Zap, Bell, ShieldAlert, Calendar, History, Tag, 
-  Target, Activity, Layers, Cpu, Database, Settings, PieChart as PieChartIcon, Globe
+  ShieldCheck, Fingerprint, FileSearch, Scale, Zap, Bell, ShieldAlert, Calendar as CalendarIcon, History, Tag, 
+  Target, Activity, Layers, Cpu, Database, Settings, PieChart as PieChartIcon, Globe,
+  Pencil, Save, Mail, DollarSign
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTransactionStore } from "../store/useTransactionStore";
@@ -17,8 +20,12 @@ import { authenticatedFetch } from "../lib/auth";
 import { useDashboardAgent, TemplateSentinel } from "../components/DashboardAgent";
 import { useI18n } from "../i18n/client";
 import { LanguageSwitcher } from "../components/LanguageSwitcher";
-import { ThemeToggle } from "../components/ThemeToggle";
 import { useHaptics } from "../hooks/useHaptics";
+import { EmptyState } from "../components/EmptyState";
+import { auth, db } from "../lib/firebase";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc, updateDoc } from "firebase/firestore";
+
 
 // Lazy load recharts — reduz o bundle inicial em ~200 KB
 // Os gráficos só carregam após o conteúdo principal estar visível
@@ -28,22 +35,20 @@ const ChartPlaceholder = () => (
   </div>
 );
 
-const { BarChart, Bar, LineChart, Line, PieChart, Pie, XAxis, YAxis, ResponsiveContainer, Cell, Tooltip, CartesianGrid, AreaChart, Area } = {
-  BarChart: dynamic(() => import('recharts').then(m => m.BarChart as any), { ssr: false, loading: ChartPlaceholder }),
-  Bar: dynamic(() => import('recharts').then(m => m.Bar as any), { ssr: false }),
-  LineChart: dynamic(() => import('recharts').then(m => m.LineChart as any), { ssr: false }),
-  Line: dynamic(() => import('recharts').then(m => m.Line as any), { ssr: false }),
-  PieChart: dynamic(() => import('recharts').then(m => m.PieChart as any), { ssr: false }),
-  Pie: dynamic(() => import('recharts').then(m => m.Pie as any), { ssr: false }),
-  XAxis: dynamic(() => import('recharts').then(m => m.XAxis as any), { ssr: false }),
-  YAxis: dynamic(() => import('recharts').then(m => m.YAxis as any), { ssr: false }),
-  ResponsiveContainer: dynamic(() => import('recharts').then(m => m.ResponsiveContainer as any), { ssr: false }),
-  Cell: dynamic(() => import('recharts').then(m => m.Cell as any), { ssr: false }),
-  Tooltip: dynamic(() => import('recharts').then(m => m.Tooltip as any), { ssr: false }),
-  CartesianGrid: dynamic(() => import('recharts').then(m => m.CartesianGrid as any), { ssr: false }),
-  AreaChart: dynamic(() => import('recharts').then(m => m.AreaChart as any), { ssr: false, loading: ChartPlaceholder }),
-  Area: dynamic(() => import('recharts').then(m => m.Area as any), { ssr: false }),
-};
+const BarChart = NextDynamic(() => import('recharts').then(m => m.BarChart), { ssr: false, loading: ChartPlaceholder });
+const Bar = NextDynamic(() => import('recharts').then(m => m.Bar), { ssr: false });
+const LineChart = NextDynamic(() => import('recharts').then(m => m.LineChart), { ssr: false });
+const Line = NextDynamic(() => import('recharts').then(m => m.Line), { ssr: false });
+const PieChart = NextDynamic(() => import('recharts').then(m => m.PieChart), { ssr: false });
+const Pie = NextDynamic(() => import('recharts').then(m => m.Pie), { ssr: false });
+const XAxis = NextDynamic(() => import('recharts').then(m => m.XAxis), { ssr: false });
+const YAxis = NextDynamic(() => import('recharts').then(m => m.YAxis), { ssr: false });
+const ResponsiveContainer = NextDynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
+const Cell = NextDynamic(() => import('recharts').then(m => m.Cell), { ssr: false });
+const Tooltip = NextDynamic(() => import('recharts').then(m => m.Tooltip), { ssr: false });
+const CartesianGrid = NextDynamic(() => import('recharts').then(m => m.CartesianGrid), { ssr: false });
+const AreaChart = NextDynamic(() => import('recharts').then(m => m.AreaChart), { ssr: false, loading: ChartPlaceholder });
+const Area = NextDynamic(() => import('recharts').then(m => m.Area), { ssr: false });
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "eatingOut": <Coffee size={20} />,
@@ -94,6 +99,7 @@ function ExpenseTracker() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dateRange, setDateRange] = useState<'7days' | 'month' | 'all'>('7days');
   
   type DashboardMode = "cashflow" | "entities" | "payment" | "temporal" | "category" | "forensics" | "tax" | "alerts";
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>("cashflow");
@@ -104,6 +110,14 @@ function ExpenseTracker() {
   const [currentPage, setCurrentPage] = useState(1);
   const [expandedTxId, setExpandedTxId] = useState<string | number | null>(null);
   const itemsPerPage = 6;
+
+  // ── Firebase user profile ──
+  interface FirestoreUser { name: string; email: string; photoURL: string; locale: string; currency: string; createdAt: string; }
+  const [fireUser, setFireUser]       = useState<FirestoreUser | null>(null);
+  const [fireLoading, setFireLoading] = useState(true);
+  const [isEditingProfile, setIsEditingProfile] = useState(false);
+  const [profileForm, setProfileForm] = useState({ name: '', locale: 'pt-BR', currency: 'BRL' });
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   const [manualTx, setManualTx] = useState({
     merchant_name: "",
@@ -123,6 +137,8 @@ function ExpenseTracker() {
       try {
         await fetchTransactions();
         await syncWithBackend();
+      } catch (error) {
+        console.error('❌ Error loading transactions:', error);
       } finally {
         setIsLoadingData(false);
       }
@@ -130,9 +146,85 @@ function ExpenseTracker() {
     loadData();
   }, [fetchTransactions, syncWithBackend]);
 
+  // Load Firebase user profile
+  useEffect(() => {
+    if (!auth) { setFireLoading(false); return; }
+    const unsub = onAuthStateChanged(auth, async (currentUser) => {
+      if (!currentUser || !db) { setFireLoading(false); return; }
+      try {
+        const snap = await getDoc(doc(db, 'users', currentUser.uid));
+        const data = snap.data() ?? {};
+        const merged: FirestoreUser = {
+          name:      data.name      || currentUser.displayName || '',
+          email:     data.email     || currentUser.email       || '',
+          photoURL:  data.photoURL  || currentUser.photoURL   || '',
+          locale:    data.locale    || 'pt-BR',
+          currency:  data.currency  || 'BRL',
+          createdAt: data.createdAt || '',
+        };
+        setFireUser(merged);
+        setProfileForm({ name: merged.name, locale: merged.locale, currency: merged.currency });
+      } catch (e) {
+        console.error('Erro ao carregar perfil:', e);
+      } finally {
+        setFireLoading(false);
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const handleSaveProfile = async () => {
+    const currentUser = auth?.currentUser;
+    if (!currentUser || !db) return;
+    setIsSavingProfile(true);
+    try {
+      await updateDoc(doc(db, 'users', currentUser.uid), {
+        name:      profileForm.name,
+        locale:    profileForm.locale,
+        currency:  profileForm.currency,
+        updatedAt: new Date().toISOString(),
+      });
+      document.cookie = `NEXT_LOCALE=${profileForm.locale}; path=/; max-age=${60*60*24*365}`;
+      document.cookie = `CURRENCY=${profileForm.currency}; path=/; max-age=${60*60*24*365}`;
+      localStorage.setItem('USER_CURRENCY', profileForm.currency);
+      setFireUser(prev => prev ? { ...prev, ...profileForm } : prev);
+      setIsEditingProfile(false);
+      alert('Perfil atualizado!');
+    } catch (e) {
+      console.error(e);
+      alert('Erro ao salvar perfil.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
+  // Filter transactions by date range
+  const getDateFilter = useCallback(() => {
+    const now = new Date();
+    if (dateRange === '7days') {
+      const sevenDaysAgo = new Date(now);
+      sevenDaysAgo.setDate(now.getDate() - 7);
+      return sevenDaysAgo;
+    }
+    if (dateRange === 'month') {
+      return new Date(now.getFullYear(), now.getMonth(), 1);
+    }
+    return new Date(0); // 'all' - beginning of time
+  }, [dateRange]);
+
+  const filteredByDate = useMemo(() => {
+    const startDate = getDateFilter();
+    const filtered = transactions.filter(tx => {
+      const txDate = new Date(tx.transaction_date);
+      if (isNaN(txDate.getTime())) return true; // Include invalid dates rather than hiding them
+      return txDate >= startDate;
+    });
+    return filtered;
+  }, [transactions, getDateFilter]);
+
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(tx => {
+    return filteredByDate.filter(tx => {
       const merchant = tx.merchant_name || "Desconhecido";
       const matchesSearch = merchant.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            (tx.note && tx.note.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -150,7 +242,7 @@ function ExpenseTracker() {
 
       return matchesSearch && matchesFilter;
     });
-  }, [transactions, searchQuery, activeFilter]);
+  }, [filteredByDate, searchQuery, activeFilter]);
 
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
   const paginatedTransactions = useMemo(() => {
@@ -216,13 +308,28 @@ function ExpenseTracker() {
           return;
         }
 
+        // Parse date safely
+        let parsedDate = new Date().toISOString();
+        if (ai.transaction_date) {
+           const d = new Date(ai.transaction_date);
+           if (!isNaN(d.getTime())) parsedDate = d.toISOString();
+        }
+
+        // Parse amount safely
+        let parsedAmount = 0;
+        if (typeof ai.total_amount === 'string') {
+           parsedAmount = parseFloat(ai.total_amount.replace(/[^\d.,]/g, '').replace(',', '.'));
+        } else if (typeof ai.total_amount === 'number') {
+           parsedAmount = ai.total_amount;
+        }
+
         const newTx: TransactionEntity = {
-          id: data.database_id, // Use the official ID from the backend
-          total_amount: ai.total_amount || 0,
+          id: data.database_id, 
+          total_amount: isNaN(parsedAmount) ? 0 : parsedAmount,
           merchant_name: ai.merchant_name || 'Desconhecido',
           category: ai.smart_category || 'Outros',
           currency: 'BRL',
-          transaction_date: ai.transaction_date || new Date().toISOString(),
+          transaction_date: parsedDate,
           transaction_type: ai.transaction_type || 'Outflow',
           payment_method: ai.payment_method || 'Comprovante',
           description: ai.description || undefined,
@@ -286,7 +393,7 @@ function ExpenseTracker() {
       const name = normalizeBusinessName(tx.merchant_name) || 'Desconhecido';
       
       // Heurística para detectar PJ: Palavras-chave ou nome muito curto/longo com termos corporativos
-      const isLegal = !!(tx.masked_cnpj || tx.merchant_name?.toUpperCase().includes(' LTDA') || tx.merchant_name?.toUpperCase().includes(' S.A'));
+      const isLegal = !!(tx.masked_cpf || tx.merchant_name?.toUpperCase().includes(' LTDA') || tx.merchant_name?.toUpperCase().includes(' S.A'));
       
       if (!map[name]) {
         map[name] = { name, count: 0, total: 0, lastDate: tx.transaction_date, isLegal };
@@ -365,17 +472,17 @@ function ExpenseTracker() {
 
   const categoriesData = useMemo(() => {
     const map: Record<string, number> = {};
-    transactions.forEach(tx => {
+    filteredByDate.forEach(tx => {
         if(tx.transaction_type === 'Outflow' && tx.total_amount) {
             map[tx.category] = (map[tx.category] || 0) + (Number(tx.total_amount) || 0);
         }
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
-  }, [transactions]);
+  }, [filteredByDate]);
 
   const growthData = useMemo(() => {
      let current = 0;
-     const sorted = [...transactions]
+     const sorted = [...filteredByDate]
         .filter(tx => tx.transaction_date && !isNaN(new Date(tx.transaction_date).getTime()))
         .sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
      const data = sorted.map(tx => {
@@ -386,11 +493,11 @@ function ExpenseTracker() {
      });
      if (data.length === 1) data.push({ date: 'Hoje', capital: data[0].capital });
      return data;
-  }, [transactions]);
+  }, [filteredByDate]);
 
   const dailyInsights = useMemo(() => {
     const today = new Date().toLocaleDateString('sv-SE');
-    const todayTxs = transactions.filter(tx => tx.transaction_date && new Date(tx.transaction_date).toLocaleDateString('sv-SE') === today);
+    const todayTxs = filteredByDate.filter(tx => tx.transaction_date && new Date(tx.transaction_date).toLocaleDateString('sv-SE') === today);
     const todayInflow = todayTxs.reduce((acc, tx) => tx.transaction_type === "Inflow" ? acc + tx.total_amount : acc, 0);
     const todayOutflow = todayTxs.reduce((acc, tx) => tx.transaction_type === "Outflow" ? acc + tx.total_amount : acc, 0);
     const delta = todayInflow - todayOutflow;
@@ -399,43 +506,55 @@ function ExpenseTracker() {
       message: delta > 0 ? t('dashboard.richer') : (delta < 0 ? t('dashboard.poorer') : t('dashboard.stable')),
       isPositive: delta >= 0
     };
-  }, [transactions]);
+  }, [filteredByDate, t]);
 
   const weekdayIntensity = useMemo(() => {
     const days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(2023, 0, 1 + i); // Jan 1, 2023 was a Sunday
-      return formatDate(d, 'EEEEEE');
+      return formatDateI18n(d, 'EEEEEE');
     });
     const intensity = [0, 0, 0, 0, 0, 0, 0];
-    transactions.forEach(tx => {
+    filteredByDate.forEach(tx => {
       const date = new Date(tx.transaction_date);
       if (!isNaN(date.getTime())) intensity[date.getDay()] += tx.total_amount;
     });
     return days.map((day, i) => ({ day, val: intensity[i] }));
-  }, [transactions, formatDate]);
+  }, [filteredByDate, formatDateI18n]);
 
   const paymentMethodsData = useMemo(() => {
     const map: Record<string, number> = {};
-    transactions.forEach(tx => {
+    filteredByDate.forEach(tx => {
       if (tx.transaction_type === 'Outflow') {
         const method = tx.payment_method || 'Outros';
         map[method] = (map[method] || 0) + tx.total_amount;
       }
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
-  }, [transactions]);
+  }, [filteredByDate]);
 
-  const inflowCount = useMemo(() => transactions.filter(t => t.transaction_type === 'Inflow').length, [transactions]);
-  const outflowCount = useMemo(() => transactions.filter(t => t.transaction_type === 'Outflow').length, [transactions]);
-  const avgOutflow = outflowCount > 0 ? totalOutflow / outflowCount : 0;
-  const avgInflow = inflowCount > 0 ? totalInflow / inflowCount : 0;
+  const inflowCount = useMemo(() => filteredByDate.filter(t => t.transaction_type === 'Inflow').length, [filteredByDate]);
+  const outflowCount = useMemo(() => filteredByDate.filter(t => t.transaction_type === 'Outflow').length, [filteredByDate]);
+  const totalInflowFiltered = useMemo(() => filteredByDate.reduce((acc, tx) => {
+    const type = (tx.transaction_type || '').toLowerCase();
+    const isInflow = type === 'inflow' || type === 'entrada' || tx.category === 'Receita';
+    return isInflow ? acc + Number(tx.total_amount || 0) : acc;
+  }, 0), [filteredByDate]);
+  
+  const totalOutflowFiltered = useMemo(() => filteredByDate.reduce((acc, tx) => {
+    const type = (tx.transaction_type || '').toLowerCase();
+    const isInflow = type === 'inflow' || type === 'entrada' || tx.category === 'Receita';
+    return !isInflow ? acc + Number(tx.total_amount || 0) : acc;
+  }, 0), [filteredByDate]);
+  const avgOutflow = outflowCount > 0 ? totalOutflowFiltered / outflowCount : 0;
+  const avgInflow = inflowCount > 0 ? totalInflowFiltered / inflowCount : 0;
+  const balanceFiltered = totalInflowFiltered - totalOutflowFiltered;
 
   const temporalData = useMemo(() => {
     const hourlyMap = Array(24).fill(0);
     const dayOfMonthMap: Record<number, number> = {};
     const monthlyMap: Record<string, number> = {};
     
-    transactions.forEach(tx => {
+    filteredByDate.forEach(tx => {
       const date = new Date(tx.transaction_date);
       if (isNaN(date.getTime())) return;
       
@@ -454,7 +573,7 @@ function ExpenseTracker() {
       daily: Object.entries(dayOfMonthMap).map(([day, val]) => ({ day: parseInt(day), val })).sort((a,b) => a.day - b.day),
       seasonal: Object.entries(monthlyMap).map(([month, val]) => ({ month, val }))
     };
-  }, [transactions]);
+  }, [filteredByDate]);
 
   const forensicsData = useMemo(() => {
     const duplicates = transactions.filter((tx, idx) => 
@@ -661,11 +780,11 @@ function ExpenseTracker() {
                 ))}
               </div>
               <div className="flex items-center justify-between text-[11px] text-ds-text-tertiary">
-                <p className="italic">Arraste para a esquerda para apagar.</p>
+                <p className="italic">Arraste para a esquerda para apagar</p>
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
-                    tx.id && moveToTrash(tx.id);
+                    if (tx.id) moveToTrash(tx.id);
                   }} 
                   className="px-3 py-1.5 rounded-md bg-red-500/10 text-fn-expense font-bold hover:bg-red-500/20 transition-colors"
                 >
@@ -693,13 +812,15 @@ function ExpenseTracker() {
       </div>
     );
   }
-
   return (
-    <div className="px-4 pb-20 md:px-6 md:pb-6 space-y-6 font-sans w-full max-w-[100vw] overflow-x-hidden relative" style={{ 
-      paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)',
+    <div className="min-h-screen w-full overflow-x-hidden" style={{
+      paddingTop: 'max(1rem, env(safe-area-inset-top))',
+      paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))',
       paddingLeft: 'max(1rem, env(safe-area-inset-left))',
       paddingRight: 'max(1rem, env(safe-area-inset-right))',
     }}>
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[1920px]">
+      <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileSelection} className="hidden" />
       
       {/* Loading Bar & Toast Notification */}
       <div className={`fixed top-0 left-0 w-full h-1 z-50 transition-opacity duration-300 ${(isUploading || uploadStatus !== "idle") ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
@@ -726,42 +847,103 @@ function ExpenseTracker() {
 
       {/* DASHBOARD CONTENT SWITCHER - EXPOSTO APENAS SE HOUVER DADOS */}
       {transactions.length > 0 ? (
-        <>
-          <div className="flex flex-col gap-6 mb-8">
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-              <div>
-                  <h1 className="text-2xl font-medium text-ds-text-primary">{t('dashboard.title')}</h1>
-                  <p className="text-[12px] mt-1 text-ds-text-secondary uppercase tracking-[0.2em] font-bold">{t('dashboard.subtitle')}</p>
+        <div className="space-y-4 sm:space-y-6">
+          {/* Header Section - Responsive */}
+          <div className="flex flex-col gap-4 sm:gap-6">
+            <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
+              
+              {/* TOP ROW: Title + Mobile Avatar */}
+              <div className="flex items-start justify-between w-full lg:w-auto">
+                <div className="space-y-1">
+                    <h1 className="text-xl sm:text-2xl lg:text-3xl font-medium text-ds-text-primary">{t('dashboard.title')}</h1>
+                    <p className="text-[10px] sm:text-[11px] lg:text-[12px] text-ds-text-secondary uppercase tracking-[0.2em] font-bold">{t('dashboard.subtitle')}</p>
+                </div>
+                
+                {/* Avatar (Mobile only here, top right) */}
+                <div className="flex lg:hidden items-center ml-4">
+                  {fireUser?.photoURL ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={fireUser.photoURL}
+                      alt="Perfil"
+                      referrerPolicy="no-referrer"
+                      className="w-10 h-10 rounded-full border border-brand-purple/50 object-cover flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-10 h-10 rounded-full bg-brand-purple flex items-center justify-center text-white text-[14px] font-bold flex-shrink-0">
+                      {fireUser?.name?.[0]?.toUpperCase() ?? '?'}
+                    </div>
+                  )}
+                </div>
               </div>
-              <div className="flex items-center gap-3">
-                  <button 
-                    onClick={() => setShowTrash(true)}
-                    className="relative p-2.5 rounded-xl bg-ds-bg-secondary border-thin border-ds-border text-ds-text-secondary hover:text-fn-expense transition-all hover:bg-ds-bg-primary"
-                  >
-                    <Trash2 size={20} />
-                    {trashTransactions.length > 0 && (
-                      <span className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-ds-bg-primary shadow-lg">
-                        {trashTransactions.length}
-                      </span>
-                    )}
-                  </button>
-                  <button 
-                    onClick={() => fileInputRef.current?.click()}
-                    className="flex items-center gap-2 px-5 py-2.5 bg-fn-balance text-white rounded-xl font-bold text-[13px] shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all"
-                  >
-                    <Plus size={18} />
-                    NOVO COMPROVANTE
-                  </button>
+
+              {/* BOTTOM ROW: Actions + Greeting/Avatar */}
+              <div className="flex items-center justify-between lg:justify-end gap-2 sm:gap-3 w-full lg:w-auto">
+                  
+                  {/* Left side on mobile (Trash + Novo Comprovante) */}
+                  <div className="flex items-center gap-2 sm:gap-3">
+                    <button 
+                      onClick={() => setShowTrash(true)}
+                      className="relative p-2 sm:p-2.5 rounded-xl bg-ds-bg-secondary border-thin border-ds-border text-ds-text-secondary hover:text-fn-expense transition-all hover:bg-ds-bg-primary touch-manipulation"
+                    >
+                      <Trash2 size={18} className="sm:w-5 sm:h-5" />
+                      {trashTransactions.length > 0 && (
+                        <span className="absolute -top-1 -right-1 w-4 h-4 sm:w-5 sm:h-5 bg-red-500 text-white text-[9px] sm:text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-ds-bg-primary shadow-lg">
+                          {trashTransactions.length}
+                        </span>
+                      )}
+                    </button>
+                    <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="flex items-center gap-1.5 sm:gap-2 px-3 sm:px-5 py-2 sm:py-2.5 bg-fn-balance text-white rounded-xl font-bold text-[11px] sm:text-[13px] shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all touch-manipulation"
+                    >
+                      <Plus size={16} className="sm:w-[18px] sm:h-[18px]" />
+                      <span className="inline">NOVO</span>
+                      <span className="hidden sm:inline">COMPROVANTE</span>
+                    </button>
+                  </div>
+                  
+                  {/* Right side on mobile (Greeting) / Right side on desktop (Avatar) */}
+                  <div className="flex items-center gap-2 pl-3 lg:ml-2 lg:border-l border-ds-border text-right">
+                    
+                    {/* Greeting (Mobile only) */}
+                    <div className="lg:hidden flex flex-col justify-center leading-tight">
+                      <p className="text-[10px] text-text-tertiary">
+                        {(() => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; })()},
+                      </p>
+                      <p className="text-[12px] font-semibold text-text-primary max-w-[120px] truncate">
+                        {fireUser?.name ? fireUser.name.split(' ').slice(0, 2).join(' ') : ''}
+                      </p>
+                    </div>
+
+                    {/* Avatar (Desktop only) */}
+                    <div className="hidden lg:flex items-center">
+                      {fireUser?.photoURL ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={fireUser.photoURL}
+                          alt="Perfil"
+                          referrerPolicy="no-referrer"
+                          className="w-10 h-10 rounded-full border border-brand-purple/50 object-cover flex-shrink-0"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-brand-purple flex items-center justify-center text-white text-[14px] font-bold flex-shrink-0">
+                          {fireUser?.name?.[0]?.toUpperCase() ?? '?'}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
               </div>
             </div>
 
             {/* DESKTOP TOP NAVIGATION BAR */}
-            <div className="hidden md:flex flex-col gap-2">
+            <div className="hidden lg:flex flex-col gap-2">
               <div className="flex items-center gap-2 mb-1">
                 <Cpu size={14} className="text-brand-cyan" />
                 <span className="text-[10px] font-black text-text-tertiary uppercase tracking-[0.3em]">Navigation</span>
               </div>
-              <div className="flex items-center gap-2 bg-glass-card p-1.5 rounded-2xl border-thin border-glass-border">
+              <div className="flex items-center gap-2 bg-glass-card p-1.5 rounded-2xl border-thin border-glass-border overflow-x-auto no-scrollbar">
                 {[
                   { id: "home", label: t('nav.home'), icon: <HomeIcon size={14} /> },
                   { id: "analytics", label: t('nav.analytics'), icon: <PieChartIcon size={14} /> },
@@ -771,16 +953,15 @@ function ExpenseTracker() {
                   <button 
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id as ActiveTab)} 
-                    className={`flex items-center gap-2 px-4 py-2.5 text-[12px] font-bold rounded-xl transition-all whitespace-nowrap ${activeTab === tab.id ? "bg-glass-highlight text-text-primary shadow-glow ring-1 ring-white/10" : "text-text-secondary hover:text-text-primary hover:bg-white/5"}`}
+                    className={`flex items-center gap-2 px-3 xl:px-4 py-2.5 text-[11px] xl:text-[12px] font-bold rounded-xl transition-all whitespace-nowrap touch-manipulation ${activeTab === tab.id ? "bg-glass-highlight text-text-primary shadow-glow ring-1 ring-white/10" : "text-text-secondary hover:text-text-primary hover:bg-white/5"}`}
                   >
                     {tab.icon}
                     {tab.label}
                   </button>
                 ))}
-                {/* Compact controls: language + theme */}
+                {/* Compact controls: language */}
                 <div className="ml-auto pl-2 border-l border-glass-border flex items-center gap-1.5">
                   <LanguageSwitcher compact />
-                  <ThemeToggle variant="compact" />
                 </div>
               </div>
             </div>
@@ -789,68 +970,112 @@ function ExpenseTracker() {
 
           {/* TAB 1: HOME */}
           {activeTab === "home" && (
-            <div className="@container space-y-6 stagger-children">
+            <div className="@container space-y-4 sm:space-y-6 stagger-children">
               
-              {/* (1) HERO BALANCE CARD */}
-              <div className="relative overflow-hidden rounded-[20px] p-6 md:p-8 text-white shadow-glass-lg bg-brand-bg border-thin border-glass-border">
-                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-brand-purple/40 via-brand-pink/15 to-transparent"></div>
-                <div className="absolute -top-20 -right-20 w-60 h-60 rounded-full bg-brand-purple/10 blur-3xl"></div>
-                <div className="absolute -bottom-10 -left-10 w-40 h-40 rounded-full bg-brand-pink/10 blur-3xl"></div>
+              {/* DATE RANGE FILTER TABS + USER GREETING */}
+              <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
+                <button
+                  onClick={() => setDateRange('7days')}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                    dateRange === '7days'
+                      ? 'bg-accent-purple text-white shadow-lg'
+                      : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary border border-border'
+                  }`}
+                >
+                  Últimos 7 dias
+                </button>
+                <button
+                  onClick={() => setDateRange('month')}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                    dateRange === 'month'
+                      ? 'bg-accent-purple text-white shadow-lg'
+                      : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary border border-border'
+                  }`}
+                >
+                  Este mês
+                </button>
+                <button
+                  onClick={() => setDateRange('all')}
+                  className={`px-4 py-2 rounded-xl text-sm font-semibold transition-all whitespace-nowrap ${
+                    dateRange === 'all'
+                      ? 'bg-accent-purple text-white shadow-lg'
+                      : 'bg-bg-secondary text-text-secondary hover:bg-bg-tertiary border border-border'
+                  }`}
+                >
+                  Todos
+                </button>
+
+                {/* Greeting text only (Desktop only) */}
+                <div className="ml-auto hidden lg:flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
+                  <span className="text-[14px] text-text-secondary">
+                    {(() => { const h = new Date().getHours(); return h < 12 ? 'Bom dia' : h < 18 ? 'Boa tarde' : 'Boa noite'; })()},{' '}
+                    <span className="font-semibold text-text-primary">{fireUser?.name ?? ''}</span>
+                  </span>
+                </div>
+              </div>
+
+              {/* (1) HERO BALANCE CARD - Responsive */}
+              <div className="relative overflow-hidden rounded-2xl sm:rounded-[20px] p-4 sm:p-6 lg:p-8 text-white shadow-glass-lg bg-brand-bg border-thin border-glass-border">
+                <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-brand-purple/40 via-brand-pink/15 to-transparent pointer-events-none"></div>
+                <div className="absolute -top-20 -right-20 w-40 sm:w-60 h-40 sm:h-60 rounded-full bg-brand-purple/10 blur-3xl pointer-events-none"></div>
+                <div className="absolute -bottom-10 -left-10 w-32 sm:w-40 h-32 sm:h-40 rounded-full bg-brand-pink/10 blur-3xl pointer-events-none"></div>
                 
-                <div className="relative z-10 flex flex-col items-center py-4 md:py-8 text-center">
-                  <span className="text-[12px] font-semibold text-text-tertiary mb-3 uppercase tracking-[0.3em]">{t('dashboard.totalBalance')}</span>
-                  <div className="text-[40px] md:text-hero font-black tracking-tight leading-none text-shadow-glow tabular-nums">
-                    <span className="text-text-primary">R$ {Math.floor(balance).toLocaleString('pt-BR')}</span>
-                    <span className="text-text-tertiary">,{(balance % 1).toFixed(2).substring(2)}</span>
+                <div className="relative z-10 flex flex-col items-center py-3 sm:py-4 lg:py-8 text-center">
+                  <span className="text-[10px] sm:text-[11px] lg:text-[12px] font-semibold text-text-tertiary mb-2 sm:mb-3 uppercase tracking-[0.2em] sm:tracking-[0.3em]">{t('dashboard.totalBalance')}</span>
+                  <div className="text-[32px] sm:text-[40px] lg:text-hero font-black tracking-tight leading-none text-shadow-glow tabular-nums">
+                    <span className="text-text-primary">R$ {Math.floor(balanceFiltered).toLocaleString('pt-BR')}</span>
+                    <span className="text-text-tertiary">,{(balanceFiltered % 1).toFixed(2).substring(2)}</span>
                   </div>
-                  <div className={`mt-5 inline-flex items-center gap-1.5 px-4 py-2 rounded-full bg-glass-highlight border-thin border-glass-border text-[12px] font-semibold backdrop-blur-md ${dailyInsights.isPositive ? 'text-brand-green' : 'text-brand-red'}`}>
-                    {dailyInsights.isPositive ? <TrendingUp size={14} /> : <TrendingDown size={14} />}
+                  <div className={`mt-3 sm:mt-5 inline-flex items-center gap-1.5 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-glass-highlight border-thin border-glass-border text-[11px] sm:text-[12px] font-semibold backdrop-blur-md ${dailyInsights.isPositive ? 'text-brand-green' : 'text-brand-red'}`}>
+                    {dailyInsights.isPositive ? <TrendingUp size={12} className="sm:w-[14px] sm:h-[14px]" /> : <TrendingDown size={12} className="sm:w-[14px] sm:h-[14px]" />}
                     <span>{dailyInsights.isPositive ? '+' : '-'}R$ {dailyInsights.absDelta.toLocaleString('pt-BR', { minimumFractionDigits: 2 })} {t('common.today').toLowerCase()}</span>
                   </div>
                 </div>
 
-                {/* Mini Accounts Carousel */}
-                <div className="relative z-10 mt-6 -mx-6 px-6 overflow-x-auto no-scrollbar snap-x snap-mandatory flex gap-3 pb-2">
+                {/* Mini Accounts Carousel - Horizontal Scroll with Snap */}
+                <div className="relative z-10 mt-4 sm:mt-6 -mx-4 sm:-mx-6 lg:-mx-8 px-4 sm:px-6 lg:px-8 overflow-x-auto no-scrollbar snap-x snap-mandatory flex gap-2 sm:gap-3 pb-2" style={{ scrollSnapType: 'x mandatory' }}>
                   {[
-                    { name: 'Nubank', balance: totalInflow * 0.6, mask: '•••• 1234', color: '#8B5CF6' },
-                    { name: 'Itaú', balance: totalInflow * 0.3, mask: '•••• 8876', color: '#FB923C' },
-                    { name: 'Inter', balance: totalInflow * 0.1, mask: '•••• 0092', color: '#06B6D4' }
+                    { name: 'Nubank', balance: totalInflowFiltered * 0.6, mask: '•••• 1234', color: '#8B5CF6' },
+                    { name: 'Itaú', balance: totalInflowFiltered * 0.3, mask: '•••• 8876', color: '#FB923C' },
+                    { name: 'Inter', balance: totalInflowFiltered * 0.1, mask: '•••• 0092', color: '#06B6D4' }
                   ].map((acc, i) => (
-                    <div key={i} className="snap-center shrink-0 w-[160px] p-4 rounded-2xl bg-glass-card border-thin border-glass-border backdrop-blur-md flex flex-col hover:-translate-y-1 transition-transform cursor-pointer group">
-                      <div className="flex justify-between items-start mb-2">
-                        <div className="flex items-center gap-2">
-                          <div className="w-2 h-2 rounded-full" style={{ backgroundColor: acc.color }}></div>
-                          <span className="text-[12px] font-bold text-text-secondary">{acc.name}</span>
+                    <div key={i} className="snap-center shrink-0 w-[140px] sm:w-[160px] p-3 sm:p-4 rounded-xl sm:rounded-2xl bg-glass-card border-thin border-glass-border backdrop-blur-md flex flex-col hover:-translate-y-1 transition-transform cursor-pointer group touch-manipulation">
+                      <div className="flex justify-between items-start mb-1.5 sm:mb-2">
+                        <div className="flex items-center gap-1.5 sm:gap-2">
+                          <div className="w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full" style={{ backgroundColor: acc.color }}></div>
+                          <span className="text-[11px] sm:text-[12px] font-bold text-text-secondary">{acc.name}</span>
                         </div>
-                        <Settings size={10} className="text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <Settings size={9} className="sm:w-[10px] sm:h-[10px] text-text-tertiary opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
-                      <span className="text-[16px] font-bold text-text-primary tabular-nums">R$ {acc.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
-                      <span className="text-[10px] text-text-tertiary font-mono mt-1">{acc.mask}</span>
+                      <span className="text-[14px] sm:text-[16px] font-bold text-text-primary tabular-nums">R$ {acc.balance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                      <span className="text-[9px] sm:text-[10px] text-text-tertiary font-mono mt-0.5 sm:mt-1">{acc.mask}</span>
                     </div>
                   ))}
                 </div>
               </div>
 
-              {/* (2) METRIC GRID */}
-              <div className="grid grid-cols-2 gap-4 md:gap-6">
+              {/* (2) METRIC GRID - Responsive 2x2 mobile, 2x2 tablet, 4x1 desktop */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4 lg:gap-6">
                 {[
-                  { label: t('common.income'), value: totalInflow, trend: inflowCount > 0 ? `${inflowCount} tx` : "0", icon: <TrendingUp size={12} />, color: "#10B981" },
-                  { label: t('common.expense'), value: totalOutflow, trend: outflowCount > 0 ? `${outflowCount} tx` : "0", icon: <TrendingDown size={12} />, color: "#EF4444" },
-                  { label: t('dashboard.avgTicket'), value: avgOutflow, trend: t('dashboard.perTx'), icon: <BarChart3 size={12} />, color: "#8B5CF6" },
-                  { label: t('dashboard.netFlow'), value: Math.abs(balance), trend: balance >= 0 ? t('dashboard.positive') : t('dashboard.negative'), icon: balance >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />, color: balance >= 0 ? "#10B981" : "#EF4444" }
+                  { label: t('common.income'), value: totalInflowFiltered, trend: inflowCount > 0 ? `${inflowCount} tx` : "0", icon: <TrendingUp size={11} className="sm:w-3 sm:h-3" />, color: "#10B981" },
+                  { label: t('common.expense'), value: totalOutflowFiltered, trend: outflowCount > 0 ? `${outflowCount} tx` : "0", icon: <TrendingDown size={11} className="sm:w-3 sm:h-3" />, color: "#EF4444" },
+                  { label: t('dashboard.avgTicket'), value: avgOutflow, trend: t('dashboard.perTx'), icon: <BarChart3 size={11} className="sm:w-3 sm:h-3" />, color: "#8B5CF6" },
+                  { label: t('dashboard.netFlow'), value: Math.abs(balanceFiltered), trend: balanceFiltered >= 0 ? t('dashboard.positive') : t('dashboard.negative'), icon: balanceFiltered >= 0 ? <TrendingUp size={11} className="sm:w-3 sm:h-3" /> : <TrendingDown size={11} className="sm:w-3 sm:h-3" />, color: balanceFiltered >= 0 ? "#10B981" : "#EF4444" }
                 ].map((metric, i) => (
-                  <div key={i} className="glass-card p-4 md:p-5 flex flex-col justify-between group">
-                    <div className="flex justify-between items-start">
-                      <span className="text-[12px] md:text-[14px] font-medium text-text-secondary">{metric.label}</span>
-                      <div className="flex items-center gap-1 text-[10px] font-bold" style={{ color: metric.color }}>
-                        {metric.icon} {metric.trend}
+                  <div key={i} className="glass-card p-3 sm:p-4 lg:p-5 flex flex-col justify-between group @container">
+                    <div className="flex justify-between items-start gap-2">
+                      <span className="text-[11px] sm:text-[12px] lg:text-[14px] font-medium text-text-secondary leading-tight">{metric.label}</span>
+                      <div className="flex items-center gap-0.5 sm:gap-1 text-[9px] sm:text-[10px] font-bold shrink-0" style={{ color: metric.color }}>
+                        {metric.icon} <span className="hidden @[120px]:inline">{metric.trend}</span>
                       </div>
                     </div>
-                    <div className="mt-3 mb-1">
-                      <span className="text-[20px] md:text-val-xl font-semibold text-text-primary leading-none tabular-nums">R$ {metric.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</span>
+                    <div className="mt-2 sm:mt-3 mb-1">
+                      <span className="text-[16px] sm:text-[20px] lg:text-val-xl font-semibold text-text-primary leading-none tabular-nums block truncate">R$ {metric.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
-                    <div className="h-[50px] md:h-[60px] w-full mt-2 opacity-40 group-hover:opacity-100 transition-opacity">
+                    <div className="h-[40px] sm:h-[50px] lg:h-[60px] w-full mt-1 sm:mt-2 opacity-40 group-hover:opacity-100 transition-opacity">
+                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <ResponsiveContainer width="100%" height="100%">
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <AreaChart data={growthData.slice(-10)}>
                           <defs>
                             <linearGradient id={`grad${i}`} x1="0" y1="0" x2="0" y2="1">
@@ -858,6 +1083,7 @@ function ExpenseTracker() {
                               <stop offset="95%" stopColor={metric.color} stopOpacity={0}/>
                             </linearGradient>
                           </defs>
+                          {/* @ts-expect-error - Dynamically imported Recharts components */}
                           <Area type="monotone" dataKey="capital" stroke={metric.color} strokeWidth={2} fillOpacity={1} fill={`url(#grad${i})`} />
                         </AreaChart>
                       </ResponsiveContainer>
@@ -866,27 +1092,27 @@ function ExpenseTracker() {
                 ))}
               </div>
 
-              {/* (5) TRANSACTIONS TABLE */}
+              {/* (5) TRANSACTIONS TABLE - Responsive */}
               <div className="glass-card-static overflow-hidden">
-                <div className="p-5 border-b border-glass-border flex justify-between items-center">
-                  <h3 className="text-[16px] font-semibold text-text-primary">{t('dashboard.recentTransactions')}</h3>
-                  <button onClick={() => setActiveTab("analytics")} className="text-[12px] font-medium text-brand-cyan hover:underline" aria-label="View all transactions">{t('common.viewAll')}</button>
+                <div className="p-4 sm:p-5 border-b border-glass-border flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2">
+                  <h3 className="text-[14px] sm:text-[16px] font-semibold text-text-primary">{t('dashboard.recentTransactions')}</h3>
+                  <button onClick={() => setActiveTab("analytics")} className="text-[11px] sm:text-[12px] font-medium text-brand-cyan hover:underline touch-manipulation" aria-label="View all transactions">{t('common.viewAll')}</button>
                 </div>
                 <div className="divide-y divide-[rgba(255,255,255,0.05)] stagger-children">
-                  {transactions.slice(0, 6).map(tx => (
-                    <div key={tx.id} className="p-4 flex items-center gap-4 hover:bg-glass-highlight transition-colors cursor-pointer group">
-                      <div className="w-10 h-10 rounded-full bg-glass-card border-thin border-glass-border flex items-center justify-center text-text-primary shrink-0 group-hover:scale-110 transition-transform">
-                         {CATEGORY_ICONS[tx.category] || <ShoppingBag size={16} />}
+                  {filteredByDate.slice(0, 6).map(tx => (
+                    <div key={tx.id} className="p-3 sm:p-4 flex items-center gap-3 sm:gap-4 hover:bg-glass-highlight transition-colors cursor-pointer group touch-manipulation">
+                      <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-full bg-glass-card border-thin border-glass-border flex items-center justify-center text-text-primary shrink-0 group-hover:scale-110 transition-transform">
+                         {CATEGORY_ICONS[tx.category] || <ShoppingBag size={14} className="sm:w-4 sm:h-4" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-[14px] font-medium text-text-primary truncate">{tx.merchant_name}</p>
-                        <p className="text-[12px] text-text-tertiary mt-0.5">{formatDate(tx.transaction_date)}</p>
+                        <p className="text-[13px] sm:text-[14px] font-medium text-text-primary truncate">{tx.merchant_name}</p>
+                        <p className="text-[11px] sm:text-[12px] text-text-tertiary mt-0.5 truncate">{formatDate(tx.transaction_date)}</p>
                       </div>
-                      <div className="hidden md:block">
-                        <span className="text-[11px] text-text-tertiary">{t(`categories.${tx.category}`).replace('categories.', '')}</span>
+                      <div className="hidden sm:block shrink-0">
+                        <span className="text-[10px] sm:text-[11px] text-text-tertiary">{t(`categories.${tx.category}`).replace('categories.', '')}</span>
                       </div>
-                      <div className="text-right">
-                        <p className={`text-[16px] font-semibold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-brand-green' : 'text-text-primary'}`}>
+                      <div className="text-right shrink-0">
+                        <p className={`text-[14px] sm:text-[16px] font-semibold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-brand-green' : 'text-text-primary'}`}>
                           {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </p>
                       </div>
@@ -905,18 +1131,25 @@ function ExpenseTracker() {
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-[16px] font-semibold text-text-primary">{t('dashboard.spendingOverview')}</h2>
                   <div className="px-3 py-1.5 rounded-full bg-brand-orange/20 text-brand-orange text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer hover:bg-brand-orange/30 transition-colors">
-                    <Calendar size={12} />
+                    <CalendarIcon size={12} />
                     <span>{t('common.thisMonth')}</span>
                     <X size={10} className="opacity-60" />
                   </div>
                 </div>
                 <div className="h-[200px] md:h-[300px] xl:h-[400px] w-full min-w-0">
+                  {/* @ts-expect-error - Dynamically imported Recharts components */}
                   <ResponsiveContainer width="100%" height="100%">
+                    {/* @ts-expect-error - Dynamically imported Recharts components */}
                     <BarChart data={temporalData.hourly} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
+                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} cursor={{ fill: 'rgba(139,92,246,0.08)' }} />
+                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <Bar dataKey="val" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
                     </BarChart>
                   </ResponsiveContainer>
@@ -959,11 +1192,16 @@ function ExpenseTracker() {
                  <div className="glass-card-static p-5 md:p-6 flex flex-col justify-between">
                     <h2 className="text-[16px] font-semibold text-text-primary mb-4">{t('dashboard.distribution')}</h2>
                     <div className="h-[220px] md:h-[250px] w-full relative">
+                       {/* @ts-expect-error - Dynamically imported Recharts components */}
                        <ResponsiveContainer width="100%" height="100%">
+                         {/* @ts-expect-error - Dynamically imported Recharts components */}
                          <PieChart>
+                           {/* @ts-expect-error - Dynamically imported Recharts components */}
                            <Pie data={categoriesData} innerRadius="55%" outerRadius="80%" paddingAngle={4} dataKey="value" stroke="none">
+                             {/* @ts-expect-error - Dynamically imported Recharts components */}
                              {categoriesData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                            </Pie>
+                           {/* @ts-expect-error - Dynamically imported Recharts components */}
                            <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
                          </PieChart>
                        </ResponsiveContainer>
@@ -991,12 +1229,19 @@ function ExpenseTracker() {
                 <div className="glass-card-static p-5 md:p-6">
                   <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.weekdayActivity')}</h2>
                   <div className="h-[200px] w-full">
+                    {/* @ts-expect-error - Dynamically imported Recharts components */}
                     <ResponsiveContainer width="100%" height="100%">
+                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <BarChart data={weekdayIntensity} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <Bar dataKey="val" fill="#06B6D4" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1160,31 +1405,128 @@ function ExpenseTracker() {
           {/* TAB 4: SETTINGS */}
           {activeTab === "settings" && (
              <div className="@container max-w-2xl mx-auto space-y-6 stagger-children">
-               {/* Profile */}
+
+               {/* ── Profile card with Firestore data ── */}
                <div className="glass-card-static p-6">
-                 <div className="flex items-center gap-4 mb-6">
-                   <div className="w-14 h-14 rounded-full bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center text-white text-[20px] font-bold shrink-0">
-                     G
-                   </div>
-                   <div>
-                     <h2 className="text-[18px] font-bold text-text-primary">Gabriel Ferreira</h2>
-                     <p className="text-[13px] text-text-tertiary">SHARECOM Premium</p>
-                   </div>
+                 <div className="flex items-center justify-between mb-5">
+                   <h3 className="text-[16px] font-semibold text-text-primary">Meu Perfil</h3>
+                   <button
+                     onClick={() => {
+                       if (isEditingProfile) {
+                         setProfileForm({ name: fireUser?.name ?? '', locale: fireUser?.locale ?? 'pt-BR', currency: fireUser?.currency ?? 'BRL' });
+                       }
+                       setIsEditingProfile(!isEditingProfile);
+                     }}
+                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-purple text-white text-[12px] font-medium hover:bg-purple-700 transition-colors"
+                   >
+                     {isEditingProfile ? <><X size={12} /> Cancelar</> : <><Pencil size={12} /> Editar Perfil</>}
+                   </button>
                  </div>
-                 <div className="space-y-3">
-                   <div className="flex justify-between items-center py-3 border-b border-glass-border">
-                     <span className="text-[13px] text-text-secondary">{t('settings.email')}</span>
-                     <span className="text-[13px] text-text-primary font-medium">gabriel@email.com</span>
+
+                 {fireLoading ? (
+                   <div className="space-y-4">
+                     <div className="flex items-center gap-4">
+                       <div className="w-16 h-16 rounded-full bg-glass-highlight animate-pulse flex-shrink-0" />
+                       <div className="space-y-2 flex-1"><div className="h-4 w-32 bg-glass-highlight rounded animate-pulse" /><div className="h-3 w-48 bg-glass-highlight rounded animate-pulse" /></div>
+                     </div>
                    </div>
-                   <div className="flex justify-between items-center py-3 border-b border-glass-border">
-                     <span className="text-[13px] text-text-secondary">{t('common.transactions', { count: transactions.length })}</span>
-                     <span className="text-[13px] text-text-primary font-bold tabular-nums">{transactions.length}</span>
-                   </div>
-                   <div className="flex justify-between items-center py-3">
-                     <span className="text-[13px] text-text-secondary">{t('settings.memberSince')}</span>
-                     <span className="text-[13px] text-text-primary font-medium">{formatDateI18n(new Date('2026-04-01'), 'MMMM yyyy')}</span>
-                   </div>
-                 </div>
+                 ) : (
+                   <>
+                     {/* Avatar + name + email */}
+                     <div className="flex items-center gap-4 mb-5">
+                       {fireUser?.photoURL ? (
+                         // eslint-disable-next-line @next/next/no-img-element
+                         <img src={fireUser.photoURL} alt="Foto" referrerPolicy="no-referrer"
+                           className="w-16 h-16 rounded-full border-2 border-brand-purple object-cover flex-shrink-0" />
+                       ) : (
+                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center text-white text-[22px] font-bold flex-shrink-0">
+                           {fireUser?.name?.[0]?.toUpperCase() ?? '?'}
+                         </div>
+                       )}
+                       <div className="overflow-hidden">
+                         <h2 className="text-[18px] font-bold text-text-primary truncate">{fireUser?.name || '—'}</h2>
+                         <p className="text-[13px] text-text-tertiary truncate flex items-center gap-1">
+                           <Mail size={11} className="flex-shrink-0" />{fireUser?.email || '—'}
+                         </p>
+                       </div>
+                     </div>
+
+                     {/* View mode fields */}
+                     {!isEditingProfile && (
+                       <div className="space-y-0 border-t border-glass-border">
+                         <div className="flex justify-between items-center py-3 border-b border-glass-border">
+                           <span className="text-[13px] text-text-secondary flex items-center gap-1.5"><Globe size={13} /> Idioma</span>
+                           <span className="text-[13px] text-text-primary font-medium">
+                             {fireUser?.locale === 'pt-BR' ? 'Português (BR)' : fireUser?.locale === 'en' ? 'English' : fireUser?.locale === 'es' ? 'Español' : fireUser?.locale ?? '—'}
+                           </span>
+                         </div>
+                         <div className="flex justify-between items-center py-3 border-b border-glass-border">
+                           <span className="text-[13px] text-text-secondary flex items-center gap-1.5"><DollarSign size={13} /> Moeda</span>
+                           <span className="text-[13px] text-text-primary font-bold">{fireUser?.currency ?? '—'}</span>
+                         </div>
+                         <div className="flex justify-between items-center py-3 border-b border-glass-border">
+                           <span className="text-[13px] text-text-secondary">{t('common.transactions', { count: transactions.length })}</span>
+                           <span className="text-[13px] text-text-primary font-bold tabular-nums">{transactions.length}</span>
+                         </div>
+                         {fireUser?.createdAt && (
+                           <div className="flex justify-between items-center py-3">
+                             <span className="text-[13px] text-text-secondary flex items-center gap-1.5"><CalendarIcon size={13} /> {t('settings.memberSince')}</span>
+                             <span className="text-[13px] text-text-primary font-medium">
+                               {new Date(fireUser.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
+                             </span>
+                           </div>
+                         )}
+                       </div>
+                     )}
+
+                     {/* Edit form */}
+                     {isEditingProfile && (
+                       <div className="space-y-3 border-t border-glass-border pt-4">
+                         <div>
+                           <label className="text-[11px] text-text-tertiary uppercase tracking-wide mb-1 block">Nome</label>
+                           <input
+                             value={profileForm.name}
+                             onChange={e => setProfileForm({ ...profileForm, name: e.target.value })}
+                             placeholder="Seu nome"
+                             className="w-full p-3 rounded-[10px] bg-glass-highlight border-thin border-glass-border text-text-primary text-[13px] outline-none focus:border-brand-purple transition-colors"
+                           />
+                         </div>
+                         <div>
+                           <label className="text-[11px] text-text-tertiary uppercase tracking-wide mb-1 block">Idioma</label>
+                           <select
+                             value={profileForm.locale}
+                             onChange={e => setProfileForm({ ...profileForm, locale: e.target.value })}
+                             className="w-full p-3 rounded-[10px] bg-glass-highlight border-thin border-glass-border text-text-primary text-[13px] outline-none focus:border-brand-purple transition-colors"
+                           >
+                             <option value="pt-BR">Português (BR)</option>
+                             <option value="en">English</option>
+                             <option value="es">Español</option>
+                           </select>
+                         </div>
+                         <div>
+                           <label className="text-[11px] text-text-tertiary uppercase tracking-wide mb-1 block">Moeda</label>
+                           <select
+                             value={profileForm.currency}
+                             onChange={e => setProfileForm({ ...profileForm, currency: e.target.value })}
+                             className="w-full p-3 rounded-[10px] bg-glass-highlight border-thin border-glass-border text-text-primary text-[13px] outline-none focus:border-brand-purple transition-colors"
+                           >
+                             <option value="BRL">Real (R$)</option>
+                             <option value="USD">Dólar ($)</option>
+                             <option value="EUR">Euro (€)</option>
+                           </select>
+                         </div>
+                         <button
+                           onClick={handleSaveProfile}
+                           disabled={isSavingProfile}
+                           className="w-full flex items-center justify-center gap-2 py-3 rounded-[10px] bg-brand-purple text-white font-bold text-[13px] hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95"
+                         >
+                           <Save size={15} />
+                           {isSavingProfile ? 'Salvando...' : 'Salvar Alterações'}
+                         </button>
+                       </div>
+                     )}
+                   </>
+                 )}
                </div>
 
                {/* Language */}
@@ -1217,9 +1559,9 @@ function ExpenseTracker() {
                    <div className="flex items-center justify-between">
                      <div>
                        <p className="text-[13px] font-medium text-text-primary">{t('settings.currency')}</p>
-                       <p className="text-[11px] text-text-tertiary mt-0.5">{locale}</p>
+                       <p className="text-[11px] text-text-tertiary mt-0.5">{fireUser?.currency ?? locale}</p>
                      </div>
-                     <span className="px-3 py-1.5 rounded-lg bg-glass-highlight border-thin border-glass-border text-[12px] font-bold text-text-primary">{locale === 'pt-BR' ? 'BRL (R$)' : 'USD ($)'}</span>
+                     <span className="px-3 py-1.5 rounded-lg bg-glass-highlight border-thin border-glass-border text-[12px] font-bold text-text-primary">{fireUser?.currency === 'BRL' ? 'BRL (R$)' : fireUser?.currency === 'USD' ? 'USD ($)' : fireUser?.currency ?? 'BRL (R$)'}</span>
                    </div>
                  </div>
                </div>
@@ -1235,7 +1577,7 @@ function ExpenseTracker() {
                      </div>
                      <ChevronRight size={14} className="text-text-tertiary group-hover:text-text-primary transition-colors" />
                    </button>
-                   <button 
+                   <button
                      disabled={isLoadingData}
                      onClick={async () => {
                        setIsLoadingData(true);
@@ -1249,9 +1591,9 @@ function ExpenseTracker() {
                      </div>
                      <ChevronRight size={14} className="text-text-tertiary group-hover:text-text-primary transition-colors" />
                    </button>
-                   <button 
+                   <button
                      disabled={isLoadingData}
-                     onClick={async () => { 
+                     onClick={async () => {
                        if(window.confirm(t('settings.clearDataConfirm'))) {
                          setIsLoadingData(true);
                          try { await clearAllData(); } finally { setIsLoadingData(false); }
@@ -1271,53 +1613,32 @@ function ExpenseTracker() {
                <p className="text-center text-[11px] text-text-tertiary py-4">{t('settings.version')} • Built with 🧠 by Neural Analytics</p>
              </div>
           )}
-        </>
+        </div>
       ) : (
-        /* EMPTY STATE - "CLEAN SLATE" */
-        <div className="flex flex-col items-center justify-center min-h-[70vh] space-y-8 animate-in fade-in zoom-in-95 duration-700">
-           <div className="relative">
-              <div className="w-32 h-32 rounded-full bg-ds-bg-secondary border-thin border-ds-border flex items-center justify-center text-ds-text-tertiary/20">
-                 <FileText size={64} />
-              </div>
-              <div className="absolute -bottom-2 -right-2 w-12 h-12 rounded-full bg-fn-balance flex items-center justify-center text-white shadow-lg border-4 border-ds-bg-primary animate-bounce">
-                 <Plus size={24} />
-              </div>
-           </div>
-           
-           <div className="text-center max-w-sm space-y-3">
-              <h2 className="text-[24px] font-bold text-ds-text-primary">Inicie sua Gestão</h2>
-              <p className="text-[14px] text-ds-text-secondary leading-relaxed">
-                 O ecossistema SHARECOM está pronto. Envie seu primeiro comprovante para ativar os dashboards de inteligência.
-              </p>
-           </div>
-
-           <div className="flex flex-col items-center gap-4">
+        /* EMPTY STATE */
+        <EmptyState
+          icon={<FileText size={64} />}
+          title="Nenhuma transação ainda"
+          description="Envie seu primeiro comprovante para começar a usar os dashboards inteligentes do SHARECOM"
+          action={
+            <div className="flex flex-col items-center gap-4">
               <button 
                 onClick={() => fileInputRef.current?.click()}
-                className="px-8 py-4 bg-fn-balance text-white rounded-2xl font-bold shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
+                className="px-8 py-4 bg-accent-purple text-white rounded-2xl font-bold shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
               >
                 <Plus size={20} />
                 ENVIAR PRIMEIRO COMPROVANTE
               </button>
+              
               <button 
                 onClick={() => setShowManualModal(true)}
-                className="text-[14px] font-medium text-ds-text-tertiary hover:text-ds-text-primary transition-colors"
+                className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
               >
-                Ou registre manualmente
+                Registrar manualmente
               </button>
-           </div>
-
-           {/* Lixeira acessível mesmo vazia para transparência */}
-           {trashTransactions.length > 0 && (
-             <button 
-               onClick={() => setShowTrash(true)}
-               className="mt-12 flex items-center gap-2 text-[12px] text-ds-text-tertiary hover:text-fn-expense transition-colors"
-             >
-               <Trash2 size={14} />
-               Ver {trashTransactions.length} itens na lixeira
-             </button>
-           )}
-        </div>
+            </div>
+          }
+        />
       )}
 
       {/* TRASH MODAL */}
@@ -1499,13 +1820,18 @@ function ExpenseTracker() {
         )}
       </AnimatePresence>
 
-      {/* FINWAVE BOTTOM NAVIGATION BAR */}
-      <div className="md:hidden fixed bottom-0 left-0 w-full glass-card rounded-b-none border-b-0 border-x-0 pb-[max(1rem,env(safe-area-inset-bottom))] z-50 flex justify-around p-4 shadow-glass backdrop-blur-xl">
+      {/* FINWAVE BOTTOM NAVIGATION BAR - Mobile Only */}
+      <div className="lg:hidden fixed bottom-0 left-0 w-full glass-card rounded-b-none border-b-0 border-x-0 z-50 flex justify-around shadow-glass backdrop-blur-xl" style={{
+        paddingTop: '0.75rem',
+        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
+        paddingRight: 'max(1rem, env(safe-area-inset-right))',
+      }}>
         {[
-          { id: "home", label: t('nav.home'), icon: <HomeIcon size={24} /> },
-          { id: "analytics", label: t('nav.analytics'), icon: <PieChartIcon size={24} /> },
-          { id: "goals", label: t('nav.goals'), icon: <Target size={24} /> },
-          { id: "settings", label: t('nav.settings'), icon: <Settings size={24} /> }
+          { id: "home", label: t('nav.home'), icon: <HomeIcon size={22} className="sm:w-6 sm:h-6" /> },
+          { id: "analytics", label: t('nav.analytics'), icon: <PieChartIcon size={22} className="sm:w-6 sm:h-6" /> },
+          { id: "goals", label: t('nav.goals'), icon: <Target size={22} className="sm:w-6 sm:h-6" /> },
+          { id: "settings", label: t('nav.settings'), icon: <Settings size={22} className="sm:w-6 sm:h-6" /> }
         ].map((tab) => (
           <button 
             key={tab.id}
@@ -1514,13 +1840,14 @@ function ExpenseTracker() {
               setActiveTab(tab.id as ActiveTab); 
               setDashboardMode(tab.id as any); 
             }}
-            className={`flex flex-col items-center gap-1 min-w-[48px] min-h-[48px] transition-colors ${activeTab === tab.id ? "text-brand-orange" : "text-text-tertiary hover:text-text-secondary"}`}
+            className={`flex flex-col items-center gap-1 min-w-[56px] min-h-[56px] transition-colors touch-manipulation ${activeTab === tab.id ? "text-brand-orange" : "text-text-tertiary hover:text-text-secondary"}`}
           >
             {tab.icon}
-            <span className="text-[10px] font-medium">{tab.label}</span>
+            <span className="text-[9px] sm:text-[10px] font-medium">{tab.label}</span>
           </button>
         ))}
       </div>
+    </div>
     </div>
   );
 }

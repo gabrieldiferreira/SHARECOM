@@ -7,7 +7,9 @@ import ErrorSentinel from "@/components/ErrorSentinel";
 import InstallPrompt from "@/components/InstallPrompt";
 import { I18nProvider } from "@/i18n/client";
 import { locales, defaultLocale, type Locale } from "@/i18n/request";
-import { AppThemeProvider } from "@/components/ThemeProvider";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { ToastProvider } from "@/components/Toast";
+
 import { DevTools } from "@/components/DevTools";
 
 const inter = Inter({
@@ -105,16 +107,18 @@ export default async function RootLayout({
         <link rel="dns-prefetch" href="https://firebaseapp.com" />
         <link rel="dns-prefetch" href="https://openrouter.ai" />
       </head>
-      <body className={`${inter.variable} font-sans`}>
-        <AppThemeProvider>
-          <I18nProvider initialLocale={locale} initialMessages={messages}>
-            <ErrorSentinel>
-              <Layout>{children}</Layout>
-              <InstallPrompt />
-              <DevTools />
-            </ErrorSentinel>
-          </I18nProvider>
-        </AppThemeProvider>
+      <body className={`${inter.variable} font-sans transition-theme`}>
+        <ThemeProvider attribute="class" defaultTheme="dark" enableSystem>
+          <ToastProvider>
+            <I18nProvider initialLocale={locale} initialMessages={messages}>
+              <ErrorSentinel>
+                <Layout>{children}</Layout>
+                <InstallPrompt />
+                <DevTools />
+              </ErrorSentinel>
+            </I18nProvider>
+          </ToastProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

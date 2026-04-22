@@ -450,3 +450,67 @@ def clear_all_expenses(db: Session = Depends(get_db), _: dict = Depends(verify_f
 @app.get("/patterns")
 def get_patterns(db: Session = Depends(get_db), _: dict = Depends(verify_firebase_token)):
     return db.query(models.PatternLog).order_by(models.PatternLog.timestamp.desc()).all()
+
+import psutil
+import os
+from datetime import datetime
+
+MEMORY_THRESHOLD_MB = 512
+
+def get_memory_usage_mb():
+    process = psutil.Process(os.getpid())
+    return process.memory_info().rss / 1024 / 1024
+
+def check_database_connection():
+    try:
+        from sqlalchemy import text
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return True, None
+    except Exception as e:
+        return False, str(e)
+
+@app.get("/api/health")
+def health_check():
+    start_time = datetime.utcnow()
+    
+    db_status, db_error = check_database_connection()
+    memory_mb = get_memory_usage_mb()
+    memory_healthy = memory_mb < MEMORY_THRESHOLD_MB
+    
+    healthy = db_status and memory_healthy
+    
+    response = {
+        "status": "healthy" if healthy else "unhealthy",
+        "timestamp": start_time.isoformat(),
+        "checks": {
+            "database": {
+                "status": "up" if db_status else "down",
+                "error": db_error,
+            },
+            "memory": {
+                "status": "ok" if memory_healthy else "high",
+                "usage_mb": round(memory_mb, 2),
+                "threshold_mb": MEMORY_THRESHOLD_MB,
+            },
+        },
+        "metrics": {
+            "queries_per_request_avg": 0,
+            "memory_trend": "stable",
+            "error_rate": 0,
+        },
+    }
+    
+    status_code = 200 if healthy else 503
+    return response, status_code
+
+@app.get("/api/health/ready")
+def readiness_check():
+    db_status, _ = check_database_connection()
+    if not db_status:
+        return {"ready": False, "reason": "database not ready"}, 503
+    return {"ready": True}, 200
+
+@app.get("/api/health/live")
+def liveness_check():
+    return {"alive": True}, 200

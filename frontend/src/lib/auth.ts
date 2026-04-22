@@ -7,6 +7,11 @@ async function waitForUser(timeoutMs = 10000): Promise<User | null> {
   if (auth.currentUser) return auth.currentUser;
 
   return await new Promise((resolve) => {
+    if (!auth) {
+      resolve(null);
+      return;
+    }
+
     const timeout = setTimeout(() => {
       unsubscribe();
       resolve(null);

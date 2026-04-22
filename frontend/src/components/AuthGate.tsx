@@ -28,6 +28,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       console.log("AuthGate: Iniciando verificação de sessão...");
 
       try {
+        if (!auth) return;
         // 1. Processa qualquer resultado de redirecionamento pendente (Google Login Mobile)
         const result = await getRedirectResult(auth);
         if (result) {
@@ -39,6 +40,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       }
 
       // 2. Escuta mudanças de estado (Restaurar sessão via Cookie/IndexedDB)
+      if (!auth) return;
       const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
         console.log("AuthGate: onAuthStateChanged ->", currentUser ? currentUser.email : "null");
         setUser(currentUser);

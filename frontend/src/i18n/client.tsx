@@ -41,13 +41,13 @@ const I18nContext = createContext<I18nContextValue | null>(null);
 // ─── Simple dot-path resolver (e.g. "dashboard.cashFlow") ────────────────────
 
 function resolvePath(obj: Messages, path: string): string | undefined {
-  return path.split('.').reduce((acc, key) => acc?.[key], obj) as string | undefined;
+  return path.split('.').reduce((acc, key) => acc?.[key], obj as any) as string | undefined;
 }
 
 // ─── ICU-style plural parser (minimal, supports =0 / one / other) ─────────────
 
 function parsePlural(template: string, count: number): string {
-  const match = template.match(/\{(\w+),\s*plural,\s*(.+)\}/s);
+  const match = template.match(/\{(\w+),\s*plural,\s*(.+)\}/);
   if (!match) return template;
 
   const cases = match[2];

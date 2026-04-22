@@ -2,8 +2,9 @@
 
 import React, { useState, useRef, useEffect } from "react";
 
+import NextImage from "next/image";
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, Sun, Moon, ScanLine, Camera, Image, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -11,6 +12,7 @@ import { useTransactionStore } from "../store/useTransactionStore";
 import { TransactionEntity } from "../lib/db";
 import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { ThemeToggle } from "./ThemeToggle";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -37,7 +39,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           setShowModal(false);
           setPastedContent("");
           setPastedAt(null);
-          setToast({ message: "Link expirado (limite de 1 minuto)", type: 'error' });
+          // setToast({ message: "Link expirado (limite de 1 minuto)", type: 'error' });
         }
       }, 1000);
       return () => clearInterval(timer);
@@ -67,7 +69,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       // 2. Fallback: Tenta ler como texto (Link)
       const text = await navigator.clipboard.readText();
       if (!text || text.trim() === "") {
-        setToast({ message: "Clipboard vazio ou formato não suportado", type: 'error' });
+        // setToast({ message: "Clipboard vazio ou formato não suportado", type: 'error' });
         return;
       }
 
@@ -78,12 +80,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setShowModal(true);
       setShowScanMenu(false);
     } catch (err) {
-      setToast({ message: "Permita o acesso à área de transferência", type: 'error' });
+      // setToast({ message: "Permita o acesso à área de transferência", type: 'error' });
       console.error("Erro ao ler clipboard:", err);
     }
   };
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const [isDark, setIsDark] = useState(false);
   const isLoginPage = pathname === "/login";
 
   React.useEffect(() => {
@@ -92,26 +93,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setUser(u);
     });
   }, []);
-
-  React.useEffect(() => {
-    const saved = localStorage.getItem("theme");
-    if (saved === "dark" || (!saved && window.matchMedia("(prefers-color-scheme: dark)").matches)) {
-      document.documentElement.classList.add("dark");
-      setIsDark(true);
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    const next = !isDark;
-    setIsDark(next);
-    if (next) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -298,40 +279,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen flex-col md:flex-row" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between p-4 sticky top-2 mx-3 z-50 shadow-xl" style={{
-        backgroundColor: isDark ? 'rgba(15, 23, 42, 0.75)' : 'rgba(255, 255, 255, 0.7)',
+      <header className="md:hidden flex items-center justify-between p-4 sticky top-2 mx-3 z-50 shadow-none dark:shadow-xl" style={{
+        backgroundColor: 'var(--card)',
         backdropFilter: 'blur(16px)',
-        border: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
+        border: '1px solid var(--ds-border)',
         borderRadius: '16px'
       }}>
-        <div className="flex items-center gap-2">
-          {user?.photoURL ? (
-            <img
-              src={user.photoURL}
-              alt={user.displayName || "Perfil"}
-              className="w-8 h-8 rounded-full"
-              style={{ border: '0.5px solid var(--ds-border)' }}
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-full flex items-center justify-center font-medium text-[10px]" style={{ backgroundColor: 'var(--bg-tertiary)', color: 'var(--text-secondary)' }}>
-              {user?.displayName?.[0] || "U"}
-            </div>
-          )}
+        <div className="flex items-center gap-2 w-8">
+          {/* Espaço reservado para manter o logo centralizado via justify-between */}
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg overflow-hidden border border-white/10 shadow-sm">
-            <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
+          <div className="w-8 h-8 rounded-lg overflow-hidden border border-black/5 dark:border-white/10 shadow-sm">
+            <NextImage src="/logo.png" alt="Logo" width={32} height={32} className="w-full h-full object-cover" />
           </div>
           <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
         </div>
 
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <button onClick={handleLogout} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
             <LogOut size={18} />
-          </button>
-          <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
-            {isDark ? <Sun size={18} /> : <Moon size={18} />}
           </button>
         </div>
       </header>
@@ -344,36 +312,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between px-2 pt-2">
           <div className="flex items-center gap-2">
              <div className="w-7 h-7 rounded-md overflow-hidden border border-black/5 shadow-sm">
-               <img src="/logo.png" alt="Logo" className="w-full h-full object-cover" />
+               <NextImage src="/logo.png" alt="Logo" width={28} height={28} className="w-full h-full object-cover" />
              </div>
              <h1 className="text-xl font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
           </div>
-          <button onClick={toggleTheme} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
-            {isDark ? <Sun size={16} /> : <Moon size={16} />}
-          </button>
         </div>
 
-        {/* User Profile Info */}
-        {user && (
-          <div className="flex items-center gap-3 p-3 rounded-lg" style={{ backgroundColor: 'var(--bg-tertiary)' }}>
-            {user.photoURL ? (
-              <img
-                src={user.photoURL}
-                alt={user.displayName || "Perfil"}
-                className="w-10 h-10 rounded-full"
-                style={{ border: '0.5px solid var(--ds-border)' }}
-              />
-            ) : (
-              <div className="w-10 h-10 rounded-full flex items-center justify-center font-medium text-sm" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-secondary)' }}>
-                {user.displayName?.[0] || "U"}
-              </div>
-            )}
-            <div className="overflow-hidden">
-              <p className="text-label" style={{ color: 'var(--text-tertiary)' }}>{getGreeting()}</p>
-              <p className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>{user.displayName}</p>
-            </div>
-          </div>
-        )}
+
 
         <nav className="flex-1 space-y-1">
           {navItems.map((item) => {
@@ -415,6 +360,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="space-y-3 pt-4" style={{ borderTop: '0.5px solid var(--ds-border)' }}>
+          <div className="flex items-center justify-between px-2 mb-2">
+            <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>Tema</span>
+            <ThemeToggle />
+          </div>
+          
           <button
             onClick={() => fileInputRef.current?.click()}
             disabled={isUploading}
@@ -504,7 +454,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
                   <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
-                    <Image size={20} />
+                    <LucideImage size={20} />
                   </div>
                   <div className="text-left">
                     <p className="text-sm font-medium">Galeria</p>
@@ -552,10 +502,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div
             className="w-full max-w-sm relative z-10 overflow-hidden rounded-2xl shadow-2xl"
             style={{
-              backgroundColor: isDark ? 'rgba(15, 23, 42, 0.82)' : 'rgba(255, 255, 255, 0.82)',
+              backgroundColor: 'rgba(15, 23, 42, 0.82)',
               backdropFilter: 'blur(20px)',
               WebkitBackdropFilter: 'blur(20px)',
-              border: `1px solid ${isDark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.08)'}`,
+              border: '1px solid rgba(255,255,255,0.12)',
             }}
           >
             <div className="p-5 space-y-4">
@@ -575,7 +525,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {selectedFile ? (
                 <div
                   className="flex items-center gap-3 p-3 rounded-xl"
-                  style={{ backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)', border: '0.5px solid var(--ds-border)' }}
+                  style={{ backgroundColor: 'rgba(255,255,255,0.06)', border: '0.5px solid var(--ds-border)' }}
                 >
                   <div className="w-9 h-9 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--bg-tertiary)', color: '#3B82F6' }}>
                     <FileText size={18} />
@@ -606,7 +556,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     onClick={() => setUploadType("Outflow")}
                     className="relative flex flex-col items-center gap-1.5 py-3 rounded-xl font-medium text-sm transition-all duration-200 active:scale-95"
                     style={{
-                      backgroundColor: uploadType === 'Outflow' ? 'rgba(239, 68, 68, 0.12)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                      backgroundColor: uploadType === 'Outflow' ? 'rgba(239, 68, 68, 0.12)' : 'rgba(255,255,255,0.05)',
                       border: uploadType === 'Outflow' ? '1.5px solid rgba(239, 68, 68, 0.6)' : '1px solid var(--ds-border)',
                       color: uploadType === 'Outflow' ? '#EF4444' : 'var(--text-tertiary)',
                       boxShadow: uploadType === 'Outflow' ? '0 0 12px rgba(239,68,68,0.15)' : 'none',
@@ -629,7 +579,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     onClick={() => setUploadType("Inflow")}
                     className="relative flex flex-col items-center gap-1.5 py-3 rounded-xl font-medium text-sm transition-all duration-200 active:scale-95"
                     style={{
-                      backgroundColor: uploadType === 'Inflow' ? 'rgba(16, 185, 129, 0.12)' : (isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'),
+                      backgroundColor: uploadType === 'Inflow' ? 'rgba(16, 185, 129, 0.12)' : 'rgba(255,255,255,0.05)',
                       border: uploadType === 'Inflow' ? '1.5px solid rgba(16, 185, 129, 0.6)' : '1px solid var(--ds-border)',
                       color: uploadType === 'Inflow' ? '#10B981' : 'var(--text-tertiary)',
                       boxShadow: uploadType === 'Inflow' ? '0 0 12px rgba(16,185,129,0.15)' : 'none',
@@ -658,7 +608,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   placeholder="Ex: Almoço com cliente, treino de futebol..."
                   className="w-full rounded-xl p-3 text-sm focus:outline-none transition-colors h-20 resize-none"
                   style={{
-                    backgroundColor: isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)',
+                    backgroundColor: 'rgba(255,255,255,0.06)',
                     border: '0.5px solid var(--ds-border)',
                     color: 'var(--text-primary)',
                   }}
@@ -735,10 +685,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Bottom Nav - Mobile */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 px-4 flex items-center justify-around z-50 shadow-[0_-8px_30px_rgba(0,0,0,0.2)]" style={{
-          backgroundColor: isDark ? 'rgba(15, 23, 42, 0.9)' : 'rgba(255, 255, 255, 0.85)',
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 px-4 flex items-center justify-around z-50 shadow-none dark:shadow-[0_-8px_30px_rgba(0,0,0,0.2)] border-t border-black/5 dark:border-white/10" style={{
+          backgroundColor: 'var(--card)',
           backdropFilter: 'blur(20px)',
-          borderTop: `1px solid ${isDark ? 'rgba(255, 255, 255, 0.1)' : 'rgba(0, 0, 0, 0.05)'}`,
           borderRadius: '24px 24px 0 0',
           paddingBottom: 'env(safe-area-inset-bottom)',
           transform: 'translateZ(0)',

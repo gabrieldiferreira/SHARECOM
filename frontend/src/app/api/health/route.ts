@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { prisma } from '@/lib/prisma';
+import { initAdmin } from '@/lib/firebase-admin';
 
 interface HealthCheck {
   status: 'ok' | 'degraded' | 'down';
@@ -18,10 +18,14 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   const start = Date.now();
   const checks: HealthCheck['checks'] = {};
 
-  // ── 1. Database ──────────────────────────────────────────────────────────
+  // ── 1. Firestore / Firebase Admin ────────────────────────────────────────
   const dbStart = Date.now();
   try {
-    await prisma.$queryRaw`SELECT 1 AS ping`;
+    const adminReady = initAdmin();
+    if (!adminReady) {
+      throw new Error('Firebase Admin credentials not configured');
+    }
+
     checks.database = {
       status: 'ok',
       latencyMs: Date.now() - dbStart,
@@ -52,7 +56,12 @@ export async function GET(request: NextRequest): Promise<NextResponse> {
   }
 
   // ── 3. Environment variables ─────────────────────────────────────────────
-  const requiredEnvs = ['DATABASE_URL', 'NEXTAUTH_SECRET'];
+  const requiredEnvs = [
+    'NEXT_PUBLIC_FIREBASE_API_KEY',
+    'NEXT_PUBLIC_FIREBASE_PROJECT_ID',
+    'FIREBASE_CLIENT_EMAIL',
+    'FIREBASE_PRIVATE_KEY',
+  ];
   const missingEnvs = requiredEnvs.filter(k => !process.env[k]);
   checks.environment = {
     status: missingEnvs.length > 0 ? 'down' : 'ok',

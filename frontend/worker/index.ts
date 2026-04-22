@@ -1,3 +1,7 @@
+/// <reference lib="webworker" />
+
+const sw = globalThis as unknown as ServiceWorkerGlobalScope;
+
 sw.addEventListener('fetch', (event: any) => {
   const url = new URL(event.request.url);
 

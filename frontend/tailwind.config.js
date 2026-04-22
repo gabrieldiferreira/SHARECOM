@@ -10,60 +10,70 @@ module.exports = {
   theme: {
     extend: {
       colors: {
-        // Design system tokens — all reference CSS variables
-        // This ensures Tailwind classes auto-adapt to dark/light
+        // New unified color system
+        bg: {
+          primary: 'var(--bg-primary)',
+          secondary: 'var(--bg-secondary)',
+          tertiary: 'var(--bg-tertiary)',
+        },
+        card: 'var(--card)',
+        text: {
+          primary: 'var(--text-primary)',
+          secondary: 'var(--text-secondary)',
+          muted: 'var(--text-muted)',
+        },
+        border: 'var(--border)',
+        accent: {
+          purple: 'var(--accent-purple)',
+          pink: 'var(--accent-pink)',
+          orange: 'var(--accent-orange)',
+          cyan: 'var(--accent-cyan)',
+        },
+        success: 'var(--success)',
+        error: 'var(--error)',
+        
+        // Legacy ds-* aliases (for backward compatibility)
         ds: {
           bg: {
-            primary:   'var(--ds-bg-primary)',
+            primary: 'var(--ds-bg-primary)',
             secondary: 'var(--ds-bg-secondary)',
-            tertiary:  'var(--ds-bg-tertiary)',
+            tertiary: 'var(--ds-bg-tertiary)',
           },
           text: {
-            primary:   'var(--ds-text-primary)',
+            primary: 'var(--ds-text-primary)',
             secondary: 'var(--ds-text-secondary)',
-            muted:     'var(--ds-text-muted)',
+            muted: 'var(--ds-text-muted)',
           },
-          border:  'var(--ds-border)',
+          border: 'var(--ds-border)',
           accent: {
-            purple: '#8B5CF6',
-            pink:   '#EC4899',
-            orange: '#FB923C',
-            cyan:   '#06B6D4',
-            green:  '#10B981',
-            red:    '#EF4444',
+            purple: 'var(--ds-accent-purple)',
+            pink: 'var(--ds-accent-pink)',
+            orange: 'var(--ds-accent-orange)',
+            cyan: 'var(--ds-accent-cyan)',
+            green: '#10B981',
+            red: '#EF4444',
           },
         },
-        // Brand aliases (used in existing components)
+        // Brand aliases
         brand: {
-          bg:     'var(--ds-bg-primary)',
-          purple: '#8B5CF6',
-          pink:   '#EC4899',
-          orange: '#FB923C',
-          cyan:   '#06B6D4',
-          green:  '#10B981',
-          red:    '#EF4444',
+          bg: 'var(--bg-primary)',
+          purple: 'var(--accent-purple)',
+          pink: 'var(--accent-pink)',
+          orange: 'var(--accent-orange)',
+          cyan: 'var(--accent-cyan)',
+          green: 'var(--success)',
+          red: 'var(--error)',
         },
         // Glass tokens
         glass: {
-          card:      'var(--glass-bg)',
-          border:    'var(--glass-border)',
+          card: 'var(--glass-bg)',
+          border: 'var(--glass-border)',
           highlight: 'var(--glass-highlight)',
         },
-        // Legacy ds-* aliases (keep existing page.tsx classes working)
-        'ds-bg-primary':     'var(--ds-bg-primary)',
-        'ds-bg-secondary':   'var(--ds-bg-secondary)',
-        'ds-text-primary':   'var(--ds-text-primary)',
-        'ds-text-secondary': 'var(--ds-text-secondary)',
-        'ds-border':         'var(--ds-border)',
-        'fn-income':         '#10B981',
-        'fn-expense':        '#EF4444',
-        'fn-balance':        '#8B5CF6',
-        // New semantic tokens
-        text: {
-          primary:   'var(--ds-text-primary)',
-          secondary: 'var(--ds-text-secondary)',
-          tertiary:  'var(--ds-text-muted)',
-        },
+        // Semantic tokens
+        'fn-income': 'var(--success)',
+        'fn-expense': 'var(--error)',
+        'fn-balance': 'var(--accent-purple)',
       },
       fontFamily: {
         sans: ['Inter', '"SF Pro Display"', '-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
@@ -81,8 +91,9 @@ module.exports = {
         'glow-cyan':  '0 0 20px rgba(6, 182, 212, 0.3)',
         'glow-green': '0 0 20px rgba(16, 185, 129, 0.3)',
         'glow-pink':  '0 0 20px rgba(236, 72, 153, 0.3)',
-        // Light mode shadows
-        card: '0 4px 24px rgba(13, 13, 18, 0.10), 0 1px 4px rgba(13, 13, 18, 0.06)',
+        // Light mode shadows - warm neutral
+        card: '0 4px 24px rgba(28, 25, 23, 0.1), 0 1px 4px rgba(28, 25, 23, 0.06)',
+        'card-lg': '0 8px 32px rgba(28, 25, 23, 0.12), 0 2px 8px rgba(28, 25, 23, 0.08)',
       },
       fontSize: {
         hero:    ['48px', { lineHeight: '1',   fontWeight: '900' }],
@@ -95,6 +106,25 @@ module.exports = {
         'safe-bottom': 'env(safe-area-inset-bottom)',
         'safe-top':    'env(safe-area-inset-top)',
       },
+      screens: {
+        'xs': '375px',
+        'sm': '640px',
+        'md': '768px',
+        'lg': '1024px',
+        'xl': '1280px',
+        '2xl': '1536px',
+        'tablet-landscape': {'raw': '(min-width: 768px) and (orientation: landscape)'},
+        'mobile-landscape': {'raw': '(max-width: 767px) and (orientation: landscape)'},
+      },
+      container: {
+        center: true,
+        padding: {
+          DEFAULT: '1rem',
+          sm: '1.5rem',
+          lg: '2rem',
+          xl: '3rem',
+        },
+      },
       transitionProperty: {
         'theme': 'background-color, color, border-color, box-shadow',
       },
@@ -103,5 +133,7 @@ module.exports = {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/container-queries'),
+  ],
 };
