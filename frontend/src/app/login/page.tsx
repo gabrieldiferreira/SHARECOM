@@ -2,17 +2,20 @@
 
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { 
   signInWithPopup, 
   signInWithRedirect,
   getRedirectResult,
   onAuthStateChanged,
+  signInWithEmailAndPassword,
 } from "firebase/auth";
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, provider, db } from "@/lib/firebase";
-import { Fingerprint, Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
+  const router = useRouter();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -175,6 +178,50 @@ export default function LoginPage() {
     }
   };
 
+  const handleEmailLogin = async () => {
+    if (!auth) {
+      setErrorMessage("Erro: Firebase não configurado.");
+      return;
+    }
+
+    if (!email.trim() || !password) {
+      setErrorMessage("Preencha e-mail e senha para entrar.");
+      return;
+    }
+
+    setIsSigningIn(true);
+    setErrorMessage("");
+
+    try {
+      const result = await signInWithEmailAndPassword(auth, email.trim(), password);
+      await syncAndRedirect(result.user);
+    } catch (error: any) {
+      console.error("❌ Email login failed:", error);
+
+      if (error?.code === "auth/invalid-credential" || error?.code === "auth/wrong-password" || error?.code === "auth/user-not-found") {
+        setErrorMessage("E-mail ou senha incorretos.");
+      } else if (error?.code === "auth/invalid-email") {
+        setErrorMessage("Informe um e-mail válido.");
+      } else if (error?.code === "auth/too-many-requests") {
+        setErrorMessage("Muitas tentativas. Aguarde um pouco e tente novamente.");
+      } else if (error?.code === "auth/operation-not-allowed") {
+        setErrorMessage("Ative o login por e-mail e senha no Firebase.");
+      } else {
+        setErrorMessage(error?.message || "Falha ao autenticar com e-mail e senha.");
+      }
+    } finally {
+      setIsSigningIn(false);
+    }
+  };
+
+  const handleForgotPassword = () => {
+    const nextUrl = email.trim()
+      ? `/reset-password?email=${encodeURIComponent(email.trim())}`
+      : "/reset-password";
+
+    router.push(nextUrl);
+  };
+
 
 
   if (!mounted) return null;
@@ -234,16 +281,10 @@ export default function LoginPage() {
                       onChange={(e) => setEmail(e.target.value)}
                       onFocus={() => setEmailFocused(true)}
                       onBlur={() => setEmailFocused(false)}
-                      placeholder=" "
-                      className="w-full bg-transparent py-3.5 pl-10 pr-3 text-sm text-white placeholder-white/30 outline-none"
+                      placeholder="E-mail"
+                      aria-label="E-mail"
+                      className="w-full bg-transparent py-3.5 pl-10 pr-3 text-sm text-white placeholder:text-white/35 outline-none"
                     />
-                    <label 
-                      className={`absolute left-10 top-1/2 -translate-y-1/2 text-xs transition-all duration-200 pointer-events-none ${
-                        emailFocused || email ? '-top-2 text-[10px] bg-[#0D0D12] px-1 text-purple-400' : 'text-white/40'
-                      }`}
-                    >
-                      E-mail
-                    </label>
                   </div>
                 </div>
 
@@ -264,16 +305,10 @@ export default function LoginPage() {
                       onChange={(e) => setPassword(e.target.value)}
                       onFocus={() => setPasswordFocused(true)}
                       onBlur={() => setPasswordFocused(false)}
-                      placeholder=" "
-                      className="w-full bg-transparent py-3.5 pl-10 pr-10 text-sm text-white placeholder-white/30 outline-none"
+                      placeholder="Senha"
+                      aria-label="Senha"
+                      className="w-full bg-transparent py-3.5 pl-10 pr-10 text-sm text-white placeholder:text-white/35 outline-none"
                     />
-                    <label 
-                      className={`absolute left-10 top-1/2 -translate-y-1/2 text-xs transition-all duration-200 pointer-events-none ${
-                        passwordFocused || password ? '-top-2 text-[10px] bg-[#0D0D12] px-1 text-purple-400' : 'text-white/40'
-                      }`}
-                    >
-                      Senha
-                    </label>
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
@@ -288,6 +323,7 @@ export default function LoginPage() {
                 <div className="flex justify-end -mt-1">
                   <button 
                     type="button"
+                    onClick={handleForgotPassword}
                     className="text-[11px] text-white/40 hover:text-white/60 transition-colors"
                   >
                     Esqueci minha senha
@@ -297,10 +333,7 @@ export default function LoginPage() {
                 {/* Primary Button */}
                 <button
                   type="button"
-                  onClick={() => {
-                    console.log('🔥 Botão ENTRAR clicado');
-                    // Add standard email/password login logic here later
-                  }}
+                  onClick={handleEmailLogin}
                   disabled={isSigningIn}
                   className="w-full py-3.5 px-6 rounded-xl font-bold text-sm text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg"
                   style={{
@@ -311,7 +344,7 @@ export default function LoginPage() {
                   {isSigningIn ? (
                     <Loader2 className="w-5 h-5 animate-spin mx-auto" />
                   ) : (
-                    "ENTRAR"
+                    "ENTRAR COM E-MAIL"
                   )}
                 </button>
 

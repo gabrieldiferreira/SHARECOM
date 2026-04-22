@@ -3,7 +3,12 @@
 import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { auth, db } from "@/lib/firebase";
-import { onAuthStateChanged, User } from "firebase/auth";
+import {
+  EmailAuthProvider,
+  linkWithCredential,
+  onAuthStateChanged,
+  User,
+} from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import {
   Download,
@@ -96,7 +101,12 @@ export default function SettingsPage() {
   const [isEditing, setIsEditing] = useState(false);
   const [formData, setFormData]   = useState({ name: "", locale: "pt-BR", currency: "BRL" });
   const [isSaving, setIsSaving]   = useState(false);
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [hasPassword, setHasPassword] = useState(false);
+  const [isCreatingPassword, setIsCreatingPassword] = useState(false);
 
+  const { showToast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -143,6 +153,11 @@ export default function SettingsPage() {
     return () => unsubscribe();
   }, []);
 
+  useEffect(() => {
+    const providers = (user?.providerData ?? []).map((providerData) => providerData.providerId);
+    setHasPassword(providers.includes("password"));
+  }, [user]);
+
   /* ── Save ── */
   const handleSave = async () => {
     const currentUser = auth?.currentUser;
@@ -172,6 +187,53 @@ export default function SettingsPage() {
       alert("Erro ao salvar. Tente novamente.");
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  /* ── Password ── */
+  const handleCreatePassword = async () => {
+    const currentUser = auth?.currentUser;
+    const email = currentUser?.email;
+
+    if (!currentUser || !email) {
+      showToast("error", "Sua conta precisa ter um e-mail válido para criar uma senha.");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      showToast("error", "As senhas não coincidem.");
+      return;
+    }
+
+    if (password.length < 6) {
+      showToast("error", "A senha deve ter pelo menos 6 caracteres.");
+      return;
+    }
+
+    setIsCreatingPassword(true);
+
+    try {
+      const credential = EmailAuthProvider.credential(email, password);
+      await linkWithCredential(currentUser, credential);
+
+      setHasPassword(true);
+      setPassword("");
+      setConfirmPassword("");
+      showToast("success", "Senha criada! Agora você pode entrar com e-mail e senha.");
+    } catch (error: any) {
+      console.error("Erro ao criar senha:", error);
+
+      if (error?.code === "auth/provider-already-linked") {
+        showToast("error", "Esta conta já possui uma senha vinculada.");
+      } else if (error?.code === "auth/requires-recent-login") {
+        showToast("error", "Faça login novamente com o Google e tente criar a senha outra vez.");
+      } else if (error?.code === "auth/operation-not-allowed") {
+        showToast("error", "Ative o provedor Email/Senha no Firebase para usar este recurso.");
+      } else {
+        showToast("error", "Não foi possível criar a senha. Tente novamente.");
+      }
+    } finally {
+      setIsCreatingPassword(false);
     }
   };
 
@@ -383,6 +445,41 @@ export default function SettingsPage() {
                 </button>
               </div>
             )}
+          </div>
+        )}
+
+        {user && !isLoading && !hasPassword && (
+          <div className="p-4 rounded-xl bg-ds-bg-secondary border border-ds-border space-y-3">
+            <div className="space-y-1">
+              <span className="text-sm font-medium text-ds-text-secondary block">Definir Senha</span>
+              <p className="text-xs text-ds-text-tertiary">
+                Crie uma senha para entrar também sem depender do Google.
+              </p>
+            </div>
+
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Nova senha"
+              className="w-full p-3 bg-ds-bg-primary border border-ds-border rounded-lg text-ds-text-primary outline-none focus:border-purple-500 transition-colors"
+            />
+
+            <input
+              type="password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              placeholder="Confirmar senha"
+              className="w-full p-3 bg-ds-bg-primary border border-ds-border rounded-lg text-ds-text-primary outline-none focus:border-purple-500 transition-colors"
+            />
+
+            <button
+              onClick={handleCreatePassword}
+              disabled={isCreatingPassword}
+              className="w-full flex items-center justify-center gap-2 py-3 rounded-lg bg-purple-600 text-white font-semibold hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed active:scale-95 transition-all"
+            >
+              {isCreatingPassword ? "Criando..." : "Criar Senha"}
+            </button>
           </div>
         )}
 

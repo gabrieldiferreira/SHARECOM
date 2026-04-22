@@ -85,7 +85,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const isLoginPage = pathname === "/login";
+  const isAuthPage = pathname === "/login" || pathname === "/reset-password";
 
   React.useEffect(() => {
     if (!auth) return;
@@ -272,40 +272,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  if (isLoginPage) {
+  if (isAuthPage) {
     return <>{children}</>;
   }
 
   return (
     <div className="flex h-screen flex-col md:flex-row" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
       {/* Mobile Header */}
-      <header className="md:hidden flex items-center justify-between p-4 sticky top-2 mx-3 z-50 shadow-none dark:shadow-xl" style={{
-        backgroundColor: 'var(--card)',
-        backdropFilter: 'blur(16px)',
-        border: '1px solid var(--ds-border)',
-        borderRadius: '16px'
-      }}>
-        <div className="flex items-center gap-2 w-8">
-          {/* Espaço reservado para manter o logo centralizado via justify-between */}
+      <div className="md:hidden sticky top-0 z-50 mobile-header-shell">
+        <div className="mobile-status-bridge" aria-hidden="true" />
+
+        <div className="px-3">
+          <header className="mobile-header-card flex items-center justify-between p-4 shadow-none dark:shadow-xl">
+            <div className="flex items-center gap-2 w-8">
+              {/* Espaço reservado para manter o logo centralizado via justify-between */}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-lg overflow-hidden border border-black/5 dark:border-white/10 shadow-sm">
+                <NextImage src="/logo.png" alt="Logo" width={32} height={32} className="w-full h-full object-cover" />
+              </div>
+              <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <ThemeToggle />
+              <button onClick={handleLogout} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
+                <LogOut size={18} />
+              </button>
+            </div>
+          </header>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg overflow-hidden border border-black/5 dark:border-white/10 shadow-sm">
-            <NextImage src="/logo.png" alt="Logo" width={32} height={32} className="w-full h-full object-cover" />
-          </div>
-          <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARECOM</h1>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <ThemeToggle />
-          <button onClick={handleLogout} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
-            <LogOut size={18} />
-          </button>
-        </div>
-      </header>
-
-      {/* Header Fade Effect (Subtle & Small) */}
-      <div className="md:hidden sticky top-[68px] left-0 right-0 h-3 z-40 pointer-events-none" style={{ background: 'linear-gradient(to bottom, var(--bg-primary) 0%, transparent 100%)', marginTop: '-12px' }}></div>
+        <div className="mobile-header-fade" aria-hidden="true" />
+      </div>
 
       {/* Sidebar - Desktop */}
       <aside className="hidden md:flex flex-col w-60 p-4 space-y-6 overflow-y-auto scroll-container no-scrollbar h-screen sticky top-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '0.5px solid var(--ds-border)' }}>
