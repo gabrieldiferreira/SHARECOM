@@ -138,7 +138,7 @@ function ExpenseTracker() {
     const loadData = async () => {
       console.log('🔍 Debug Dashboard - Starting data load');
       console.log('Auth user:', auth?.currentUser?.uid);
-      console.log('Date filter:', dateFilter);
+      console.log('Date range:', dateRange);
       
       setIsLoadingData(true);
       setDashboardError(null);
