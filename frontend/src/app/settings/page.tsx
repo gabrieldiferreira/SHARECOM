@@ -22,7 +22,7 @@ import {
   Calendar,
   Mail,
 } from "lucide-react";
-import { useToast } from "@/components/Toast";
+import { useToast } from "@/components/ui/Toast";
 
 interface UserData {
   name: string;
@@ -162,7 +162,7 @@ export default function SettingsPage() {
   const handleSave = async () => {
     const currentUser = auth?.currentUser;
     if (!user || !db || !currentUser) {
-      alert("Você precisa estar logado para salvar.");
+      showToast("Você precisa estar logado para salvar.", "error");
       return;
     }
 
@@ -181,10 +181,10 @@ export default function SettingsPage() {
 
       setUserData((prev) => prev ? { ...prev, ...formData } : prev);
       setIsEditing(false);
-      alert("Dados atualizados com sucesso!");
+      showToast("Dados atualizados com sucesso!", "success");
     } catch (err) {
       console.error("Erro ao salvar:", err);
-      alert("Erro ao salvar. Tente novamente.");
+      showToast("Erro ao salvar. Tente novamente.", "error");
     } finally {
       setIsSaving(false);
     }
@@ -253,9 +253,10 @@ export default function SettingsPage() {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
+      showToast("Dados exportados com sucesso!", "success");
     } catch (e) {
       console.error(e);
-      alert("Erro ao exportar dados.");
+      showToast("Erro ao exportar dados.", "error");
     }
   };
 

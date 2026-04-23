@@ -7,6 +7,7 @@ import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { useTransactionStore } from "../../store/useTransactionStore";
 import { motion, AnimatePresence } from "framer-motion";
 import { auth } from '@/lib/firebase';
+import { useToast } from "@/components/ui/Toast";
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "Alimentação": <Coffee size={20} />,
@@ -46,6 +47,7 @@ export default function TimelinePage() {
     fetchTransactions,
     moveToTrash,
   } = useTransactionStore();
+  const { showToast } = useToast();
 
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -222,12 +224,13 @@ export default function TimelinePage() {
         setShowEditModal(false);
         setEditModalData(null);
         fetchTransactions();
+        showToast('Alterações salvas com sucesso!', 'success');
       } else {
-        alert('Erro ao salvar alterações');
+        showToast('Erro ao salvar alterações', 'error');
       }
     } catch (e) {
       console.error('Edit error:', e);
-      alert('Erro ao salvar alterações');
+      showToast('Erro ao salvar alterações', 'error');
     }
   };
 
@@ -247,12 +250,13 @@ export default function TimelinePage() {
       
       if (res.ok) {
         moveToTrash(typeof txId === 'string' ? parseInt(txId) : txId);
+        showToast('Transação excluída com sucesso!', 'success');
       } else {
-        alert('Erro ao excluir transação');
+        showToast('Erro ao excluir transação', 'error');
       }
     } catch (e) {
       console.error('Delete error:', e);
-      alert('Erro ao excluir transação');
+      showToast('Erro ao excluir transação', 'error');
     }
   };
 

@@ -13,9 +13,11 @@ import {
 import { doc, setDoc, getDoc } from "firebase/firestore";
 import { auth, provider, db } from "@/lib/firebase";
 import { Eye, EyeOff, Mail, Lock, Loader2 } from "lucide-react";
+import { useToast } from "@/components/ui/Toast";
 
 export default function LoginPage() {
   const router = useRouter();
+  const { showToast } = useToast();
   const [isSigningIn, setIsSigningIn] = useState(false);
   const [errorMessage, setErrorMessage] = useState("");
   const [mounted, setMounted] = useState(false);
@@ -70,7 +72,7 @@ export default function LoginPage() {
           console.log('✅ Saved successfully!');
         } catch (err: any) {
           console.error('❌ Error saving:', err);
-          alert(`Error saving profile: ${err?.message || 'Unknown Firestore error'}`);
+          showToast(`Error saving profile: ${err?.message || 'Unknown Firestore error'}`, 'error');
           throw err;
         }
 
@@ -84,7 +86,7 @@ export default function LoginPage() {
       }
     } catch (e: any) {
       console.error('❌ Sync failed', e);
-      alert(`Login sync failed: ${e?.message || 'Unknown error'}`);
+      showToast(`Login sync failed: ${e?.message || 'Unknown error'}`, 'error');
     }
     window.location.href = "/";
   };
@@ -168,7 +170,7 @@ export default function LoginPage() {
       }
     } catch (error: any) {
       console.error('❌ Google login failed:', error);
-      alert(`Google login error: ${error?.message || 'Unknown auth error'}`);
+      showToast(`Google login error: ${error?.message || 'Unknown auth error'}`, 'error');
       if (error.code === 'auth/popup-blocked') {
         setErrorMessage("O popup foi bloqueado pelo navegador.");
       } else if (error.code !== 'auth/cancelled-by-user') {

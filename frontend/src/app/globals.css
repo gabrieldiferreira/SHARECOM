@@ -830,12 +830,28 @@ body > div:first-child::-webkit-scrollbar {
 }
 */
 
+@keyframes slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 0.3s ease-out;
+}
+
 /* Reduced motion */
 @media (prefers-reduced-motion: reduce) {
   .glass-card:hover { transform: none; }
   .animate-fade-in-up,
   .animate-fill-progress,
   .animate-pulse-glow,
+  .animate-slide-in,
   .skeleton { animation: none; }
   .stagger-children > * { animation: none; }
   body { transition: none; }

@@ -25,6 +25,7 @@ import { EmptyState } from "../components/EmptyState";
 import { auth, db } from "../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { useToast } from "@/components/ui/Toast";
 
 
 // Lazy load recharts — reduz o bundle inicial em ~200 KB
@@ -89,6 +90,7 @@ function ExpenseTracker() {
 
   // PWA Native Haptics
   const haptics = useHaptics();
+  const { showToast } = useToast();
 
   const [isUploading, setIsUploading] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<"idle" | "success" | "duplicate" | "error">("idle");
@@ -196,10 +198,10 @@ function ExpenseTracker() {
       localStorage.setItem('USER_CURRENCY', profileForm.currency);
       setFireUser(prev => prev ? { ...prev, ...profileForm } : prev);
       setIsEditingProfile(false);
-      alert('Perfil atualizado!');
+      showToast('Perfil atualizado!', 'success');
     } catch (e) {
       console.error(e);
-      alert('Erro ao salvar perfil.');
+      showToast('Erro ao salvar perfil.', 'error');
     } finally {
       setIsSavingProfile(false);
     }
@@ -305,12 +307,12 @@ function ExpenseTracker() {
         const ai = data.ai_data || {};
         
         if (ai.merchant_name && ai.merchant_name.includes("Check API Key")) {
-           alert("O backend está rodando, mas a GEMINI_API_KEY está ausente ou inválida. Configure o .env");
+           showToast("O backend está rodando, mas a GEMINI_API_KEY está ausente ou inválida. Configure o .env", "error");
            setIsUploading(false);
            return;
         }
         if (ai.merchant_name && ai.merchant_name.includes("Limite Gemini atingido")) {
-          alert("Limite de uso da API Gemini atingido. Aguarde o reset da cota ou troque para um plano com mais capacidade.");
+          showToast("Limite de uso da API Gemini atingido. Aguarde o reset da cota ou troque para um plano com mais capacidade.", "error");
           setIsUploading(false);
           return;
         }
@@ -356,22 +358,22 @@ function ExpenseTracker() {
       } else {
         haptics.error();
         if (response.status === 401) {
-          alert("Sua sessão expirou. Faça login novamente para continuar.");
+          showToast("Sua sessão expirou. Faça login novamente para continuar.", "error");
           return;
         }
         try {
           const errorText = await response.text();
           const errObj = JSON.parse(errorText);
-          if (errObj.detail) { alert(`Falha: ${errObj.detail}`); return; }
+          if (errObj.detail) { showToast(`Falha: ${errObj.detail}`, 'error'); return; }
         } catch (e) {}
-        alert("Falha ao processar o recibo automaticamente.");
+        showToast("Falha ao processar o recibo automaticamente.", "error");
       }
     } catch (e) {
       console.error("Upload error:", e);
       if (e instanceof Error && e.message === "AUTH_REQUIRED") {
-        alert("Você precisa estar autenticado para enviar recibos.");
+        showToast("Você precisa estar autenticado para enviar recibos.", "error");
       } else {
-        alert("Erro ao conectar com o servidor. Verifique sua internet.");
+        showToast("Erro ao conectar com o servidor. Verifique sua internet.", "error");
       }
     } finally {
       setIsUploading(false);
