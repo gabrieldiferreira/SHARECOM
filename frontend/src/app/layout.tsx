@@ -88,7 +88,7 @@ async function getLocaleAndMessages(): Promise<{ locale: Locale; messages: Recor
     // Static rendering fallback
   }
 
-  const messages = (await import(`../../messages/${locale}.json`)).default;
+  const messages = (await import(`@/messages/${locale}.json`)).default;
   return { locale, messages };
 }
 
