@@ -1170,22 +1170,35 @@ function ExpenseTracker() {
                   </div>
                 </div>
                 <div className="h-[200px] md:h-[300px] xl:h-[400px] w-full min-w-0">
-                  {/* @ts-expect-error - Dynamically imported Recharts components */}
-                  <ResponsiveContainer width="100%" height="100%">
-                    {/* @ts-expect-error - Dynamically imported Recharts components */}
-                    <BarChart data={temporalData.hourly} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                  {temporalData.hourly.every(d => d.val === 0) ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center px-4">
+                      <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-4">
+                        <BarChart3 size={32} className="text-purple-400" />
+                      </div>
+                      <p className="text-text-secondary text-sm font-medium mb-2">
+                        {t('dashboard.noSpendingData')}
+                      </p>
+                      <p className="text-text-tertiary text-xs">
+                        {t('dashboard.addTransactionsToSeeChart')}
+                      </p>
+                    </div>
+                  ) : (
+                    <ResponsiveContainer width="100%" height="100%">
                       {/* @ts-expect-error - Dynamically imported Recharts components */}
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                      {/* @ts-expect-error - Dynamically imported Recharts components */}
-                      <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
-                      {/* @ts-expect-error - Dynamically imported Recharts components */}
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
-                      {/* @ts-expect-error - Dynamically imported Recharts components */}
-                      <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} cursor={{ fill: 'rgba(139,92,246,0.08)' }} />
-                      {/* @ts-expect-error - Dynamically imported Recharts components */}
-                      <Bar dataKey="val" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                      <BarChart data={temporalData.hourly} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
+                        <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
+                        <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} cursor={{ fill: 'rgba(139,92,246,0.08)' }} />
+                        {/* @ts-expect-error - Dynamically imported Recharts components */}
+                        <Bar dataKey="val" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  )}
                 </div>
               </div>
 
@@ -1194,8 +1207,21 @@ function ExpenseTracker() {
                  {/* Categories */}
                  <div className="glass-card-static p-5 md:p-6">
                     <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.topCategories')}</h2>
-                    <div className="space-y-3 stagger-children">
-                      {categoriesData.slice(0, 5).map((cat, i) => {
+                    {categoriesData.length === 0 ? (
+                      <div className="h-[280px] flex flex-col items-center justify-center text-center px-4">
+                        <div className="w-14 h-14 rounded-2xl bg-pink-500/10 flex items-center justify-center mb-3">
+                          <PieChartIcon size={28} className="text-pink-400" />
+                        </div>
+                        <p className="text-text-secondary text-sm font-medium mb-1">
+                          {t('dashboard.noCategoryData')}
+                        </p>
+                        <p className="text-text-tertiary text-xs">
+                          {t('dashboard.categoriesWillAppearHere')}
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3 stagger-children">
+                        {categoriesData.slice(0, 5).map((cat, i) => {
                          const pct = totalOutflow > 0 ? (cat.value / totalOutflow) * 100 : 0;
                          return (
                             <div key={i} className="p-4 rounded-[16px] bg-glass-highlight border-thin border-glass-border hover:border-brand-purple/30 hover:shadow-glow transition-all cursor-pointer flex items-center justify-between group">
@@ -1219,6 +1245,7 @@ function ExpenseTracker() {
                          );
                       })}
                     </div>
+                    )}
                  </div>
 
                  {/* Donut Chart */}
