@@ -8,7 +8,7 @@ import InstallPrompt from "@/components/InstallPrompt";
 import { I18nProvider } from "@/i18n/client";
 import { locales, defaultLocale, type Locale } from "@/i18n/request";
 import { ThemeProvider } from "@/components/ThemeProvider";
-import { ToastProvider } from "@/components/Toast";
+import { ToastProvider } from "@/components/ui/Toast";
 
 import { DevTools } from "@/components/DevTools";
 
