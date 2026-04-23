@@ -70,9 +70,9 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
           {toasts.map(toast => (
             <motion.div
               key={toast.id}
-              initial={{ opacity: 0, x: 100, scale: 0.9 }}
-              animate={{ opacity: 1, x: 0, scale: 1 }}
-              exit={{ opacity: 0, x: 100, scale: 0.9 }}
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 20 }}
               className={`pointer-events-auto p-4 rounded-2xl flex items-center gap-3 min-w-[280px] max-w-sm border backdrop-blur-xl ${colors[toast.type]}`}
             >
               <div className="shrink-0">{icons[toast.type]}</div>

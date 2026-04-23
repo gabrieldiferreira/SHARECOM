@@ -122,9 +122,9 @@ export default function LinkPage() {
         {showForm && !generatedLink ? (
           <motion.div
             key="form"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
             className="space-y-4"
           >
             {/* Form Card - Centered */}
@@ -220,8 +220,8 @@ export default function LinkPage() {
         ) : generatedLink ? (
           <motion.div
             key="preview"
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
             className="space-y-4"
           >
             {/* Generated Link Preview - Glass Container */}
@@ -305,8 +305,8 @@ export default function LinkPage() {
           {links.map(link => (
             <motion.div
               key={link.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0, x: 10 }}
+              animate={{ opacity: 1, x: 0 }}
               className="p-4 rounded-2xl flex items-center justify-between bg-ds-bg-secondary border border-ds-border"
             >
               <div className="flex items-center gap-3">

@@ -16,6 +16,7 @@ import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { getApiUrl } from "../../lib/api";
 import { auth } from "../../lib/firebase";
 import { onAuthStateChanged } from "firebase/auth";
+import { motion, AnimatePresence } from "framer-motion";
 
 const CATEGORY_COLORS: Record<string, string> = {
   "Alimentação": "#8B5CF6",
@@ -406,7 +407,7 @@ export default function ReportsPage() {
           <button
             key={r.id}
             onClick={() => setActiveReport(r.id)}
-            className={`flex items-center gap-1.5 px-4 py-2.5 text-xs font-medium whitespace-nowrap rounded-xl transition-all flex-1 ${activeReport === r.id ? 'text-white' : 'text-white/50 hover:text-white/70'}`}
+            className={`flex items-center justify-center gap-1.5 px-4 py-2.5 text-xs font-medium whitespace-nowrap rounded-xl transition-all flex-1 ${activeReport === r.id ? 'text-white' : 'text-white/50 hover:text-white/70'}`}
             style={activeReport === r.id ? { 
               background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
               boxShadow: '0 2px 12px rgba(139, 92, 246, 0.3)',
@@ -431,8 +432,7 @@ export default function ReportsPage() {
           <button
             key={t}
             onClick={() => setTimeRange(t)}
-            disabled={isLoadingReports}
-            className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all disabled:opacity-50 ${timeRange === t ? 'text-white' : 'text-white/50'}`}
+            className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-all ${timeRange === t ? 'text-white' : 'text-white/50'}`}
             style={timeRange === t ? { 
               background: 'rgba(139, 92, 246, 0.3)',
             } : {}}
@@ -440,26 +440,43 @@ export default function ReportsPage() {
             {t === 'monthly' ? 'Mensal' : t === 'quarterly' ? 'Trimestral' : 'Anual'}
           </button>
         ))}
-        {isLoadingReports && <Loader2 size={14} className="ml-2 animate-spin text-white/50" />}
       </div>
 
       {/* Report content */}
-      <div className="rounded-lg overflow-hidden bg-ds-bg-secondary border-thin border-ds-border">
-        {isLoadingReports ? (
-          <div className="py-12 text-center">
+      <div className="rounded-lg overflow-hidden bg-ds-bg-secondary border-thin border-ds-border relative min-h-[400px]">
+        {/* Background loading indicator */}
+        {isLoadingReports && (
+          <div className="absolute top-4 right-4 z-50 animate-in fade-in duration-300">
+            <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-ds-bg-primary/80 border-thin border-ds-border backdrop-blur-md shadow-sm">
+              <Loader2 size={12} className="animate-spin text-fn-balance" />
+              <span className="text-[10px] font-medium text-ds-text-secondary">Atualizando...</span>
+            </div>
+          </div>
+        )}
+
+        {!isCheckingAuth && transactions.length === 0 && isLoadingReports ? (
+          <div className="py-24 text-center">
             <Loader2 size={32} className="animate-spin mx-auto mb-3 text-fn-balance" />
-            <p className="text-[14px] text-ds-text-secondary">Carregando dados do período...</p>
+            <p className="text-[14px] text-ds-text-secondary">Carregando dados financeiros...</p>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="py-12 text-center">
-            <p className="text-[14px] text-ds-text-secondary">Sem dados para este período.</p>
+          <div className="py-24 text-center">
+            <p className="text-[14px] text-ds-text-secondary">Nenhuma transação encontrada para os filtros selecionados.</p>
           </div>
         ) : (
           <div className="p-3 sm:p-6">
+            <AnimatePresence>
+              <motion.div
+                key={activeReport}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
+              >
             {/* ── Overview ─────────────────────────────── */}
             {activeReport === "overview" && (
               <div className="space-y-8">
-                <h2 className="text-[18px] font-medium border-b-thin border-ds-border pb-2 text-ds-text-primary">Visão Geral</h2>
+                <h2 className="text-[18px] font-medium border-b-thin border-ds-border pb-2 text-ds-text-primary text-center">Visão Geral</h2>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                   {/* Pie: category distribution */}
                   <div className="flex flex-col items-center">
@@ -528,7 +545,7 @@ export default function ReportsPage() {
             {/* ── Category ─────────────────────────────── */}
             {activeReport === "category" && (
               <div className="space-y-6">
-                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Categoria</h2>
+                <h2 className="text-[18px] font-medium text-ds-text-primary text-center">Relatório por Categoria</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="min-w-0">
                     <ResponsiveContainer width="100%" height={300}>
@@ -595,7 +612,7 @@ export default function ReportsPage() {
             {/* ── Monthly ──────────────────────────────── */}
             {activeReport === "monthly" && (
               <div className="space-y-6">
-                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório Mensal</h2>
+                <h2 className="text-[18px] font-medium text-ds-text-primary text-center">Relatório Mensal</h2>
                 <ResponsiveContainer width="100%" height={300}>
                   <BarChart data={monthlyData}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--ds-border)" />
@@ -645,7 +662,7 @@ export default function ReportsPage() {
             {/* ── Payment Method ───────────────────────── */}
             {activeReport === "payment" && (
               <div className="space-y-6">
-                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Método de Pagamento</h2>
+                <h2 className="text-[18px] font-medium text-ds-text-primary text-center">Relatório por Método de Pagamento</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="min-w-0">
                     <ResponsiveContainer width="100%" height={300}>
@@ -694,7 +711,7 @@ export default function ReportsPage() {
             {/* ── Institution ──────────────────────────── */}
             {activeReport === "institution" && (
               <div className="space-y-6">
-                <h2 className="text-[18px] font-medium text-ds-text-primary">Relatório por Instituição</h2>
+                <h2 className="text-[18px] font-medium text-ds-text-primary text-center">Relatório por Instituição</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                   <div className="min-w-0">
                     <ResponsiveContainer width="100%" height={300}>
@@ -737,6 +754,8 @@ export default function ReportsPage() {
                 </div>
               </div>
             )}
+            </motion.div>
+          </AnimatePresence>
           </div>
         )}
       </div>

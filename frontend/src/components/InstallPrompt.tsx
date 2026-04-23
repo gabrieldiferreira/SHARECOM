@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import { Download, X, Smartphone } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
 interface BeforeInstallPromptEvent extends Event {
   prompt: () => Promise<void>;
@@ -61,94 +62,100 @@ export default function InstallPrompt() {
     sessionStorage.setItem("pwa-install-dismissed", "1");
   };
 
-  if (!showBanner || dismissed) return null;
-
-  // Banner para iOS — instrução manual
-  if (isIOS) {
-    return (
-      <div
-        className="fixed bottom-24 left-4 right-4 z-[500] rounded-2xl p-4 shadow-2xl"
-        style={{
-          backgroundColor: "var(--bg-secondary)",
-          border: "1px solid var(--ds-border)",
-          backdropFilter: "blur(16px)",
-        }}
-      >
-        <div className="flex items-start gap-3">
-          <div
-            className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
-            style={{ border: '1px solid var(--ds-border)' }}
-          >
-            <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover" />
-          </div>
-          <div className="flex-1">
-            <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
-              Instalar SHARECOM
-            </p>
-            <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
-              Toque em{" "}
-              <span className="font-bold" style={{ color: "#3B82F6" }}>
-                Compartilhar ↑
-              </span>{" "}
-              e depois{" "}
-              <span className="font-bold" style={{ color: "#3B82F6" }}>
-                &ldquo;Adicionar à Tela de Início&rdquo;
-              </span>
-            </p>
-          </div>
-          <button onClick={handleDismiss} style={{ color: "var(--text-tertiary)" }}>
-            <X size={18} />
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Banner para Android/Chrome/Edge — instala com 1 clique
   return (
-    <div
-      className="fixed bottom-24 left-4 right-4 z-[500] rounded-2xl shadow-2xl"
-      style={{
-        backgroundColor: "var(--bg-secondary)",
-        border: "1px solid var(--ds-border)",
-        backdropFilter: "blur(16px)",
-      }}
-    >
-      <div className="flex items-center gap-3 p-4">
-        <div
-          className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
-          style={{ border: '1px solid var(--ds-border)' }}
-        >
-          <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
-            Instalar SHARECOM
-          </p>
-          <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-            Acesso rápido, funciona offline
-          </p>
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          <button
-            onClick={handleDismiss}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg"
+    <AnimatePresence>
+      {showBanner && !dismissed && (
+        isIOS ? (
+          <motion.div
+            key="ios-banner"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="fixed bottom-24 left-4 right-4 z-[500] rounded-2xl p-4 shadow-2xl"
             style={{
-              border: "0.5px solid var(--ds-border)",
-              color: "var(--text-secondary)",
+              backgroundColor: "var(--bg-secondary)",
+              border: "1px solid var(--ds-border)",
+              backdropFilter: "blur(16px)",
             }}
           >
-            Agora não
-          </button>
-          <button
-            onClick={handleInstall}
-            className="px-3 py-1.5 text-xs font-medium rounded-lg text-white"
-            style={{ backgroundColor: "#3B82F6" }}
+            <div className="flex items-start gap-3">
+              <div
+                className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
+                style={{ border: '1px solid var(--ds-border)' }}
+              >
+                <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
+                  Instalar SHARECOM
+                </p>
+                <p className="text-xs mt-0.5 leading-relaxed" style={{ color: "var(--text-secondary)" }}>
+                  Toque em{" "}
+                  <span className="font-bold" style={{ color: "#3B82F6" }}>
+                    Compartilhar ↑
+                  </span>{" "}
+                  e depois{" "}
+                  <span className="font-bold" style={{ color: "#3B82F6" }}>
+                    &ldquo;Adicionar à Tela de Início&rdquo;
+                  </span>
+                </p>
+              </div>
+              <button onClick={handleDismiss} style={{ color: "var(--text-tertiary)" }}>
+                <X size={18} />
+              </button>
+            </div>
+          </motion.div>
+        ) : (
+          <motion.div
+            key="android-banner"
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            className="fixed bottom-24 left-4 right-4 z-[500] rounded-2xl shadow-2xl"
+            style={{
+              backgroundColor: "var(--bg-secondary)",
+              border: "1px solid var(--ds-border)",
+              backdropFilter: "blur(16px)",
+            }}
           >
-            Instalar
-          </button>
-        </div>
-      </div>
-    </div>
+            <div className="flex items-center gap-3 p-4">
+              <div
+                className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
+                style={{ border: '1px solid var(--ds-border)' }}
+              >
+                <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>
+                  Instalar SHARECOM
+                </p>
+                <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                  Acesso rápido, funciona offline
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                <button
+                  onClick={handleDismiss}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg"
+                  style={{
+                    border: "0.5px solid var(--ds-border)",
+                    color: "var(--text-secondary)",
+                  }}
+                >
+                  Agora não
+                </button>
+                <button
+                  onClick={handleInstall}
+                  className="px-3 py-1.5 text-xs font-medium rounded-lg text-white"
+                  style={{ backgroundColor: "#3B82F6" }}
+                >
+                  Instalar
+                </button>
+              </div>
+            </div>
+          </motion.div>
+        )
+      )}
+    </AnimatePresence>
   );
 }

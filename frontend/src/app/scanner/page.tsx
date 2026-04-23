@@ -427,8 +427,8 @@ export default function ScannerPage() {
           <AnimatePresence>
             {idempotent && (
               <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
                 className="flex items-center gap-2 px-4 py-3 mb-4 rounded-xl"
                 style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)' }}
               >
@@ -439,8 +439,8 @@ export default function ScannerPage() {
 
             {editData.needs_manual_review && !idempotent && (
               <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
                 className="flex items-center gap-2 px-4 py-3 mb-4 rounded-xl"
                 style={{ background: 'rgba(245, 158, 11, 0.15)', border: '1px solid rgba(245, 158, 11, 0.3)' }}
               >
@@ -451,8 +451,8 @@ export default function ScannerPage() {
 
             {!idempotent && !editData.needs_manual_review && (
               <motion.div 
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
                 className="flex items-center gap-2 px-4 py-3 mb-4 rounded-xl"
                 style={{ background: 'rgba(16, 185, 129, 0.15)', border: '1px solid rgba(16, 185, 129, 0.3)' }}
               >

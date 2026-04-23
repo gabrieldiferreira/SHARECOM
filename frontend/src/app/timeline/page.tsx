@@ -249,16 +249,18 @@ export default function TimelinePage() {
                 {txs.map((tx, idx) => (
                   <motion.div
                     key={tx.id}
-                    initial={{ opacity: 0, x: -20 }}
+                    initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: idx * 0.03 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ delay: idx * 0.01, duration: 0.3, ease: "easeOut" }}
                     className="relative mb-2"
                   >
                     {/* Main transaction row */}
                     <motion.div
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: idx * 0.03 }}
+                      initial={{ x: 20, opacity: 0 }}
+                      animate={{ x: 0, opacity: 1 }}
+                      exit={{ x: -20, opacity: 0 }}
+                      transition={{ duration: 0.3, ease: "easeOut" }}
                       className="relative flex items-center gap-3 p-4 rounded-2xl cursor-pointer group bg-bg-secondary border border-border hover:border-accent-purple/30 transition-all"
                     >
                       {/* Merchant Logo 48px Circle */}

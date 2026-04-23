@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 
 import { useState, useEffect, Suspense, useMemo, useRef, useCallback } from "react";
 import NextDynamic from "next/dynamic";
+import Link from "next/link";
 import { 
   Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, BarChart3, Plus, Loader2, CheckCircle2, 
   TrendingUp, TrendingDown, Landmark, Clock, Award, MessageSquare, Search, Filter, ChevronLeft, 
@@ -36,20 +37,27 @@ const ChartPlaceholder = () => (
   </div>
 );
 
-const BarChart = NextDynamic(() => import('recharts').then(m => m.BarChart), { ssr: false, loading: ChartPlaceholder });
-const Bar = NextDynamic(() => import('recharts').then(m => m.Bar), { ssr: false });
-const LineChart = NextDynamic(() => import('recharts').then(m => m.LineChart), { ssr: false });
-const Line = NextDynamic(() => import('recharts').then(m => m.Line), { ssr: false });
-const PieChart = NextDynamic(() => import('recharts').then(m => m.PieChart), { ssr: false });
-const Pie = NextDynamic(() => import('recharts').then(m => m.Pie), { ssr: false });
-const XAxis = NextDynamic(() => import('recharts').then(m => m.XAxis), { ssr: false });
-const YAxis = NextDynamic(() => import('recharts').then(m => m.YAxis), { ssr: false });
-const ResponsiveContainer = NextDynamic(() => import('recharts').then(m => m.ResponsiveContainer), { ssr: false });
-const Cell = NextDynamic(() => import('recharts').then(m => m.Cell), { ssr: false });
-const Tooltip = NextDynamic(() => import('recharts').then(m => m.Tooltip), { ssr: false });
-const CartesianGrid = NextDynamic(() => import('recharts').then(m => m.CartesianGrid), { ssr: false });
-const AreaChart = NextDynamic(() => import('recharts').then(m => m.AreaChart), { ssr: false, loading: ChartPlaceholder });
-const Area = NextDynamic(() => import('recharts').then(m => m.Area), { ssr: false });
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const dyn = (loader: () => Promise<any>): React.ComponentType<any> =>
+  NextDynamic(loader as any, { ssr: false } as any);
+const dynLoad = (loader: () => Promise<any>, loading: () => React.ReactElement): React.ComponentType<any> =>
+  NextDynamic(loader as any, { ssr: false, loading } as any);
+
+const BarChart      = dynLoad(() => import('recharts').then(m => ({ default: m.BarChart })), ChartPlaceholder);
+const Bar           = dyn(() => import('recharts').then(m => ({ default: m.Bar })));
+const LineChart     = dyn(() => import('recharts').then(m => ({ default: m.LineChart })));
+const Line          = dyn(() => import('recharts').then(m => ({ default: m.Line })));
+const PieChart      = dyn(() => import('recharts').then(m => ({ default: m.PieChart })));
+const Pie           = dyn(() => import('recharts').then(m => ({ default: m.Pie })));
+const XAxis         = dyn(() => import('recharts').then(m => ({ default: m.XAxis })));
+const YAxis         = dyn(() => import('recharts').then(m => ({ default: m.YAxis })));
+const ResponsiveContainer = dyn(() => import('recharts').then(m => ({ default: m.ResponsiveContainer })));
+const Cell          = dyn(() => import('recharts').then(m => ({ default: m.Cell })));
+const Tooltip       = dyn(() => import('recharts').then(m => ({ default: m.Tooltip })));
+const CartesianGrid = dyn(() => import('recharts').then(m => ({ default: m.CartesianGrid })));
+const AreaChart     = dynLoad(() => import('recharts').then(m => ({ default: m.AreaChart })), ChartPlaceholder);
+const Area          = dyn(() => import('recharts').then(m => ({ default: m.Area })));
+/* eslint-enable @typescript-eslint/no-explicit-any */
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "eatingOut": <Coffee size={20} />,
@@ -1126,14 +1134,14 @@ function ExpenseTracker() {
 
 
           {/* TAB 1: HOME */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {activeTab === "home" && (
               <motion.div 
                 key="home"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
                 className="@container space-y-4 sm:space-y-6"
               >
               
@@ -1170,10 +1178,7 @@ function ExpenseTracker() {
                   Todos
                 </button>
 
-                {/* Transaction count indicator */}
-                <div className="ml-4 px-3 py-1.5 rounded-lg bg-bg-secondary border border-border text-xs text-text-tertiary whitespace-nowrap">
-                  {transactions.length} total | {filteredByDate.length} filtradas
-                </div>
+
                 
                 {/* Mock data button (only show if no transactions) */}
                 {transactions.length === 0 && (
@@ -1253,9 +1258,7 @@ function ExpenseTracker() {
                       <span className="text-[16px] sm:text-[20px] lg:text-val-xl font-semibold text-text-primary leading-none tabular-nums block truncate">R$ {metric.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                     </div>
                     <div className="h-[40px] sm:h-[50px] lg:h-[60px] w-full mt-1 sm:mt-2 opacity-40 group-hover:opacity-100 transition-opacity">
-                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <ResponsiveContainer width="100%" height="100%">
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <AreaChart data={growthData.slice(-10)}>
                           <defs>
                             <linearGradient id={`grad${i}`} x1="0" y1="0" x2="0" y2="1">
@@ -1263,7 +1266,6 @@ function ExpenseTracker() {
                               <stop offset="95%" stopColor={metric.color} stopOpacity={0}/>
                             </linearGradient>
                           </defs>
-                          {/* @ts-expect-error - Dynamically imported Recharts components */}
                           <Area type="monotone" dataKey="capital" stroke={metric.color} strokeWidth={2} fillOpacity={1} fill={`url(#grad${i})`} />
                         </AreaChart>
                       </ResponsiveContainer>
@@ -1305,14 +1307,14 @@ function ExpenseTracker() {
           </AnimatePresence>
 
           {/* TAB 2: ANALYTICS */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {activeTab === "analytics" && (
               <motion.div
                 key="analytics"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
                 className="@container space-y-6"
               >
               {/* (3) SPENDING CHART */}
@@ -1370,17 +1372,11 @@ function ExpenseTracker() {
                     </div>
                   ) : (
                     <ResponsiveContainer width="100%" height="100%">
-                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <BarChart data={temporalData.hourly} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
                         <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} cursor={{ fill: 'rgba(139,92,246,0.08)' }} />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <Bar dataKey="val" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1438,16 +1434,11 @@ function ExpenseTracker() {
                  <div className="glass-card-static p-5 md:p-6 flex flex-col justify-between">
                     <h2 className="text-[16px] font-semibold text-text-primary mb-4">{t('dashboard.distribution')}</h2>
                     <div className="h-[220px] md:h-[250px] w-full relative">
-                       {/* @ts-expect-error - Dynamically imported Recharts components */}
                        <ResponsiveContainer width="100%" height="100%">
-                         {/* @ts-expect-error - Dynamically imported Recharts components */}
                          <PieChart>
-                           {/* @ts-expect-error - Dynamically imported Recharts components */}
                            <Pie data={categoriesData} innerRadius="55%" outerRadius="80%" paddingAngle={4} dataKey="value" stroke="none">
-                             {/* @ts-expect-error - Dynamically imported Recharts components */}
                              {categoriesData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
                            </Pie>
-                           {/* @ts-expect-error - Dynamically imported Recharts components */}
                            <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
                          </PieChart>
                        </ResponsiveContainer>
@@ -1475,19 +1466,12 @@ function ExpenseTracker() {
                 <div className="glass-card-static p-5 md:p-6">
                   <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.weekdayActivity')}</h2>
                   <div className="h-[200px] w-full">
-                    {/* @ts-expect-error - Dynamically imported Recharts components */}
                     <ResponsiveContainer width="100%" height="100%">
-                      {/* @ts-expect-error - Dynamically imported Recharts components */}
                       <BarChart data={weekdayIntensity} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={v => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
+                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
                         <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
-                        {/* @ts-expect-error - Dynamically imported Recharts components */}
                         <Bar dataKey="val" fill="#06B6D4" radius={[8, 8, 0, 0]} />
                       </BarChart>
                     </ResponsiveContainer>
@@ -1551,14 +1535,14 @@ function ExpenseTracker() {
           </AnimatePresence>
 
           {/* TAB 3: GOALS */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {activeTab === "goals" && (
               <motion.div
                 key="goals"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
                 className="@container space-y-6"
               >
                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -1659,14 +1643,14 @@ function ExpenseTracker() {
           </AnimatePresence>
 
           {/* TAB 4: SETTINGS */}
-          <AnimatePresence mode="wait">
+          <AnimatePresence>
             {activeTab === "settings" && (
               <motion.div
                 key="settings"
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                exit={{ opacity: 0, y: -20 }}
-                transition={{ duration: 0.2, ease: "easeInOut" }}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ duration: 0.3, ease: "easeOut" }}
                 className="@container max-w-2xl mx-auto space-y-6"
               >
 
@@ -1916,9 +1900,10 @@ function ExpenseTracker() {
             className="fixed inset-0 z-[300] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
           >
             <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.95, opacity: 0 }}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
               className="w-full max-w-lg bg-ds-bg-primary border-thin border-ds-border rounded-2xl shadow-2xl overflow-hidden"
             >
               <div className="p-6 border-b border-ds-border flex items-center justify-between">
@@ -2005,7 +1990,13 @@ function ExpenseTracker() {
       <AnimatePresence>
         {showModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }} className="w-full max-w-sm bg-ds-bg-primary border-thin border-ds-border rounded-2xl p-6 shadow-2xl">
+            <motion.div 
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full max-w-sm bg-ds-bg-primary border-thin border-ds-border rounded-2xl p-6 shadow-2xl"
+            >
               <h3 className="text-[18px] font-bold text-ds-text-primary mb-2">{t('upload.processReceipt')}</h3>
               <p className="text-[13px] text-ds-text-secondary mb-6">{t('upload.classifyReceipt')}</p>
               
@@ -2039,7 +2030,13 @@ function ExpenseTracker() {
       <AnimatePresence>
         {showManualModal && (
           <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[400] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-            <motion.div initial={{ y: 20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 20, opacity: 0 }} className="w-full max-w-md bg-ds-bg-primary border-thin border-ds-border rounded-2xl shadow-2xl overflow-hidden">
+            <motion.div 
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+              className="w-full max-w-md bg-ds-bg-primary border-thin border-ds-border rounded-2xl shadow-2xl overflow-hidden"
+            >
               <div className="p-6 border-b border-ds-border flex items-center justify-between">
                 <h3 className="text-[18px] font-bold text-ds-text-primary">{t('manual.title')}</h3>
                 <button onClick={() => setShowManualModal(false)} className="p-2 text-ds-text-tertiary hover:text-ds-text-primary"><X size={20} /></button>

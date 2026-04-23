@@ -69,9 +69,10 @@ export function DevTools() {
             className="fixed inset-0 z-[2000] flex items-center justify-center bg-black/80 backdrop-blur-sm"
           >
             <motion.div
-              initial={{ scale: 0.9 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.9 }}
+              initial={{ x: 20, opacity: 0 }}
+              animate={{ x: 0, opacity: 1 }}
+              exit={{ x: -20, opacity: 0 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
               className="bg-[#1E1E2E] border border-red-500/30 rounded-2xl p-6 w-80 max-w-[90vw] shadow-2xl"
             >
               <div className="flex items-center gap-3 mb-4">
@@ -121,9 +122,10 @@ export function DevTools() {
       <AnimatePresence>
         {isOpen && (
           <motion.div
-            initial={{ opacity: 0, y: 20, scale: 0.95 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 20, scale: 0.95 }}
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            exit={{ opacity: 0, x: -20 }}
+            transition={{ duration: 0.3, ease: "easeOut" }}
             className="fixed bottom-36 left-4 z-[1000] w-72 bg-[#1E1E2E] border border-white/10 rounded-2xl shadow-2xl overflow-hidden"
           >
             <div className="flex items-center justify-between p-4 bg-white/5 border-b border-white/5">

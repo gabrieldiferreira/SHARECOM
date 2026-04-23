@@ -33,14 +33,14 @@ export const getRedisConnection = (name = 'default') => {
     },
     // Prevent ioredis from emitting errors to the process if it fails to connect
     autoResubscribe: false,
-    maxRetriesReadyCheck: 1,
   });
 
   // Attach a silent error listener to prevent process-level logging of ECONNREFUSED
   connection.on('error', (err) => {
     if (!hasLoggedError) {
       // Log only a concise warning once
-      const isConnError = err.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
+    const nodeErr = err as NodeJS.ErrnoException;
+    const isConnError = nodeErr.code === 'ECONNREFUSED' || err.message?.includes('ECONNREFUSED');
       const msg = isConnError ? 'Connection refused (check if Redis is running)' : err.message;
       
       console.warn(`⚠️ Redis connection [${name}] failed: ${msg}`);

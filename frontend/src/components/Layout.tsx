@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 
 import NextImage from "next/image";
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp, Target } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -12,6 +12,7 @@ import { useTransactionStore } from "../store/useTransactionStore";
 import { TransactionEntity } from "../lib/db";
 import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
+import { motion, AnimatePresence } from "framer-motion";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -247,11 +248,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const navItems = [
+  const desktopNavItems = [
     { name: "Painel", href: "/", icon: LayoutDashboard },
     { name: "Histórico", href: "/timeline", icon: History },
     { name: "Scanner", href: "/scanner", icon: ScanLine },
     { name: "Relatórios", href: "/reports", icon: PieChart },
+    { name: "Link", onClick: handlePasteLink, icon: Link2 },
+  ];
+
+  const mobileNavItems = [
+    { name: "Painel", href: "/", icon: LayoutDashboard },
+    { name: "Histórico", href: "/timeline", icon: History },
+    { name: "Análises", href: "/reports", icon: PieChart },
+    { name: "Metas", href: "/goals", icon: Target },
     { name: "Link", onClick: handlePasteLink, icon: Link2 },
   ];
 
@@ -295,7 +304,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <button onClick={handleLogout} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
+              <Link href="/settings" className="p-1.5 rounded-md hover:bg-black/5" style={{ color: 'var(--text-secondary)' }}>
+                <Settings size={18} />
+              </Link>
+              <button onClick={handleLogout} className="p-1.5 rounded-md hover:bg-black/5" style={{ color: 'var(--text-secondary)' }}>
                 <LogOut size={18} />
               </button>
             </div>
@@ -319,7 +331,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
 
         <nav className="flex-1 space-y-1">
-          {navItems.map((item) => {
+          {desktopNavItems.map((item) => {
             const Icon = item.icon;
             const isActive = item.href ? pathname === item.href : false;
 
@@ -379,9 +391,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <span>{uploadSuccess ? "Enviado!" : "Enviar Comprovante"}</span>
           </button>
 
+          <Link
+            href="/settings"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-black/5"
+            style={{ color: 'var(--text-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '6px' }}
+          >
+            <Settings size={16} />
+            <span>Configurações</span>
+          </Link>
+
           <button
             onClick={handleLogout}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-black/5"
             style={{ color: 'var(--text-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '6px' }}
           >
             <LogOut size={16} />
@@ -673,13 +694,27 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="flex-1 overflow-y-auto scroll-container pb-20 md:pb-0">
-          <div className="max-w-7xl mx-auto w-full">
-            {children}
+          <div className="max-w-7xl mx-auto w-full grid grid-cols-1 grid-rows-1">
+            <AnimatePresence mode="popLayout">
+              <motion.div
+                key={pathname}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                transition={{ 
+                  duration: 0.25, 
+                  ease: "easeInOut" 
+                }}
+                className="col-start-1 row-start-1 w-full"
+              >
+                {children}
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
 
-        {/* Bottom Nav - Mobile */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 px-4 flex items-center justify-around z-50 shadow-none dark:shadow-[0_-8px_30px_rgba(0,0,0,0.2)] border-t border-black/5 dark:border-white/10" style={{
+        {/* Bottom Nav - Mobile (Scrollable with Fixed Scan Button) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 z-50 shadow-none dark:shadow-[0_-8px_30px_rgba(0,0,0,0.2)] border-t border-black/5 dark:border-white/10" style={{
           backgroundColor: 'var(--card)',
           backdropFilter: 'blur(20px)',
           borderRadius: '24px 24px 0 0',
@@ -688,89 +723,71 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale'
         }}>
-          {navItems.slice(0, 2).map((item) => {
-            const Icon = item.icon;
-            const isActive = item.href ? pathname === item.href : false;
-
-            if (item.onClick) {
-              return (
-                <button
-                  key={item.name}
-                  onClick={item.onClick}
-                  className="flex flex-col items-center space-y-0.5 transition-colors"
-                  style={{ color: 'var(--text-tertiary)' }}
-                >
-                  <Icon size={20} />
-                  <span className="text-[11px] font-semibold">{item.name}</span>
-                </button>
-              );
-            }
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href || "#"}
-                className="flex flex-col items-center space-y-0.5 transition-colors"
-                style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
+          {/* Central Scan Button - Fixed and Elevated */}
+          <div className="absolute left-1/2 -translate-x-1/2 -top-5 flex flex-col items-center z-20 pointer-events-auto">
+            <div className="p-2 flex flex-col items-center">
+              <button
+                onClick={() => setShowScanMenu(true)}
+                disabled={isUploading}
+                className="w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-all text-white"
+                style={{
+                  backgroundColor: uploadSuccess ? '#10B981' : '#3B82F6',
+                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
+                }}
               >
-                <Icon size={20} />
-                <span className="text-[11px] font-semibold">{item.name}</span>
-              </Link>
-            );
-          })}
-
-          {/* Central Scan Button - opens camera on mobile */}
-          <div className="relative -top-4 flex flex-col items-center">
-            <button
-              onClick={() => setShowScanMenu(true)}
-              disabled={isUploading}
-              className="w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-all text-white"
-              style={{
-                backgroundColor: uploadSuccess ? '#10B981' : '#3B82F6',
-                boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
-              }}
-            >
-              {isUploading ? (
-                <Loader2 size={24} className="animate-spin" />
-              ) : uploadSuccess ? (
-                <CheckCircle2 size={24} />
-              ) : (
-                <Camera size={24} strokeWidth={2} />
-              )}
-            </button>
-            <span className="text-[10px] font-medium mt-0.5" style={{ color: '#3B82F6' }}>Scan</span>
+                {isUploading ? (
+                  <Loader2 size={24} className="animate-spin" />
+                ) : uploadSuccess ? (
+                  <CheckCircle2 size={24} />
+                ) : (
+                  <Camera size={24} strokeWidth={2} />
+                )}
+              </button>
+              <span className="text-[10px] font-bold mt-1" style={{ color: '#3B82F6' }}>Scan</span>
+            </div>
           </div>
 
-          {[navItems[3], navItems[4]].map((item) => {
-            const Icon = item.icon;
-            const isActive = item.href ? pathname === item.href : false;
+          {/* Scrollable Container for all other icons */}
+          <div 
+            className="flex items-center h-full overflow-x-auto no-scrollbar px-0 relative z-10 snap-x snap-mandatory" 
+            style={{ 
+              WebkitOverflowScrolling: 'touch',
+              maskImage: 'linear-gradient(to right, transparent 0%, black 15%, black calc(50% - 40px), transparent calc(50% - 25px), transparent calc(50% + 25px), black calc(50% + 40px), black 85%, transparent 100%)',
+              WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 15%, black calc(50% - 40px), transparent calc(50% - 25px), transparent calc(50% + 25px), black calc(50% + 40px), black 85%, transparent 100%)'
+            }}
+          >
+            {/* Contiguous items mapping (duplicated for infinite scroll feel) */}
+            {[...mobileNavItems, ...mobileNavItems, ...mobileNavItems, ...mobileNavItems].map((item, index) => {
+              const Icon = item.icon;
+              const isActive = item.href ? pathname === item.href : false;
 
-            if (item.onClick) {
+              if (item.onClick) {
+                return (
+                  <button
+                    key={`${item.name}-${index}`}
+                    onClick={item.onClick}
+                    className="flex flex-col items-center justify-center space-y-1 transition-colors shrink-0 w-[20vw] snap-start"
+                    style={{ color: 'var(--text-tertiary)' }}
+                  >
+                    <Icon size={24} />
+                    <span className="text-[12px] font-semibold">{item.name}</span>
+                  </button>
+                );
+              }
+
               return (
-                <button
-                  key={item.name}
-                  onClick={item.onClick}
-                  className="flex flex-col items-center space-y-0.5 transition-colors"
-                  style={{ color: 'var(--text-tertiary)' }}
+                <Link
+                  key={`${item.name}-${index}`}
+                  href={item.href || "#"}
+                  className="flex flex-col items-center justify-center space-y-1 transition-colors shrink-0 w-[20vw] snap-start"
+                  style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
                 >
-                  <Icon size={20} />
-                  <span className="text-[10px] font-medium">{item.name}</span>
-                </button>
+                  <Icon size={24} />
+                  <span className="text-[12px] font-semibold">{item.name}</span>
+                </Link>
               );
-            }
-
-            return (
-              <Link
-                key={item.href}
-                href={item.href || "#"}
-                className="flex flex-col items-center space-y-0.5 transition-colors"
-                style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
-              >
-                <Icon size={20} />
-                <span className="text-[10px] font-medium">{item.name}</span>
-              </Link>
-            );
-          })}
+            })}
+          </div>
         </nav>
       </main>
     </div>

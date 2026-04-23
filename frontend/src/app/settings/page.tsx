@@ -196,17 +196,17 @@ export default function SettingsPage() {
     const email = currentUser?.email;
 
     if (!currentUser || !email) {
-      showToast("error", "Sua conta precisa ter um e-mail válido para criar uma senha.");
+      showToast("Sua conta precisa ter um e-mail válido para criar uma senha.", "error");
       return;
     }
 
     if (password !== confirmPassword) {
-      showToast("error", "As senhas não coincidem.");
+      showToast("As senhas não coincidem.", "error");
       return;
     }
 
     if (password.length < 6) {
-      showToast("error", "A senha deve ter pelo menos 6 caracteres.");
+      showToast("A senha deve ter pelo menos 6 caracteres.", "error");
       return;
     }
 
@@ -219,18 +219,18 @@ export default function SettingsPage() {
       setHasPassword(true);
       setPassword("");
       setConfirmPassword("");
-      showToast("success", "Senha criada! Agora você pode entrar com e-mail e senha.");
+      showToast("Senha criada! Agora você pode entrar com e-mail e senha.", "success");
     } catch (error: any) {
       console.error("Erro ao criar senha:", error);
 
       if (error?.code === "auth/provider-already-linked") {
-        showToast("error", "Esta conta já possui uma senha vinculada.");
+        showToast("Esta conta já possui uma senha vinculada.", "error");
       } else if (error?.code === "auth/requires-recent-login") {
-        showToast("error", "Faça login novamente com o Google e tente criar a senha outra vez.");
+        showToast("Faça login novamente com o Google e tente criar a senha outra vez.", "error");
       } else if (error?.code === "auth/operation-not-allowed") {
-        showToast("error", "Ative o provedor Email/Senha no Firebase para usar este recurso.");
+        showToast("Ative o provedor Email/Senha no Firebase para usar este recurso.", "error");
       } else {
-        showToast("error", "Não foi possível criar a senha. Tente novamente.");
+        showToast("Não foi possível criar a senha. Tente novamente.", "error");
       }
     } finally {
       setIsCreatingPassword(false);
@@ -239,7 +239,7 @@ export default function SettingsPage() {
 
   /* ── Export ── */
   const handleExport = async () => {
-    if (!user) return showToast("error", "Você precisa estar logado para exportar.");
+    if (!user) return showToast("Você precisa estar logado para exportar.", "error");
     try {
       const token = await user.getIdToken();
       const res = await fetch("/api/export", { headers: { Authorization: `Bearer ${token}` } });
@@ -273,11 +273,11 @@ export default function SettingsPage() {
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
         body:    JSON.stringify(data),
       });
-      if (res.ok) { showToast("success", "Dados importados com sucesso!"); setTimeout(() => window.location.href = "/", 1000); }
-      else          showToast("error", "Falha na importação dos dados.");
+      if (res.ok) { showToast("Dados importados com sucesso!", "success"); setTimeout(() => window.location.href = "/", 1000); }
+      else          showToast("Falha na importação dos dados.", "error");
     } catch (err) {
       console.error(err);
-      showToast("error", "Erro ao ler ou enviar arquivo.");
+      showToast("Erro ao ler ou enviar arquivo.", "error");
     } finally {
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
