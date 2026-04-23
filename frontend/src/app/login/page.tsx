@@ -115,6 +115,12 @@ export default function LoginPage() {
         }
       } catch (error: any) {
         if (!isMounted) return;
+        console.error('❌ getRedirectResult error:', error);
+        // Não bloqueia o usuário se o erro for apenas 'no result'
+        if (error.code !== 'auth/no-recent-redirect-handled') {
+          setErrorMessage(`Erro ao processar login mobile: ${error.message}`);
+        }
+        setIsCheckingSession(false);
       }
 
       const unsubscribe = onAuthStateChanged(auth as any, (user) => {
@@ -152,28 +158,31 @@ export default function LoginPage() {
     setIsSigningIn(true);
     setErrorMessage("");
     try {
-      const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
       const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      if (isLocalhost || !isMobile) {
+      
+      // Tentar popup primeiro (funciona em muitos browsers mobile modernos)
+      try {
         const result = await signInWithPopup(auth as any, provider as any);
-        console.log('✅ Auth OK, user:', result.user);
-        console.log('User ID:', result.user?.uid);
+        console.log('✅ Auth OK (Popup), user:', result.user);
         if (result.user) {
           await syncAndRedirect(result.user);
         } else {
           console.error('❌ Google auth returned no user');
           setIsSigningIn(false);
         }
-      } else {
-        console.log('↪️ Using signInWithRedirect');
-        await signInWithRedirect(auth as any, provider as any);
+      } catch (popupError: any) {
+        // Se falhar por bloqueio de popup ou se estivermos em mobile, tentamos redirect
+        if (popupError.code === 'auth/popup-blocked' || isMobile) {
+          console.log('↪️ Falling back to signInWithRedirect');
+          await signInWithRedirect(auth as any, provider as any);
+        } else {
+          throw popupError;
+        }
       }
     } catch (error: any) {
       console.error('❌ Google login failed:', error);
       showToast(`Google login error: ${error?.message || 'Unknown auth error'}`, 'error');
-      if (error.code === 'auth/popup-blocked') {
-        setErrorMessage("O popup foi bloqueado pelo navegador.");
-      } else if (error.code !== 'auth/cancelled-by-user') {
+      if (error.code !== 'auth/cancelled-by-user') {
         setErrorMessage(error.message || "Falha ao autenticar.");
       }
       setIsSigningIn(false);

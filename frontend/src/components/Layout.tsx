@@ -281,7 +281,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <div className="md:hidden sticky top-0 z-50 mobile-header-shell">
         <div className="mobile-status-bridge" aria-hidden="true" />
 
-        <div className="px-3">
+        <div>
           <header className="mobile-header-card flex items-center justify-between p-4 shadow-none dark:shadow-xl">
             <div className="flex items-center gap-2 w-8">
               {/* Espaço reservado para manter o logo centralizado via justify-between */}
