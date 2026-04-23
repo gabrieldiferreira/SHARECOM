@@ -151,11 +151,23 @@ function ExpenseTracker() {
       1.5, 2.2, 2.0, 1.5, 1.0, 0.8, 0.5 // 6-11pm: evening peak
     ];
     
-    // Generate 80 transactions over the last 30 days with weighted hours
-    for (let i = 0; i < 80; i++) {
-      const daysAgo = Math.floor(Math.random() * 30);
-      const date = new Date(now);
+    // Weekday weights: more activity on weekdays, less on weekends
+    const weekdayWeights = [0.7, 1.2, 1.3, 1.2, 1.3, 1.1, 0.8]; // Sun-Sat
+    
+    // Generate 100 transactions over the last 30 days with weighted hours and weekdays
+    for (let i = 0; i < 100; i++) {
+      // Select day with weekday weighting
+      let daysAgo = Math.floor(Math.random() * 30);
+      let date = new Date(now);
       date.setDate(date.getDate() - daysAgo);
+      
+      // Re-roll if weekday weight doesn't match
+      const dayOfWeek = date.getDay();
+      if (Math.random() > weekdayWeights[dayOfWeek] / 1.3) {
+        daysAgo = Math.floor(Math.random() * 30);
+        date = new Date(now);
+        date.setDate(date.getDate() - daysAgo);
+      }
       
       // Weighted random hour selection
       const totalWeight = hourlyWeights.reduce((a, b) => a + b, 0);
@@ -195,6 +207,11 @@ function ExpenseTracker() {
         const h = new Date(tx.transaction_date).getHours();
         acc[h] = (acc[h] || 0) + 1;
         return acc;
+      }, {} as Record<number, number>),
+      weekdayDistribution: mockTransactions.reduce((acc, tx) => {
+        const d = new Date(tx.transaction_date).getDay();
+        acc[d] = (acc[d] || 0) + 1;
+        return acc;
       }, {} as Record<number, number>)
     });
     
@@ -203,7 +220,7 @@ function ExpenseTracker() {
       await addTransaction(tx);
     }
     
-    showToast('80 transações de demonstração adicionadas!', 'success');
+    showToast('100 transações de demonstração adicionadas!', 'success');
     await fetchTransactions();
   }, [addTransaction, fetchTransactions, showToast]);
 
@@ -612,16 +629,24 @@ function ExpenseTracker() {
   }, [filteredByDate, t]);
 
   const weekdayIntensity = useMemo(() => {
+    console.log('📅 Calculating weekday intensity from', filteredByDate.length, 'transactions');
     const days = Array.from({ length: 7 }, (_, i) => {
       const d = new Date(2023, 0, 1 + i); // Jan 1, 2023 was a Sunday
       return formatDateI18n(d, 'EEEEEE');
     });
     const intensity = [0, 0, 0, 0, 0, 0, 0];
+    let processedCount = 0;
     filteredByDate.forEach(tx => {
+      if (tx.transaction_type !== 'Outflow') return; // Only count expenses
       const date = new Date(tx.transaction_date);
-      if (!isNaN(date.getTime())) intensity[date.getDay()] += tx.total_amount;
+      if (!isNaN(date.getTime())) {
+        intensity[date.getDay()] += tx.total_amount;
+        processedCount++;
+      }
     });
-    return days.map((day, i) => ({ day, val: intensity[i] }));
+    const result = days.map((day, i) => ({ day, val: intensity[i] }));
+    console.log('📅 Weekday intensity:', { processedTxs: processedCount, byDay: intensity, result });
+    return result;
   }, [filteredByDate, formatDateI18n]);
 
   const paymentMethodsData = useMemo(() => {
