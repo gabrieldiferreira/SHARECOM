@@ -12,7 +12,6 @@ import { useTransactionStore } from "../store/useTransactionStore";
 import { TransactionEntity } from "../lib/db";
 import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { ThemeToggle } from "./ThemeToggle";
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -296,7 +295,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <ThemeToggle />
               <button onClick={handleLogout} className="p-1.5 rounded-md" style={{ color: 'var(--text-secondary)' }}>
                 <LogOut size={18} />
               </button>
@@ -360,10 +358,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="space-y-3 pt-4" style={{ borderTop: '0.5px solid var(--ds-border)' }}>
-          <div className="flex items-center justify-between px-2 mb-2">
-            <span className="text-xs font-medium" style={{ color: 'var(--text-tertiary)' }}>Tema</span>
-            <ThemeToggle />
-          </div>
           
           <button
             onClick={() => fileInputRef.current?.click()}
