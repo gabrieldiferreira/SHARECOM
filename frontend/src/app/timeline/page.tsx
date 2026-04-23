@@ -190,23 +190,16 @@ export default function TimelinePage() {
         paddingBottom: '12px',
       }}>
         <div 
-          className="flex flex-col md:flex-row gap-3 items-center p-3 rounded-2xl"
-          style={{ 
-            background: 'rgba(255, 255, 255, 0.03)',
-            backdropFilter: 'blur(20px)',
-            WebkitBackdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
+          className="flex flex-col md:flex-row gap-3 items-center p-3 rounded-2xl bg-bg-secondary border border-border backdrop-blur-xl"
         >
           <div className="relative flex-1 w-full">
-            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-white/40" />
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
             <input
               type="text"
               placeholder="Pesquisar transação..."
               value={searchQuery}
               onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              className="w-full py-2.5 pl-9 pr-3 text-sm bg-white/5 rounded-xl outline-none text-white placeholder-white/30 transition-all"
-              style={{ border: '1px solid rgba(255, 255, 255, 0.08)' }}
+              className="w-full py-2.5 pl-9 pr-3 text-sm bg-bg-tertiary rounded-xl outline-none text-text-primary placeholder-text-muted transition-all border border-border focus:border-accent-purple"
             />
           </div>
         </div>
@@ -217,14 +210,11 @@ export default function TimelinePage() {
             <button
               key={f.id}
               onClick={() => { setActiveFilter(f.id); setCurrentPage(1); }}
-              className="px-3.5 py-2 text-xs font-medium whitespace-nowrap rounded-full transition-all"
-              style={{
-                background: activeFilter === f.id 
-                  ? 'linear-gradient(135deg, #8B5CF6, #EC4899)' 
-                  : 'rgba(255, 255, 255, 0.05)',
-                color: activeFilter === f.id ? 'white' : 'rgba(255, 255, 255, 0.5)',
-                border: activeFilter === f.id ? 'none' : '1px solid rgba(255, 255, 255, 0.1)',
-              }}
+              className={`px-3.5 py-2 text-xs font-medium whitespace-nowrap rounded-full transition-all ${
+                activeFilter === f.id
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0'
+                  : 'bg-bg-tertiary text-text-secondary border border-border hover:bg-bg-secondary'
+              }`}
             >
               {f.label}
             </button>
@@ -234,25 +224,12 @@ export default function TimelinePage() {
 
       {/* Empty State Illustration */}
       {groupedTransactions.length === 0 ? (
-        <div 
-          className="p-12 text-center rounded-2xl"
-          style={{ 
-            background: 'rgba(255, 255, 255, 0.03)',
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
-        >
-          <div 
-            className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4"
-            style={{ 
-              background: 'rgba(139, 92, 246, 0.1)',
-              color: '#8B5CF6',
-            }}
-          >
-            <Calendar size={32} />
+        <div className="p-12 text-center rounded-2xl bg-bg-secondary border border-border backdrop-blur-xl">
+          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-purple-500/10">
+            <Calendar size={32} className="text-purple-500" />
           </div>
-          <p className="text-base font-semibold mb-1.5 text-white">Nenhuma transação</p>
-          <p className="text-xs text-white/40">
+          <p className="text-base font-semibold mb-1.5 text-text-primary">Nenhuma transação</p>
+          <p className="text-xs text-text-tertiary">
             {searchQuery || activeFilter !== 'all'
               ? 'Tente ajustar seus filtros.'
               : 'Suas transações aparecerão aqui.'}
