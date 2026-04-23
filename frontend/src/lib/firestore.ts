@@ -124,6 +124,41 @@ function normalizeDoc<T extends Record<string, unknown>>(id: string, data: T) {
   } as T & { id: string };
 }
 
+function toComparableDate(value: unknown): Date | null {
+  if (!value) {
+    return null;
+  }
+
+  if (value instanceof Timestamp) {
+    return value.toDate();
+  }
+
+  if (value instanceof Date) {
+    return Number.isNaN(value.getTime()) ? null : value;
+  }
+
+  if (typeof value === 'string') {
+    const parsed = new Date(value);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  return null;
+}
+
+function isLikelyFirestoreQueryError(error: unknown) {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const message = error.message.toLowerCase();
+  return (
+    message.includes('index') ||
+    message.includes('query requires') ||
+    message.includes('invalid query') ||
+    message.includes('failed-precondition')
+  );
+}
+
 export async function upsertUser(
   userId: string,
   data: Partial<UserProfile>,
@@ -200,13 +235,53 @@ export async function getTransactions(
   constraints.push(orderBy('datetime', 'desc'));
   constraints.push(limit(100));
 
-  const snapshot = await getDocs(query(collection(firestore, 'transactions'), ...constraints));
+  try {
+    const snapshot = await getDocs(query(collection(firestore, 'transactions'), ...constraints));
 
-  return snapshot.docs
-    .map((transactionDoc) =>
-      normalizeDoc(transactionDoc.id, transactionDoc.data() as Record<string, unknown>),
-    )
-    .filter((transaction) => !transaction.deletedAt);
+    return snapshot.docs
+      .map((transactionDoc) =>
+        normalizeDoc(transactionDoc.id, transactionDoc.data() as Record<string, unknown>),
+      )
+      .filter((transaction) => !transaction.deletedAt);
+  } catch (error) {
+    if (!isLikelyFirestoreQueryError(error)) {
+      throw error;
+    }
+
+    console.warn('Firestore transaction query failed, using fallback scan:', error);
+
+    const fallbackSnapshot = await getDocs(
+      query(collection(firestore, 'transactions'), where('userId', '==', userId), limit(500)),
+    );
+
+    return fallbackSnapshot.docs
+      .map((transactionDoc) =>
+        normalizeDoc(transactionDoc.id, transactionDoc.data() as Record<string, unknown>),
+      )
+      .filter((transaction) => !transaction.deletedAt)
+      .filter((transaction) => {
+        const transactionDate = toComparableDate(transaction.datetime);
+        if (!transactionDate) {
+          return false;
+        }
+
+        if (dateRange?.start && transactionDate < dateRange.start) {
+          return false;
+        }
+
+        if (dateRange?.end && transactionDate > dateRange.end) {
+          return false;
+        }
+
+        return true;
+      })
+      .sort((left, right) => {
+        const leftTime = toComparableDate(left.datetime)?.getTime() ?? 0;
+        const rightTime = toComparableDate(right.datetime)?.getTime() ?? 0;
+        return rightTime - leftTime;
+      })
+      .slice(0, 100);
+  }
 }
 
 export async function getTransactionById(userId: string, id: string) {

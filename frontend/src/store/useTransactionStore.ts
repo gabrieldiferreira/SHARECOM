@@ -35,53 +35,63 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
 
   fetchTransactions: async () => {
     set({ isLoading: true });
-    const db = await getDB();
-    if (!db) return;
-    const txs = await db.getAllFromIndex('transactions', 'by-date');
-    const sorted = txs.reverse();
-    
-    // Purge logic: Remove items older than 15 days in trash
-    const now = new Date();
-    const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
-    
-    const active: TransactionEntity[] = [];
-    const trash: TransactionEntity[] = [];
-    const toPurge: number[] = [];
+    try {
+      const db = await getDB();
+      if (!db) {
+        set({ isLoading: false });
+        return;
+      }
 
-    for (const tx of sorted) {
-      if (tx.deleted_at) {
-        const deletedTime = new Date(tx.deleted_at).getTime();
-        if (now.getTime() - deletedTime > fifteenDaysInMs) {
-          if (tx.id) toPurge.push(tx.id);
+      const txs = await db.getAllFromIndex('transactions', 'by-date');
+      const sorted = txs.reverse();
+      
+      // Purge logic: Remove items older than 15 days in trash
+      const now = new Date();
+      const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
+      
+      const active: TransactionEntity[] = [];
+      const trash: TransactionEntity[] = [];
+      const toPurge: number[] = [];
+
+      for (const tx of sorted) {
+        if (tx.deleted_at) {
+          const deletedTime = new Date(tx.deleted_at).getTime();
+          if (now.getTime() - deletedTime > fifteenDaysInMs) {
+            if (tx.id) toPurge.push(tx.id);
+          } else {
+            trash.push(tx);
+          }
         } else {
-          trash.push(tx);
+          active.push(tx);
         }
-      } else {
-        active.push(tx);
       }
-    }
 
-    // Execute purge
-    if (toPurge.length > 0) {
-      const txSet = db.transaction('transactions', 'readwrite');
-      for (const id of toPurge) {
-        await txSet.store.delete(id);
+      // Execute purge
+      if (toPurge.length > 0) {
+        const txSet = db.transaction('transactions', 'readwrite');
+        for (const id of toPurge) {
+          await txSet.store.delete(id);
+        }
+        await txSet.done;
       }
-      await txSet.done;
+
+      // Calculate metrics for active only
+      const inflow = active.reduce((acc, tx) => (tx.transaction_type === 'Inflow' || tx.category === 'Receita') ? acc + tx.total_amount : acc, 0);
+      const outflow = active.reduce((acc, tx) => (tx.transaction_type === 'Outflow' && tx.category !== 'Receita') ? acc + tx.total_amount : acc, 0);
+      
+      set({ 
+        transactions: active,
+        trashTransactions: trash,
+        isLoading: false,
+        totalInflow: inflow,
+        totalOutflow: outflow,
+        balance: inflow - outflow
+      });
+    } catch (error) {
+      console.error("Failed to fetch local transactions:", error);
+      set({ isLoading: false });
+      throw error;
     }
-    
-    // Calculate metrics for active only
-    const inflow = active.reduce((acc, tx) => (tx.transaction_type === 'Inflow' || tx.category === 'Receita') ? acc + tx.total_amount : acc, 0);
-    const outflow = active.reduce((acc, tx) => (tx.transaction_type === 'Outflow' && tx.category !== 'Receita') ? acc + tx.total_amount : acc, 0);
-    
-    set({ 
-      transactions: active,
-      trashTransactions: trash,
-      isLoading: false,
-      totalInflow: inflow,
-      totalOutflow: outflow,
-      balance: inflow - outflow
-    });
   },
 
   addTransaction: async (tx: TransactionEntity): Promise<{ success: boolean, isDuplicate: boolean }> => {

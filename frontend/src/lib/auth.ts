@@ -3,8 +3,26 @@ import { onAuthStateChanged, User } from "firebase/auth";
 
 async function waitForUser(timeoutMs = 10000): Promise<User | null> {
   if (!auth) return null;
-  // Se já temos o usuário no objeto auth, retornamos imediatamente
   if (auth.currentUser) return auth.currentUser;
+
+  const authWithReady = auth as typeof auth & {
+    authStateReady?: () => Promise<void>;
+  };
+
+  if (authWithReady.authStateReady) {
+    try {
+      await Promise.race([
+        authWithReady.authStateReady(),
+        new Promise((resolve) => setTimeout(resolve, timeoutMs)),
+      ]);
+    } catch (error) {
+      console.warn("AUTH: authStateReady falhou, usando listener padrão.", error);
+    }
+
+    if (auth.currentUser) {
+      return auth.currentUser;
+    }
+  }
 
   return await new Promise((resolve) => {
     if (!auth) {
@@ -29,13 +47,10 @@ export async function getFirebaseAuthHeader(
   options: { requireUser?: boolean; forceRefresh?: boolean } = {}
 ): Promise<Record<string, string>> {
   const { requireUser = true, forceRefresh = false } = options;
-  
-  // Aguarda o Firebase carregar o estado do usuário
   const user = await waitForUser();
 
   if (!user) {
     if (requireUser) {
-      // Só redirecionamos se estivermos no lado do cliente e NÃO estivermos na página de login
       if (typeof window !== 'undefined' && window.location.pathname !== "/login") {
         console.warn("AUTH: Usuário não encontrado, redirecionando para login...");
         window.location.href = "/login";

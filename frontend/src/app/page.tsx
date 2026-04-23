@@ -99,6 +99,7 @@ function ExpenseTracker() {
   const [showManualModal, setShowManualModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
+  const [dashboardError, setDashboardError] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<'7days' | 'month' | 'all'>('7days');
   
   type DashboardMode = "cashflow" | "entities" | "payment" | "temporal" | "category" | "forensics" | "tax" | "alerts";
@@ -134,11 +135,17 @@ function ExpenseTracker() {
     setMounted(true);
     const loadData = async () => {
       setIsLoadingData(true);
+      setDashboardError(null);
       try {
         await fetchTransactions();
         await syncWithBackend();
       } catch (error) {
         console.error('❌ Error loading transactions:', error);
+        setDashboardError(
+          error instanceof Error && error.message === 'AUTH_REQUIRED'
+            ? 'Sua sessao ainda esta sendo inicializada. Tente novamente em alguns segundos.'
+            : 'Nao foi possivel carregar o dashboard agora.',
+        );
       } finally {
         setIsLoadingData(false);
       }
@@ -812,6 +819,29 @@ function ExpenseTracker() {
       </div>
     );
   }
+
+  if (dashboardError) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-ds-bg-primary px-6">
+        <div className="max-w-md rounded-2xl border-thin border-ds-border bg-ds-bg-secondary p-6 text-center space-y-4">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-red-500/10 text-fn-expense">
+            <Info size={20} />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-lg font-semibold text-ds-text-primary">Erro ao carregar dashboard</h1>
+            <p className="text-sm text-ds-text-secondary">{dashboardError}</p>
+          </div>
+          <button
+            onClick={() => window.location.reload()}
+            className="inline-flex items-center justify-center rounded-xl bg-fn-balance px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+          >
+            Tentar novamente
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen w-full overflow-x-hidden" style={{
       paddingTop: 'max(1rem, env(safe-area-inset-top))',
