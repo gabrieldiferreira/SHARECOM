@@ -34,15 +34,19 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   pendingNote: "",
 
   fetchTransactions: async () => {
+    console.log('📦 fetchTransactions called');
     set({ isLoading: true });
     try {
       const db = await getDB();
       if (!db) {
+        console.log('❌ No IndexedDB available');
         set({ isLoading: false });
         return;
       }
 
+      console.log('📊 Getting transactions from IndexedDB...');
       const txs = await db.getAllFromIndex('transactions', 'by-date');
+      console.log(`📊 Found ${txs.length} transactions`);
       const sorted = txs.reverse();
       
       // Purge logic: Remove items older than 15 days in trash
@@ -78,6 +82,8 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       // Calculate metrics for active only
       const inflow = active.reduce((acc, tx) => (tx.transaction_type === 'Inflow' || tx.category === 'Receita') ? acc + tx.total_amount : acc, 0);
       const outflow = active.reduce((acc, tx) => (tx.transaction_type === 'Outflow' && tx.category !== 'Receita') ? acc + tx.total_amount : acc, 0);
+      
+      console.log('📊 Metrics calculated:', { active: active.length, trash: trash.length, inflow, outflow, balance: inflow - outflow });
       
       set({ 
         transactions: active,
@@ -279,10 +285,13 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   syncWithBackend: async () => {
+    console.log('🔄 syncWithBackend called');
     try {
       const res = await authenticatedFetch(getApiUrl(`/expenses?t=${Date.now()}`), { cache: "no-store" });
+      console.log('🌐 Backend response status:', res.status);
       if (res.ok) {
         const remoteData = await res.json();
+        console.log(`📥 Received ${remoteData.length} transactions from backend`);
         const db = await getDB();
         if (db) {
           try {
@@ -314,14 +323,15 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
               await txSet.store.put(merged);
             }
             await txSet.done;
+            console.log('✅ Sync complete - data merged into IndexedDB');
             get().fetchTransactions();
           } catch (dbError) {
-            console.error("Sync error:", dbError);
+            console.error("💥 Sync error:", dbError);
           }
         }
       }
     } catch (e) {
-      console.warn("Offline: Synchronization deferred.");
+      console.warn("⚠️ Offline: Synchronization deferred.", e);
     }
   },
   

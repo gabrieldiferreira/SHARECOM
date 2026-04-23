@@ -136,13 +136,27 @@ function ExpenseTracker() {
   useEffect(() => {
     setMounted(true);
     const loadData = async () => {
+      console.log('🔍 Debug Dashboard - Starting data load');
+      console.log('Auth user:', auth?.currentUser?.uid);
+      console.log('Date filter:', dateFilter);
+      
       setIsLoadingData(true);
       setDashboardError(null);
       try {
+        console.log('📌 Fetching transactions from IndexedDB...');
         await fetchTransactions();
+        console.log('✅ Transactions fetched');
+        
+        console.log('🔄 Syncing with backend...');
         await syncWithBackend();
+        console.log('✅ Backend sync complete');
       } catch (error) {
-        console.error('❌ Error loading transactions:', error);
+        console.error('💥 ERROR loading dashboard:', error);
+        console.error('Error details:', {
+          name: error instanceof Error ? error.name : 'Unknown',
+          message: error instanceof Error ? error.message : String(error),
+          stack: error instanceof Error ? error.stack : undefined
+        });
         setDashboardError(
           error instanceof Error && error.message === 'AUTH_REQUIRED'
             ? 'Sua sessao ainda esta sendo inicializada. Tente novamente em alguns segundos.'
@@ -150,6 +164,7 @@ function ExpenseTracker() {
         );
       } finally {
         setIsLoadingData(false);
+        console.log('🏁 Data load complete');
       }
     };
     loadData();
@@ -480,13 +495,16 @@ function ExpenseTracker() {
   };
 
   const categoriesData = useMemo(() => {
+    console.log('📊 Calculating categoriesData from', filteredByDate.length, 'transactions');
     const map: Record<string, number> = {};
     filteredByDate.forEach(tx => {
         if(tx.transaction_type === 'Outflow' && tx.total_amount) {
             map[tx.category] = (map[tx.category] || 0) + (Number(tx.total_amount) || 0);
         }
     });
-    return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
+    const result = Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
+    console.log('📊 Categories calculated:', result.length, 'categories');
+    return result;
   }, [filteredByDate]);
 
   const growthData = useMemo(() => {
@@ -559,12 +577,15 @@ function ExpenseTracker() {
   const balanceFiltered = totalInflowFiltered - totalOutflowFiltered;
 
   const temporalData = useMemo(() => {
+    console.log('🕒 Calculating temporalData from', filteredByDate.length, 'transactions');
     const hourlyMap = Array(24).fill(0);
     const dayOfMonthMap: Record<number, number> = {};
     const monthlyMap: Record<string, number> = {};
     
+    let outflowCount = 0;
     filteredByDate.forEach(tx => {
       if (tx.transaction_type !== 'Outflow') return;
+      outflowCount++;
       const date = new Date(tx.transaction_date);
       if (isNaN(date.getTime())) return;
       
@@ -578,11 +599,13 @@ function ExpenseTracker() {
       monthlyMap[month] = (monthlyMap[month] || 0) + tx.total_amount;
     });
 
-    return {
+    const result = {
       hourly: hourlyMap.map((val, hour) => ({ hour: `${hour}h`, val })),
       daily: Object.entries(dayOfMonthMap).map(([day, val]) => ({ day: parseInt(day), val })).sort((a,b) => a.day - b.day),
       seasonal: Object.entries(monthlyMap).map(([month, val]) => ({ month, val }))
     };
+    console.log('🕒 Temporal data calculated:', { outflowTxs: outflowCount, hourlyNonZero: result.hourly.filter(h => h.val > 0).length });
+    return result;
   }, [filteredByDate]);
 
   const forensicsData = useMemo(() => {
