@@ -238,13 +238,15 @@ function ExpenseTracker() {
 
   const filteredByDate = useMemo(() => {
     const startDate = getDateFilter();
+    console.log('📅 Filtering transactions by date:', { dateRange, startDate: startDate.toISOString(), totalTxs: transactions.length });
     const filtered = transactions.filter(tx => {
       const txDate = new Date(tx.transaction_date);
       if (isNaN(txDate.getTime())) return true; // Include invalid dates rather than hiding them
       return txDate >= startDate;
     });
+    console.log('📅 Filtered result:', { filtered: filtered.length, outflow: filtered.filter(t => t.transaction_type === 'Outflow').length });
     return filtered;
-  }, [transactions, getDateFilter]);
+  }, [transactions, getDateFilter, dateRange]);
 
 
   const filteredTransactions = useMemo(() => {
@@ -1061,6 +1063,11 @@ function ExpenseTracker() {
                   Todos
                 </button>
 
+                {/* Transaction count indicator */}
+                <div className="ml-4 px-3 py-1.5 rounded-lg bg-bg-secondary border border-border text-xs text-text-tertiary whitespace-nowrap">
+                  {transactions.length} total | {filteredByDate.length} filtradas
+                </div>
+
                 {/* Greeting text only (Desktop only) */}
                 <div className="ml-auto hidden lg:flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
                   <span className="text-[14px] text-text-secondary">
@@ -1186,11 +1193,14 @@ function ExpenseTracker() {
               <div className="glass-card-static p-5 md:p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-[16px] font-semibold text-text-primary">{t('dashboard.spendingOverview')}</h2>
-                  <div className="px-3 py-1.5 rounded-full bg-brand-orange/20 text-brand-orange text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer hover:bg-brand-orange/30 transition-colors">
+                  <button 
+                    onClick={() => setDateRange(dateRange === 'month' ? 'all' : 'month')}
+                    className="px-3 py-1.5 rounded-full bg-brand-orange/20 text-brand-orange text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer hover:bg-brand-orange/30 transition-colors"
+                  >
                     <CalendarIcon size={12} />
-                    <span>{t('common.thisMonth')}</span>
+                    <span>{dateRange === 'month' ? t('common.thisMonth') : dateRange === '7days' ? 'Últimos 7 dias' : 'Todos'}</span>
                     <X size={10} className="opacity-60" />
-                  </div>
+                  </button>
                 </div>
                 <div className="h-[200px] md:h-[300px] xl:h-[400px] w-full min-w-0">
                   {temporalData.hourly.every(d => d.val === 0) ? (
