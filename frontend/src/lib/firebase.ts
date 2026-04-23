@@ -3,15 +3,9 @@ import { Auth, getAuth, GoogleAuthProvider, setPersistence, browserLocalPersiste
 import { Firestore, enableIndexedDbPersistence, getFirestore } from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
-// Função para obter o domínio de auth de forma dinâmica
-const getAuthDomain = () => {
-  // Always use the default Firebase domain to avoid 404s on init.json with custom domains
-  return "unidoc-493609.firebaseapp.com";
-};
-
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyAYIuIphaTzqV56gwbWOHYShf5p-cyxYCk",
-  authDomain: getAuthDomain(),
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "auth.sharecom.com.br",
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unidoc-493609",
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "unidoc-493609.firebasestorage.app",
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "894636866610",
