@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, ChevronLeft, ChevronRight, Calendar, ArrowDownLeft, ArrowUpRight, Edit2, Trash2, Filter, Loader2, } from "lucide-react";
+import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, ChevronLeft, ChevronRight, Calendar, ArrowDownLeft, ArrowUpRight, Filter, Loader2, } from "lucide-react";
 import GlassFAB from "@/components/GlassFAB";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { useTransactionStore } from "../../store/useTransactionStore";
@@ -45,7 +45,6 @@ export default function TimelinePage() {
   const {
     transactions,
     fetchTransactions,
-    moveToTrash,
   } = useTransactionStore();
   const { showToast } = useToast();
 
@@ -54,9 +53,6 @@ export default function TimelinePage() {
   const [activeFilter, setActiveFilter] = useState("all");
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
-  const [showEditModal, setShowEditModal] = useState(false);
-  const [selectedTx, setSelectedTx] = useState<any>(null);
-  const [editModalData, setEditModalData] = useState<any>(null);
   const itemsPerPage = 15;
 
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -188,77 +184,6 @@ export default function TimelinePage() {
     const outflow = filteredTransactions.reduce((acc, tx) => tx.transaction_type === 'Outflow' ? acc + tx.total_amount : acc, 0);
     return { inflow, outflow, count: filteredTransactions.length };
   }, [filteredTransactions]);
-
-  const handleEditTx = (tx: any) => {
-    setSelectedTx(tx);
-    setEditModalData({
-      merchant_name: tx.merchant_name,
-      total_amount: tx.total_amount,
-      note: tx.note || ''
-    });
-    setShowEditModal(true);
-  };
-
-  const handleSaveEdit = async () => {
-    if (!selectedTx || !editModalData) return;
-    
-    try {
-      const user = auth?.currentUser;
-      if (!user) return;
-      
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/transactions/${selectedTx.id}`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`
-        },
-        body: JSON.stringify({
-          merchant_name: editModalData.merchant_name,
-          amount_cents: Math.round(editModalData.total_amount * 100),
-          description: editModalData.note
-        })
-      });
-      
-      if (res.ok) {
-        setShowEditModal(false);
-        setEditModalData(null);
-        fetchTransactions();
-        showToast('Alterações salvas com sucesso!', 'success');
-      } else {
-        showToast('Erro ao salvar alterações', 'error');
-      }
-    } catch (e) {
-      console.error('Edit error:', e);
-      showToast('Erro ao salvar alterações', 'error');
-    }
-  };
-
-  const handleDeleteTx = async (txId: string | number | undefined) => {
-    if (!txId) return;
-    if (!window.confirm('Tem certeza que deseja excluir esta transação?')) return;
-    
-    try {
-      const user = auth?.currentUser;
-      if (!user) return;
-      
-      const token = await user.getIdToken();
-      const res = await fetch(`/api/transactions/${txId}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` }
-      });
-      
-      if (res.ok) {
-        moveToTrash(typeof txId === 'string' ? parseInt(txId) : txId);
-        showToast('Transação excluída com sucesso!', 'success');
-      } else {
-        showToast('Erro ao excluir transação', 'error');
-      }
-    } catch (e) {
-      console.error('Delete error:', e);
-      showToast('Erro ao excluir transação', 'error');
-    }
-  };
 
   if (!mounted) {
     return (
@@ -404,42 +329,11 @@ export default function TimelinePage() {
                     transition={{ delay: idx * 0.03 }}
                     className="relative mb-2"
                   >
-                    {/* Swipe actions revealed on left swipe */}
-                    <motion.div
-                      className="absolute inset-y-0 right-0 flex items-center gap-1 pr-2 rounded-xl"
-                      style={{ 
-                        background: 'rgba(239, 68, 68, 0.9)',
-                      }}
-                    >
-                      <button
-                        onClick={() => handleEditTx(tx)}
-                        className="p-2.5 rounded-lg bg-white/10"
-                        title="Editar"
-                      >
-                        <Edit2 size={16} className="text-white" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTx(tx.id)}
-                        className="p-2.5 rounded-lg bg-white/10"
-                        title="Excluir"
-                      >
-                        <Trash2 size={16} className="text-white" />
-                      </button>
-                    </motion.div>
-
                     {/* Main transaction row */}
                     <motion.div
-                      data-swipeable={true}
-                      data-id={tx.id}
-                      drag="x"
-                      dragConstraints={{ left: -120, right: 0 }}
-                      onDragEnd={(_, info) => {
-                        if (info.offset.x < -80 && tx.id) {
-                          if (window.confirm('Excluir transação?')) {
-                            handleDeleteTx(tx.id);
-                          }
-                        }
-                      }}
+                      initial={{ opacity: 0, x: -20 }}
+                      animate={{ opacity: 1, x: 0 }}
+                      transition={{ delay: idx * 0.03 }}
                       className="relative flex items-center gap-3 p-4 rounded-2xl cursor-pointer group"
                       style={{ 
                         background: 'rgba(255, 255, 255, 0.03)',
@@ -523,87 +417,6 @@ export default function TimelinePage() {
           gradient="purple-pink"
         />
       </div>
-
-      {/* Edit Modal */}
-      <AnimatePresence>
-        {showEditModal && editModalData && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
-            onClick={() => setShowEditModal(false)}
-          >
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-              className="w-full max-w-md rounded-2xl overflow-hidden"
-              style={{
-                background: 'rgba(255, 255, 255, 0.03)',
-                backdropFilter: 'blur(40px)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
-              }}
-            >
-              <div className="p-6 border-b border-white/10 flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">Editar Transação</h3>
-                <button onClick={() => setShowEditModal(false)} className="p-2 text-white/50 hover:text-white">
-                  <X size={20} />
-                </button>
-              </div>
-              
-              <div className="p-6 space-y-4">
-                <div>
-                  <label className="text-xs text-white/50 mb-2 block">Estabelecimento</label>
-                  <input
-                    type="text"
-                    value={editModalData.merchant_name}
-                    onChange={(e) => setEditModalData({...editModalData, merchant_name: e.target.value})}
-                    className="w-full py-3 px-4 bg-white/5 rounded-xl outline-none text-white border border-white/10"
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-xs text-white/50 mb-2 block">Valor</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={editModalData.total_amount}
-                    onChange={(e) => setEditModalData({...editModalData, total_amount: parseFloat(e.target.value) || 0})}
-                    className="w-full py-3 px-4 bg-white/5 rounded-xl outline-none text-white border border-white/10"
-                  />
-                </div>
-                
-                <div>
-                  <label className="text-xs text-white/50 mb-2 block">Observação</label>
-                  <textarea
-                    value={editModalData.note}
-                    onChange={(e) => setEditModalData({...editModalData, note: e.target.value})}
-                    className="w-full py-3 px-4 bg-white/5 rounded-xl outline-none text-white border border-white/10 h-20 resize-none"
-                    placeholder="Adicione uma nota..."
-                  />
-                </div>
-              </div>
-              
-              <div className="p-6 border-t border-white/10 flex gap-3">
-                <button
-                  onClick={() => setShowEditModal(false)}
-                  className="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-white font-medium"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={handleSaveEdit}
-                  className="flex-1 py-3 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 text-white font-bold"
-                >
-                  Salvar
-                </button>
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </div>
   );
 }
