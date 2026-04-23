@@ -1126,8 +1126,16 @@ function ExpenseTracker() {
 
 
           {/* TAB 1: HOME */}
-          {activeTab === "home" && (
-            <div className="@container space-y-4 sm:space-y-6 stagger-children">
+          <AnimatePresence mode="wait">
+            {activeTab === "home" && (
+              <motion.div 
+                key="home"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="@container space-y-4 sm:space-y-6"
+              >
               
               {/* DATE RANGE FILTER TABS + USER GREETING */}
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
@@ -1292,12 +1300,21 @@ function ExpenseTracker() {
                   ))}
                 </div>
               </div>
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* TAB 2: ANALYTICS */}
-          {activeTab === "analytics" && (
-            <div className="@container space-y-6 stagger-children">
+          <AnimatePresence mode="wait">
+            {activeTab === "analytics" && (
+              <motion.div
+                key="analytics"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="@container space-y-6"
+              >
               {/* (3) SPENDING CHART */}
               <div className="glass-card-static p-5 md:p-6">
                 <div className="flex justify-between items-center mb-6">
@@ -1529,12 +1546,21 @@ function ExpenseTracker() {
                   </div>
                 </div>
               )}
-            </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* TAB 3: GOALS */}
-          {activeTab === "goals" && (
-             <div className="@container space-y-6 stagger-children">
+          <AnimatePresence mode="wait">
+            {activeTab === "goals" && (
+              <motion.div
+                key="goals"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="@container space-y-6"
+              >
                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                  {/* Left Sidebar - Goal Cards */}
                  <div className="lg:col-span-1 space-y-4">
@@ -1628,12 +1654,21 @@ function ExpenseTracker() {
                     </form>
                  </div>
                </div>
-             </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* TAB 4: SETTINGS */}
-          {activeTab === "settings" && (
-             <div className="@container max-w-2xl mx-auto space-y-6 stagger-children">
+          <AnimatePresence mode="wait">
+            {activeTab === "settings" && (
+              <motion.div
+                key="settings"
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -20 }}
+                transition={{ duration: 0.2, ease: "easeInOut" }}
+                className="@container max-w-2xl mx-auto space-y-6"
+              >
 
                {/* ── Profile card with Firestore data ── */}
                <div className="glass-card-static p-6">
@@ -1840,8 +1875,9 @@ function ExpenseTracker() {
                </div>
 
                <p className="text-center text-[11px] text-text-tertiary py-4">{t('settings.version')} • Built with 🧠 by Neural Analytics</p>
-             </div>
-          )}
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
       ) : (
         /* EMPTY STATE */
