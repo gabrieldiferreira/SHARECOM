@@ -75,54 +75,6 @@ export default function TimelinePage() {
 
   usePullToRefresh(handleRefresh);
 
-  useEffect(() => {
-    let startX: number | null = null;
-    let activeId: string | null = null;
-    let moved = false;
-
-    const onTouchStart = (e: TouchEvent) => {
-      const target = e.target as HTMLElement;
-      const el = target.closest('[data-swipeable]') as HTMLElement | null;
-      if (!el) return;
-      const scrollTop = document.scrollingElement?.scrollTop || 0;
-      if (scrollTop !== 0) return;
-      activeId = el.getAttribute('data-id');
-      startX = e.touches[0].clientX;
-      moved = false;
-    };
-
-    const onTouchMove = (e: TouchEvent) => {
-      if (!activeId || startX === null) return;
-      const currentX = e.touches[0].clientX;
-      const delta = currentX - startX;
-      if (delta < -80) moved = true;
-    };
-
-    const onTouchEnd = () => {
-      if (activeId && moved) {
-        const id = activeId;
-        if (id && window.confirm('Excluir transação?')) {
-          moveToTrash(typeof id === 'string' ? parseInt(id) : id);
-        }
-      }
-      activeId = null;
-      startX = null;
-      moved = false;
-    };
-
-    window.addEventListener('touchstart', onTouchStart, { passive: true });
-    window.addEventListener('touchmove', onTouchMove, { passive: true });
-    window.addEventListener('touchend', onTouchEnd);
-    window.addEventListener('touchcancel', onTouchEnd);
-
-    return () => {
-      window.removeEventListener('touchstart', onTouchStart);
-      window.removeEventListener('touchmove', onTouchMove);
-      window.removeEventListener('touchend', onTouchEnd);
-      window.removeEventListener('touchcancel', onTouchEnd);
-    };
-  }, [moveToTrash]);
-
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d);
