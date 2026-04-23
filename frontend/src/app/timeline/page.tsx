@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Search, ChevronLeft, ChevronRight, Calendar, ArrowDownLeft, ArrowUpRight, Filter, Loader2, } from "lucide-react";
+import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, ChevronLeft, ChevronRight, Calendar, ArrowDownLeft, ArrowUpRight, Filter, Loader2, } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { useTransactionStore } from "../../store/useTransactionStore";
 import { motion, AnimatePresence } from "framer-motion";
