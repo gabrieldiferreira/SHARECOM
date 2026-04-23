@@ -142,14 +142,36 @@ function ExpenseTracker() {
     const mockTransactions: TransactionEntity[] = [];
     const now = new Date();
     
-    // Generate 50 transactions over the last 30 days
-    for (let i = 0; i < 50; i++) {
+    // Generate transactions with realistic hourly distribution
+    // More transactions during typical spending hours (7-9am, 12-2pm, 6-9pm)
+    const hourlyWeights = [
+      0.1, 0.1, 0.1, 0.1, 0.2, 0.3, 0.5, // 0-6am: low activity
+      1.5, 1.8, 1.2, 0.8, 0.9, // 7-11am: morning peak
+      2.0, 1.8, 1.0, 0.7, 0.6, 0.8, // 12-5pm: lunch peak
+      1.5, 2.2, 2.0, 1.5, 1.0, 0.8, 0.5 // 6-11pm: evening peak
+    ];
+    
+    // Generate 80 transactions over the last 30 days with weighted hours
+    for (let i = 0; i < 80; i++) {
       const daysAgo = Math.floor(Math.random() * 30);
       const date = new Date(now);
       date.setDate(date.getDate() - daysAgo);
-      date.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
       
-      const isInflow = Math.random() < 0.15; // 15% income
+      // Weighted random hour selection
+      const totalWeight = hourlyWeights.reduce((a, b) => a + b, 0);
+      let random = Math.random() * totalWeight;
+      let hour = 0;
+      for (let h = 0; h < 24; h++) {
+        random -= hourlyWeights[h];
+        if (random <= 0) {
+          hour = h;
+          break;
+        }
+      }
+      
+      date.setHours(hour, Math.floor(Math.random() * 60));
+      
+      const isInflow = Math.random() < 0.12; // 12% income
       
       mockTransactions.push({
         id: Date.now() + i,
@@ -165,12 +187,23 @@ function ExpenseTracker() {
       });
     }
     
+    console.log('🎲 Generated mock data:', {
+      total: mockTransactions.length,
+      outflow: mockTransactions.filter(t => t.transaction_type === 'Outflow').length,
+      inflow: mockTransactions.filter(t => t.transaction_type === 'Inflow').length,
+      hourDistribution: mockTransactions.reduce((acc, tx) => {
+        const h = new Date(tx.transaction_date).getHours();
+        acc[h] = (acc[h] || 0) + 1;
+        return acc;
+      }, {} as Record<number, number>)
+    });
+    
     // Add to store
     for (const tx of mockTransactions) {
       await addTransaction(tx);
     }
     
-    showToast('50 transações de demonstração adicionadas!', 'success');
+    showToast('80 transações de demonstração adicionadas!', 'success');
     await fetchTransactions();
   }, [addTransaction, fetchTransactions, showToast]);
 
