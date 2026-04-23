@@ -133,6 +133,47 @@ function ExpenseTracker() {
   
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mock data generator for demo purposes
+  const generateMockData = useCallback(async () => {
+    const categories = ['Alimentação', 'Transporte', 'Compras', 'Casa', 'Lazer', 'Saúde'];
+    const merchants = ['Starbucks', 'Uber', 'iFood', 'Carrefour', 'Netflix', 'Farmacia', 'Posto Shell', 'Restaurante'];
+    const paymentMethods = ['PIX', 'Cartão de Crédito', 'Cartão de Débito', 'Dinheiro'];
+    
+    const mockTransactions: TransactionEntity[] = [];
+    const now = new Date();
+    
+    // Generate 50 transactions over the last 30 days
+    for (let i = 0; i < 50; i++) {
+      const daysAgo = Math.floor(Math.random() * 30);
+      const date = new Date(now);
+      date.setDate(date.getDate() - daysAgo);
+      date.setHours(Math.floor(Math.random() * 24), Math.floor(Math.random() * 60));
+      
+      const isInflow = Math.random() < 0.15; // 15% income
+      
+      mockTransactions.push({
+        id: Date.now() + i,
+        merchant_name: isInflow ? 'Salário' : merchants[Math.floor(Math.random() * merchants.length)],
+        total_amount: isInflow ? 3000 + Math.random() * 2000 : 10 + Math.random() * 300,
+        currency: 'BRL',
+        transaction_date: date.toISOString(),
+        transaction_type: isInflow ? 'Inflow' : 'Outflow',
+        payment_method: paymentMethods[Math.floor(Math.random() * paymentMethods.length)],
+        category: isInflow ? 'Receita' : categories[Math.floor(Math.random() * categories.length)],
+        receipt_hash: `mock_${Date.now()}_${i}`,
+        is_synced: false,
+      });
+    }
+    
+    // Add to store
+    for (const tx of mockTransactions) {
+      await addTransaction(tx);
+    }
+    
+    showToast('50 transações de demonstração adicionadas!', 'success');
+    await fetchTransactions();
+  }, [addTransaction, fetchTransactions, showToast]);
+
   useEffect(() => {
     setMounted(true);
     const loadData = async () => {
@@ -1067,6 +1108,16 @@ function ExpenseTracker() {
                 <div className="ml-4 px-3 py-1.5 rounded-lg bg-bg-secondary border border-border text-xs text-text-tertiary whitespace-nowrap">
                   {transactions.length} total | {filteredByDate.length} filtradas
                 </div>
+                
+                {/* Mock data button (only show if no transactions) */}
+                {transactions.length === 0 && (
+                  <button
+                    onClick={generateMockData}
+                    className="ml-2 px-3 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs font-semibold hover:bg-purple-500/30 transition-colors whitespace-nowrap"
+                  >
+                    🎲 Gerar Dados Demo
+                  </button>
+                )}
 
                 {/* Greeting text only (Desktop only) */}
                 <div className="ml-auto hidden lg:flex items-center gap-1.5 flex-shrink-0 whitespace-nowrap">
@@ -1193,14 +1244,41 @@ function ExpenseTracker() {
               <div className="glass-card-static p-5 md:p-6">
                 <div className="flex justify-between items-center mb-6">
                   <h2 className="text-[16px] font-semibold text-text-primary">{t('dashboard.spendingOverview')}</h2>
-                  <button 
-                    onClick={() => setDateRange(dateRange === 'month' ? 'all' : 'month')}
-                    className="px-3 py-1.5 rounded-full bg-brand-orange/20 text-brand-orange text-[12px] font-semibold flex items-center gap-1.5 cursor-pointer hover:bg-brand-orange/30 transition-colors"
-                  >
-                    <CalendarIcon size={12} />
-                    <span>{dateRange === 'month' ? t('common.thisMonth') : dateRange === '7days' ? 'Últimos 7 dias' : 'Todos'}</span>
-                    <X size={10} className="opacity-60" />
-                  </button>
+                  <div className="flex items-center gap-2">
+                    <button 
+                      onClick={() => setDateRange('7days')}
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${
+                        dateRange === '7days' 
+                          ? 'bg-brand-purple/20 text-brand-purple border border-brand-purple/30' 
+                          : 'bg-bg-tertiary text-text-tertiary hover:bg-bg-secondary border border-border'
+                      }`}
+                    >
+                      <CalendarIcon size={12} />
+                      <span>7 dias</span>
+                    </button>
+                    <button 
+                      onClick={() => setDateRange('month')}
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${
+                        dateRange === 'month' 
+                          ? 'bg-brand-orange/20 text-brand-orange border border-brand-orange/30' 
+                          : 'bg-bg-tertiary text-text-tertiary hover:bg-bg-secondary border border-border'
+                      }`}
+                    >
+                      <CalendarIcon size={12} />
+                      <span>Este mês</span>
+                    </button>
+                    <button 
+                      onClick={() => setDateRange('all')}
+                      className={`px-3 py-1.5 rounded-full text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${
+                        dateRange === 'all' 
+                          ? 'bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30' 
+                          : 'bg-bg-tertiary text-text-tertiary hover:bg-bg-secondary border border-border'
+                      }`}
+                    >
+                      <CalendarIcon size={12} />
+                      <span>Todos</span>
+                    </button>
+                  </div>
                 </div>
                 <div className="h-[200px] md:h-[300px] xl:h-[400px] w-full min-w-0">
                   {temporalData.hourly.every(d => d.val === 0) ? (
