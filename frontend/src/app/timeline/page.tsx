@@ -152,33 +152,30 @@ export default function TimelinePage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-white">Histórico</h1>
-          <p className="text-xs text-white/50 mt-0.5">{summaryStats.count} transação(ões)</p>
+          <h1 className="text-xl font-semibold text-text-primary">Histórico</h1>
+          <p className="text-xs text-text-tertiary mt-0.5">{summaryStats.count} transação(ões)</p>
         </div>
       </div>
 
       {/* Summary Cards - Glassmorphic */}
       <div className="grid grid-cols-3 gap-3">
         <div className="p-3.5 rounded-2xl glass-card-static">
-          <p className="text-[10px] text-white/50 mb-1">Entradas</p>
-          <p className="text-sm font-bold" style={{ color: '#10B981' }}>
+          <p className="text-[10px] text-text-tertiary mb-1">Entradas</p>
+          <p className="text-sm font-bold text-green-500">
             R$ {summaryStats.inflow.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </p>
         </div>
         <div className="p-3.5 rounded-2xl glass-card-static">
-          <p className="text-[10px] text-white/50 mb-1">Saídas</p>
-          <p className="text-sm font-bold" style={{ color: '#EF4444' }}>
+          <p className="text-[10px] text-text-tertiary mb-1">Saídas</p>
+          <p className="text-sm font-bold text-red-500">
             R$ {summaryStats.outflow.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
           </p>
         </div>
-        <div 
-          className="p-3.5 rounded-2xl"
-          style={{ 
+        <div className="p-3.5 rounded-2xl glass-card-static" style={{ 
             background: 'rgba(255, 255, 255, 0.03)',
             backdropFilter: 'blur(20px)',
             border: '1px solid rgba(255, 255, 255, 0.08)',
-          }}
-        >
+          }}>
           <p className="text-[10px] text-white/50 mb-1">Registros</p>
           <p className="text-sm font-bold" style={{ color: '#8B5CF6' }}>{summaryStats.count}</p>
         </div>
@@ -241,11 +238,11 @@ export default function TimelinePage() {
             <div key={dateKey}>
               {/* Date Group Header with fade effect */}
               <div className="flex items-center gap-2 mb-3 px-1">
-                <Calendar size={14} className="text-white/40" />
-                <span className="text-xs font-medium capitalize text-white/60">
+                <Calendar size={14} className="text-text-tertiary" />
+                <span className="text-xs font-medium capitalize text-text-secondary">
                   {formatGroupDate(txs[0].transaction_date)}
                 </span>
-                <div className="flex-1 h-px bg-white/10" />
+                <div className="flex-1 h-px bg-border" />
               </div>
 
               {/* Transactions with swipe actions */}
@@ -263,11 +260,7 @@ export default function TimelinePage() {
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       transition={{ delay: idx * 0.03 }}
-                      className="relative flex items-center gap-3 p-4 rounded-2xl cursor-pointer group"
-                      style={{ 
-                        background: 'rgba(255, 255, 255, 0.03)',
-                        border: '1px solid rgba(255, 255, 255, 0.06)',
-                      }}
+                      className="relative flex items-center gap-3 p-4 rounded-2xl cursor-pointer group bg-bg-secondary border border-border hover:border-accent-purple/30 transition-all"
                     >
                       {/* Merchant Logo 48px Circle */}
                       <div
@@ -282,18 +275,18 @@ export default function TimelinePage() {
 
                       {/* Details - Name + Datetime stacked */}
                       <div className="flex flex-col overflow-hidden flex-1 min-w-0">
-                        <span className="text-sm font-medium truncate text-white">
+                        <span className="text-sm font-medium truncate text-text-primary">
                           {tx.merchant_name}
                         </span>
                         <div className="flex items-center gap-1.5 mt-0.5">
-                          <span className="text-xs text-white/50">{tx.category}</span>
-                          <span className="text-white/30">•</span>
-                          <span className="text-xs text-white/50">{tx.payment_method}</span>
-                          <span className="text-white/30">•</span>
-                          <span className="text-xs text-white/40">{formatDate(tx.transaction_date)}</span>
+                          <span className="text-xs text-text-secondary">{tx.category}</span>
+                          <span className="text-text-tertiary">•</span>
+                          <span className="text-xs text-text-secondary">{tx.payment_method}</span>
+                          <span className="text-text-tertiary">•</span>
+                          <span className="text-xs text-text-tertiary">{formatDate(tx.transaction_date)}</span>
                         </div>
                         {tx.note && (
-                          <p className="text-xs italic mt-1" style={{ color: '#8B5CF6', borderLeft: '2px solid #8B5CF6', paddingLeft: '6px' }}>
+                          <p className="text-xs italic mt-1 text-purple-500 border-l-2 border-purple-500 pl-1.5">
                             &ldquo;{tx.note}&rdquo;
                           </p>
                         )}
@@ -301,13 +294,12 @@ export default function TimelinePage() {
 
                       {/* Amount right - color-coded */}
                       <div className="shrink-0 text-right">
-                        <p 
-                          className="text-base font-bold tabular-nums" 
-                          style={{ color: tx.transaction_type === 'Inflow' ? '#10B981' : '#EF4444' }}
-                        >
+                        <p className={`text-base font-bold tabular-nums ${
+                          tx.transaction_type === 'Inflow' ? 'text-green-500' : 'text-red-500'
+                        }`}>
                           {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </p>
-                        <span className="text-[10px] text-white/30">
+                        <span className="text-[10px] text-text-tertiary">
                           {tx.transaction_type === 'Inflow' ? 'Entrada' : 'Saída'}
                         </span>
                       </div>
@@ -326,12 +318,7 @@ export default function TimelinePage() {
           <button
             onClick={() => setCurrentPage(p => p + 1)}
             disabled={isLoadingMore}
-            className="px-6 py-2.5 rounded-xl text-xs font-medium"
-            style={{
-              background: 'rgba(255, 255, 255, 0.05)',
-              border: '1px solid rgba(255, 255, 255, 0.1)',
-              color: 'rgba(255, 255, 255, 0.6)',
-            }}
+            className="px-6 py-2.5 rounded-xl text-xs font-medium bg-bg-secondary border border-border text-text-secondary hover:bg-bg-tertiary transition-colors disabled:opacity-50"
           >
             {isLoadingMore ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Carregar mais'}
           </button>
