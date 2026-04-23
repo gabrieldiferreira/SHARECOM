@@ -564,6 +564,7 @@ function ExpenseTracker() {
     const monthlyMap: Record<string, number> = {};
     
     filteredByDate.forEach(tx => {
+      if (tx.transaction_type !== 'Outflow') return;
       const date = new Date(tx.transaction_date);
       if (isNaN(date.getTime())) return;
       
