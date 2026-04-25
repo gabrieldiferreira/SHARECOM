@@ -978,13 +978,7 @@ function ExpenseTracker() {
   }
 
   return (
-    <div className="min-h-screen w-full overflow-x-hidden" style={{
-      paddingTop: 'max(0.25rem, env(safe-area-inset-top))',
-      paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))',
-      paddingLeft: 'max(1rem, env(safe-area-inset-left))',
-      paddingRight: 'max(1rem, env(safe-area-inset-right))',
-    }}>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-[1920px]">
+    <div className="p-4 md:p-5 pt-1 md:pt-2 space-y-5 font-sans" style={{ maxWidth: '100%' }}>
       <input type="file" accept="image/*" ref={fileInputRef} onChange={handleFileSelection} className="hidden" />
       
       {/* Loading Bar & Toast Notification */}
@@ -2052,7 +2046,6 @@ function ExpenseTracker() {
           </motion.div>
         )}
       </AnimatePresence>
-    </div>
     </div>
   );
 }

@@ -267,7 +267,7 @@ export default function ReportsPage() {
   const tooltipStyle = { backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", fontSize: "12px" };
 
   return (
-    <div className="p-4 md:p-5 pt-1 md:pt-2 space-y-5 font-sans" style={{ maxWidth: '100%' }}>
+    <div className="p-4 md:p-5 pt-1 md:pt-2 space-y-5 font-sans overflow-x-hidden" style={{ maxWidth: '100%' }}>
       {/* Notification Card */}
       {notification && (
         <div className="fixed top-[calc(env(safe-area-inset-top)+5rem)] right-[calc(env(safe-area-inset-right)+1rem)] z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
