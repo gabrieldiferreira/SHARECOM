@@ -14,7 +14,10 @@ import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 import { motion, AnimatePresence } from "framer-motion";
 
+import { useI18n } from "../i18n/client";
+
 export default function Layout({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const pathname = usePathname();
   const { addTransaction, syncWithBackend, pendingNote, setPendingNote } = useTransactionStore();
   const [isUploading, setIsUploading] = useState(false);
@@ -29,6 +32,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const portalScrollRef = useRef<HTMLDivElement>(null);
 
   // Timer para invalidar links antigos (60 segundos)
   useEffect(() => {
@@ -45,6 +49,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return () => clearInterval(timer);
     }
   }, [showModal, pastedAt, selectedFile]);
+
 
   const handlePasteLink = async () => {
     try {
@@ -249,20 +254,40 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   };
 
   const desktopNavItems = [
-    { name: "Painel", href: "/", icon: LayoutDashboard },
+    { name: t('nav.home'), href: "/", icon: LayoutDashboard },
     { name: "Histórico", href: "/timeline", icon: History },
-    { name: "Scanner", href: "/scanner", icon: ScanLine },
-    { name: "Relatórios", href: "/reports", icon: PieChart },
-    { name: "Link", onClick: handlePasteLink, icon: Link2 },
+    { name: t('nav.analytics'), href: "/reports", icon: PieChart },
+    { name: t('nav.goals'), href: "/goals", icon: Target },
+    { name: "Link", href: "/link", icon: Link2 },
+    { name: t('nav.settings'), href: "/settings", icon: Settings },
   ];
 
   const mobileNavItems = [
-    { name: "Painel", href: "/", icon: LayoutDashboard },
+    { name: t('nav.home'), href: "/", icon: LayoutDashboard },
     { name: "Histórico", href: "/timeline", icon: History },
-    { name: "Análises", href: "/reports", icon: PieChart },
-    { name: "Metas", href: "/goals", icon: Target },
-    { name: "Link", onClick: handlePasteLink, icon: Link2 },
+    { name: t('nav.analytics'), href: "/reports", icon: PieChart },
+    { name: t('nav.goals'), href: "/goals", icon: Target },
+    { name: "Link", href: "/link", icon: Link2 },
+    { name: t('nav.settings'), href: "/settings", icon: Settings },
+    { name: "Adicionar", href: "#", icon: Plus },
   ];
+
+  const [activeNavIndex, setActiveNavIndex] = useState(0);
+  const [isNavAnimating, setIsNavAnimating] = useState(false);
+
+  const handleNextNav = () => {
+    if (isNavAnimating) return;
+    setIsNavAnimating(true);
+    setActiveNavIndex((prev) => (prev + 1) % mobileNavItems.length);
+    setTimeout(() => setIsNavAnimating(false), 400); // Cooldown to ensure 1-by-1
+  };
+
+  const handlePrevNav = () => {
+    if (isNavAnimating) return;
+    setIsNavAnimating(true);
+    setActiveNavIndex((prev) => (prev - 1 + mobileNavItems.length) % mobileNavItems.length);
+    setTimeout(() => setIsNavAnimating(false), 400); // Cooldown
+  };
 
   const handleLogout = async () => {
     if (!auth) {
@@ -693,7 +718,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           ></div>
         </div>
 
-        <div className="flex-1 overflow-y-auto scroll-container pb-20 md:pb-0">
+        <div className="flex-1 overflow-y-auto scroll-container pb-28 md:pb-0">
           <div className="max-w-7xl mx-auto w-full grid grid-cols-1 grid-rows-1">
             <AnimatePresence mode="popLayout">
               <motion.div
@@ -713,81 +738,108 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </div>
 
-        {/* Bottom Nav - Mobile (Scrollable with Fixed Scan Button) */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 z-50 shadow-none dark:shadow-[0_-8px_30px_rgba(0,0,0,0.2)] border-t border-black/5 dark:border-white/10" style={{
-          backgroundColor: 'var(--card)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: '24px 24px 0 0',
+        {/* Bottom Nav - Mobile (Fixed 5-item Bar) */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-20 z-50" style={{
           paddingBottom: 'env(safe-area-inset-bottom)',
-          transform: 'translateZ(0)',
-          WebkitFontSmoothing: 'antialiased',
-          MozOsxFontSmoothing: 'grayscale'
         }}>
-          {/* Central Scan Button - Fixed and Elevated */}
-          <div className="absolute left-1/2 -translate-x-1/2 -top-5 flex flex-col items-center z-20 pointer-events-auto">
-            <div className="p-2 flex flex-col items-center">
-              <button
-                onClick={() => setShowScanMenu(true)}
-                disabled={isUploading}
-                className="w-14 h-14 rounded-full flex items-center justify-center active:scale-90 transition-all text-white"
-                style={{
-                  backgroundColor: uploadSuccess ? '#10B981' : '#3B82F6',
-                  boxShadow: '0 4px 12px rgba(59, 130, 246, 0.4)',
-                }}
-              >
-                {isUploading ? (
-                  <Loader2 size={24} className="animate-spin" />
-                ) : uploadSuccess ? (
-                  <CheckCircle2 size={24} />
-                ) : (
-                  <Camera size={24} strokeWidth={2} />
-                )}
-              </button>
-              <span className="text-[10px] font-bold mt-1" style={{ color: '#3B82F6' }}>Scan</span>
-            </div>
+          {/* Central Scan Button - Fixed and Molded (Extra Large Size) */}
+          <div className="absolute left-1/2 -translate-x-1/2 z-30 flex flex-col items-center" style={{ top: '-20px' }}>
+            <button
+              onClick={() => setShowScanMenu(true)}
+              disabled={isUploading}
+              className="w-20 h-20 rounded-full flex items-center justify-center active:scale-95 transition-all text-white"
+              style={{
+                backgroundColor: uploadSuccess ? '#10B981' : '#3B82F6',
+                boxShadow: '0 8px 20px rgba(59, 130, 246, 0.5)',
+              }}
+            >
+              {isUploading ? (
+                <Loader2 size={36} className="animate-spin" />
+              ) : uploadSuccess ? (
+                <CheckCircle2 size={36} />
+              ) : (
+                <Camera size={36} strokeWidth={2.2} />
+              )}
+            </button>
           </div>
 
-          {/* Scrollable Container for all other icons */}
-          <div 
-            className="flex items-center h-full overflow-x-auto no-scrollbar px-0 relative z-10 snap-x snap-mandatory" 
-            style={{ 
-              WebkitOverflowScrolling: 'touch',
-              maskImage: 'linear-gradient(to right, transparent 0%, black 15%, black calc(50% - 40px), transparent calc(50% - 25px), transparent calc(50% + 25px), black calc(50% + 40px), black 85%, transparent 100%)',
-              WebkitMaskImage: 'linear-gradient(to right, transparent 0%, black 15%, black calc(50% - 40px), transparent calc(50% - 25px), transparent calc(50% + 25px), black calc(50% + 40px), black 85%, transparent 100%)'
+          {/* Wave Background with Precise SVG Notch */}
+          <div className="absolute inset-0 z-10 pointer-events-none">
+            <svg width="100%" height="100%" className="w-full h-full" style={{ filter: 'drop-shadow(0 -4px 12px rgba(0,0,0,0.1))' }}>
+              <defs>
+                <mask id="notch-mask">
+                  <rect width="100%" height="100%" fill="white" />
+                  {/* Recorte descido para acompanhar o botão (cy=15) */}
+                  <ellipse cx="50%" cy="15" rx="48" ry="52" fill="black" />
+                </mask>
+              </defs>
+              <rect 
+                width="100%" 
+                height="100%" 
+                fill="var(--mobile-header-surface)" 
+                mask="url(#notch-mask)"
+                style={{ fillOpacity: 0.98, backdropFilter: 'blur(20px)' }}
+              />
+            </svg>
+          </div>
+
+          {/* Borda superior com corte seco e vão real (Sem SVG/Fade) */}
+          <div className="absolute top-0 left-0 right-0 h-[0.5px] z-20 pointer-events-none opacity-20">
+            <div className="absolute left-0 top-0 h-full bg-white" style={{ width: 'calc(50% - 48px)' }} />
+            <div className="absolute right-0 top-0 h-full bg-white" style={{ width: 'calc(50% - 48px)' }} />
+          </div>
+
+          {/* Interaction & Icons Layer - 1-by-1 Swipe with Upwards Exit */}
+          <motion.div 
+            className="absolute inset-0 z-40 pointer-events-auto overflow-hidden"
+            onPanEnd={(_, info) => {
+              if (info.offset.x > 20) handlePrevNav();
+              else if (info.offset.x < -20) handleNextNav();
             }}
           >
-            {/* Contiguous items mapping (duplicated for infinite scroll feel) */}
-            {[...mobileNavItems, ...mobileNavItems, ...mobileNavItems, ...mobileNavItems].map((item, index) => {
-              const Icon = item.icon;
-              const isActive = item.href ? pathname === item.href : false;
+            <div className="flex items-center h-full w-full relative">
+              <AnimatePresence mode="popLayout" initial={false}>
+                {[0, 1, 2, 3].map((slotIndex) => {
+                  const itemIndex = (activeNavIndex + slotIndex) % mobileNavItems.length;
+                  const item = mobileNavItems[itemIndex];
+                  const Icon = item.icon;
+                  const isActive = item.href ? pathname === item.href : false;
 
-              if (item.onClick) {
-                return (
-                  <button
-                    key={`${item.name}-${index}`}
-                    onClick={item.onClick}
-                    className="flex flex-col items-center justify-center space-y-1 transition-colors shrink-0 w-[20vw] snap-start"
-                    style={{ color: 'var(--text-tertiary)' }}
-                  >
-                    <Icon size={24} />
-                    <span className="text-[12px] font-semibold">{item.name}</span>
-                  </button>
-                );
-              }
+                  // Positions: 0%, 20%, [Gap 40-60], 60%, 80%
+                  const finalPos = slotIndex < 2 ? `${slotIndex * 20}%` : `${(slotIndex + 1) * 20}%`;
 
-              return (
-                <Link
-                  key={`${item.name}-${index}`}
-                  href={item.href || "#"}
-                  className="flex flex-col items-center justify-center space-y-1 transition-colors shrink-0 w-[20vw] snap-start"
-                  style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
-                >
-                  <Icon size={24} />
-                  <span className="text-[12px] font-semibold">{item.name}</span>
-                </Link>
-              );
-            })}
-          </div>
+                  return (
+                    <motion.div
+                      key={`nav-item-${item.name}`} // Key linked to item to allow it to move across slots
+                      layout
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0, y: -40 }}
+                      transition={{ 
+                        type: "spring", 
+                        stiffness: 400, 
+                        damping: 35,
+                        layout: { duration: 0.3 }
+                      }}
+                      className="absolute top-0 bottom-0 flex flex-col items-center justify-center gap-1.5 py-2"
+                      style={{ left: finalPos, width: '20%' }}
+                    >
+                      <Link
+                        href={item.href || "#"}
+                        className="flex flex-col items-center"
+                        style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
+                      >
+                        <Icon size={22} strokeWidth={1.5} />
+                        <span className="text-[10px] font-semibold text-center leading-tight truncate w-full px-1">
+                          {item.name}
+                        </span>
+                      </Link>
+                    </motion.div>
+                  );
+                })}
+              </AnimatePresence>
+            </div>
+          </motion.div>
         </nav>
       </main>
     </div>

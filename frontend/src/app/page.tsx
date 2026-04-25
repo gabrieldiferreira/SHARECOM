@@ -1101,35 +1101,6 @@ function ExpenseTracker() {
 
               </div>
             </div>
-
-            {/* DESKTOP TOP NAVIGATION BAR */}
-            <div className="hidden lg:flex flex-col gap-2">
-              <div className="flex items-center gap-2 mb-1">
-                <Cpu size={14} className="text-brand-cyan" />
-                <span className="text-[10px] font-black text-text-tertiary uppercase tracking-[0.3em]">Navigation</span>
-              </div>
-              <div className="flex items-center gap-2 bg-glass-card p-1.5 rounded-2xl border-thin border-glass-border overflow-x-auto no-scrollbar">
-                {[
-                  { id: "home", label: t('nav.home'), icon: <HomeIcon size={14} /> },
-                  { id: "analytics", label: t('nav.analytics'), icon: <PieChartIcon size={14} /> },
-                  { id: "goals", label: t('nav.goals'), icon: <Target size={14} /> },
-                  { id: "settings", label: t('nav.settings'), icon: <Settings size={14} /> }
-                ].map((tab) => (
-                  <button 
-                    key={tab.id}
-                    onClick={() => setActiveTab(tab.id as ActiveTab)} 
-                    className={`flex items-center gap-2 px-3 xl:px-4 py-2.5 text-[11px] xl:text-[12px] font-bold rounded-xl transition-all whitespace-nowrap touch-manipulation ${activeTab === tab.id ? "bg-glass-highlight text-text-primary shadow-glow ring-1 ring-white/10" : "text-text-secondary hover:text-text-primary hover:bg-white/5"}`}
-                  >
-                    {tab.icon}
-                    {tab.label}
-                  </button>
-                ))}
-                {/* Compact controls: language */}
-                <div className="ml-auto pl-2 border-l border-glass-border flex items-center gap-1.5">
-                  <LanguageSwitcher compact />
-                </div>
-              </div>
-            </div>
           </div>
 
 
@@ -2081,34 +2052,6 @@ function ExpenseTracker() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* FINWAVE BOTTOM NAVIGATION BAR - Mobile Only */}
-      <div className="lg:hidden fixed bottom-0 left-0 w-full glass-card rounded-b-none border-b-0 border-x-0 z-50 flex justify-around shadow-glass backdrop-blur-xl" style={{
-        paddingTop: '0.75rem',
-        paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
-        paddingLeft: 'max(1rem, env(safe-area-inset-left))',
-        paddingRight: 'max(1rem, env(safe-area-inset-right))',
-      }}>
-        {[
-          { id: "home", label: t('nav.home'), icon: <HomeIcon size={22} className="sm:w-6 sm:h-6" /> },
-          { id: "analytics", label: t('nav.analytics'), icon: <PieChartIcon size={22} className="sm:w-6 sm:h-6" /> },
-          { id: "goals", label: t('nav.goals'), icon: <Target size={22} className="sm:w-6 sm:h-6" /> },
-          { id: "settings", label: t('nav.settings'), icon: <Settings size={22} className="sm:w-6 sm:h-6" /> }
-        ].map((tab) => (
-          <button 
-            key={tab.id}
-            onClick={() => { 
-              haptics.lightTap();
-              setActiveTab(tab.id as ActiveTab); 
-              setDashboardMode(tab.id as any); 
-            }}
-            className={`flex flex-col items-center gap-1 min-w-[56px] min-h-[56px] transition-colors touch-manipulation ${activeTab === tab.id ? "text-brand-orange" : "text-text-tertiary hover:text-text-secondary"}`}
-          >
-            {tab.icon}
-            <span className="text-[9px] sm:text-[10px] font-medium">{tab.label}</span>
-          </button>
-        ))}
-      </div>
     </div>
     </div>
   );

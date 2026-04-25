@@ -15,7 +15,7 @@ const GlassFAB: React.FC<GlassFABProps> = ({ icon, gradient = 'purple-pink', cla
 
   return (
     <button
-      className={`fixed bottom-24 md:bottom-6 right-5 md:right-6 z-50 p-0 w-14 h-14 flex items-center justify-center rounded-full shadow-lg bg-gradient-to-br ${gradientMap[gradient]} text-white ${className}`}
+      className={`fixed bottom-32 md:bottom-6 right-5 md:right-6 z-50 p-0 w-14 h-14 flex items-center justify-center rounded-full shadow-lg bg-gradient-to-br ${gradientMap[gradient]} text-white ${className}`}
       style={{ 
         boxShadow: '0 4px 20px rgba(139, 92, 246, 0.4)',
         ...style 

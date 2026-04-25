@@ -57,7 +57,7 @@ export const metadata: Metadata = {
     "apple-mobile-web-app-capable": "yes",
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "black-translucent",
-    "theme-color": "var(--ds-bg-primary)",
+    "theme-color": "var(--mobile-header-surface)",
   },
   formatDetection: {
     telephone: false,

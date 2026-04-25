@@ -717,25 +717,6 @@
     z-index: -1;
   }
 
-  .mobile-status-bridge::after {
-    content: "";
-    position: absolute;
-    left: 50%;
-    bottom: -22px;
-    width: min(88vw, 400px);
-    height: 40px;
-    transform: translateX(-50%);
-    background: radial-gradient(
-      ellipse at center,
-      rgba(139, 92, 246, 0.16) 0%,
-      rgba(236, 72, 153, 0.1) 38%,
-      transparent 76%
-    );
-    filter: blur(14px);
-    opacity: 0.8;
-    pointer-events: none;
-  }
-
   .mobile-header-card {
     position: relative;
     background-color: var(--mobile-header-surface);
@@ -840,6 +821,41 @@ body > div:first-child::-webkit-scrollbar {
 
 .animate-slide-in {
   animation: slide-in 0.3s ease-out;
+}
+
+/* ═══════════════════════════════════════════════════════════
+   GRAVITY FIELD PORTAL — Mobile Menu Protection
+   Campo de proteção invisível embaixo do Scan
+   ═══════════════════════════════════════════════════════════ */
+
+/* Portal Container — Simula campo de proteção */
+.gravity-portal {
+  position: relative;
+}
+
+.gravity-portal::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 80px;
+  height: 80px;
+  pointer-events: none;
+  
+  /* Campo de proteção invisível */
+  background: radial-gradient(circle, rgba(59, 130, 246, 0.15) 0%, transparent 100%);
+  filter: blur(12px);
+  
+  /* Apenas em mobile */
+  display: none;
+  z-index: 5;
+}
+
+@media (max-width: 768px) {
+  .gravity-portal::before {
+    display: block;
+  }
 }
 
 /* Reduced motion */

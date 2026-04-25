@@ -109,7 +109,7 @@ export function DevTools() {
       {/* Floating Toggle Button */}
       <button
         onClick={() => setIsOpen(!isOpen)}
-        className="fixed bottom-24 left-4 z-[999] p-3 bg-indigo-600 text-white rounded-full shadow-2xl hover:bg-indigo-700 transition-all flex items-center gap-2 group border border-indigo-400/30"
+        className="fixed bottom-32 left-4 z-[999] p-3 bg-indigo-600 text-white rounded-full shadow-2xl hover:bg-indigo-700 transition-all flex items-center gap-2 group border border-indigo-400/30"
         title="Open DevTools (Ctrl+Shift+X)"
       >
         <Bug size={20} />

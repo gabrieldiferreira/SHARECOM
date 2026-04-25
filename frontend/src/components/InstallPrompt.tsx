@@ -71,7 +71,7 @@ export default function InstallPrompt() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="fixed bottom-24 left-4 right-4 z-[500] rounded-2xl p-4 shadow-2xl"
+            className="fixed bottom-32 left-4 right-4 z-[500] rounded-2xl p-4 shadow-2xl"
             style={{
               backgroundColor: "var(--bg-secondary)",
               border: "1px solid var(--ds-border)",
@@ -111,7 +111,7 @@ export default function InstallPrompt() {
             initial={{ opacity: 0, x: 20 }}
             animate={{ opacity: 1, x: 0 }}
             exit={{ opacity: 0, x: -20 }}
-            className="fixed bottom-24 left-4 right-4 z-[500] rounded-2xl shadow-2xl"
+            className="fixed bottom-32 left-4 right-4 z-[500] rounded-2xl shadow-2xl"
             style={{
               backgroundColor: "var(--bg-secondary)",
               border: "1px solid var(--ds-border)",
