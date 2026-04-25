@@ -4,6 +4,8 @@ import datetime
 
 class Expense(Base):
     __tablename__ = "expenses"
+    user_id = Column(String, index=True)
+
 
     id = Column(Integer, primary_key=True, index=True)
     date = Column(DateTime, default=datetime.datetime.utcnow) # Represents temporal timestamp
@@ -17,13 +19,15 @@ class Expense(Base):
     transaction_type = Column(String, default="Outflow")
     payment_method = Column(String)
     destination_institution = Column(String)
-    transaction_id = Column(String, unique=True, index=True)
+    transaction_id = Column(String, index=True)
     masked_cpf = Column(String)
     note = Column(String, nullable=True) # User provided notes
     deleted_at = Column(DateTime, nullable=True) # For soft-delete synchronization
 
 class PatternLog(Base):
     __tablename__ = "pattern_logs"
+    user_id = Column(String, index=True)
+
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, default=datetime.datetime.utcnow)
     filename = Column(String)

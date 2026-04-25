@@ -2,6 +2,8 @@ from pydantic import BaseModel
 from datetime import datetime
 
 class ExpenseBase(BaseModel):
+    user_id: str | None = None
+
     amount: float
     category: str
     merchant: str

@@ -55,7 +55,8 @@ async def apply_migrations():
         ("transaction_id", "TEXT"),
         ("masked_cpf", "TEXT"),
         ("note", "TEXT"),
-        ("deleted_at", "TIMESTAMP")
+        ("deleted_at", "TIMESTAMP"),
+        ("user_id", "TEXT")
     ]
 
     try:
@@ -137,15 +138,8 @@ app.include_router(export_router)
 
 @app.on_event("startup")
 async def warm_up_cache():
-    try:
-        from database import SessionLocal
-        db = SessionLocal()
-        expenses = db.query(models.Expense).order_by(models.Expense.date.desc()).limit(100).all()
-        db.close()
-        cache_set("warmup:0:100", expenses)
-        print(f"CACHE WARM-UP | {len(expenses)} registros pré-carregados no LRU cache.", flush=True)
-    except Exception as e:
-        print(f"CACHE WARM-UP | Falhou (não crítico): {e}", flush=True)
+    # Warm-up desabilitado para evitar vazamento de dados entre usuários no cache global
+    print("CACHE WARM-UP | Desabilitado para garantir isolamento por UID.", flush=True)
 
 @app.middleware("http")
 async def log_requests(request, call_next):
@@ -200,7 +194,7 @@ def read_expenses(
     if cached is not None:
         return cached
 
-    query = db.query(models.Expense)
+    query = db.query(models.Expense).filter(models.Expense.user_id == uid)
     if not include_deleted:
         query = query.filter(models.Expense.deleted_at == None)
 
@@ -212,9 +206,11 @@ def read_expenses(
 def create_expense(
     expense: schemas.ExpenseCreate,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_firebase_token),
+    user: dict = Depends(verify_firebase_token),
 ):
+    uid = user.get("uid", "anonymous")
     db_expense = models.Expense(**expense.model_dump())
+    db_expense.user_id = uid
     db.add(db_expense)
     db.commit()
     db.refresh(db_expense)
@@ -226,11 +222,15 @@ def update_expense(
     expense_id: int,
     updates: dict,
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_firebase_token),
+    user: dict = Depends(verify_firebase_token),
 ):
-    db_expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
+    uid = user.get("uid", "anonymous")
+    db_expense = db.query(models.Expense).filter(
+        models.Expense.id == expense_id,
+        models.Expense.user_id == uid
+    ).first()
     if not db_expense:
-        raise HTTPException(status_code=404, detail="Gasto não encontrado")
+        raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
     
     for key, value in updates.items():
         if hasattr(db_expense, key):
@@ -259,8 +259,9 @@ async def process_ata(
     note: str = Form(None),
     transaction_type: str = Form(None),
     db: Session = Depends(get_db),
-    _: dict = Depends(verify_firebase_token),
+    user: dict = Depends(verify_firebase_token),
 ):
+    uid = user.get("uid", "anonymous")
     try:
         print(f"\n>>> DEBUG: INICIOU O PROCESSAMENTO. ARQUIVO: {received_file.filename if received_file else 'NENHUM'} | URL: {receipt_url} | NOTA: {note}", flush=True)
 
@@ -360,8 +361,11 @@ async def process_ata(
         else:
             raise HTTPException(status_code=400, detail="Nenhum dado enviado.")
 
-        # Check for idempotency
-        existing_expense = db.query(models.Expense).filter(models.Expense.receipt == sha256_hash).first()
+        # Check for idempotency (per user)
+        existing_expense = db.query(models.Expense).filter(
+            models.Expense.receipt == sha256_hash,
+            models.Expense.user_id == uid
+        ).first()
         if existing_expense:
             if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
             return {"idempotent": True, "ai_data": {"total_amount": existing_expense.amount, "merchant_name": existing_expense.merchant}, "database_id": existing_expense.id}
@@ -397,7 +401,10 @@ async def process_ata(
         if tx_id and str(tx_id).strip():
             tx_id = re.sub(r'[^A-Z0-9]', '', str(tx_id).upper())
             tx_id = tx_id.replace('O', '0').replace('I', '1').replace('S', '5')
-            existing = db.query(models.Expense).filter(models.Expense.transaction_id == tx_id).first()
+            existing = db.query(models.Expense).filter(
+                models.Expense.transaction_id == tx_id,
+                models.Expense.user_id == uid
+            ).first()
             if existing:
                 if existing.deleted_at:
                     existing.deleted_at = None
@@ -408,6 +415,7 @@ async def process_ata(
             tx_id = None
 
         db_expense = models.Expense(
+            user_id=uid,
             date=date_obj, amount=amount, category=category, merchant=merchant,
             description=extracted_data.get("description") or "Processado",
             receipt=sha256_hash, transaction_type=transaction_type or extracted_data.get("transaction_type", "Outflow"),
@@ -431,16 +439,21 @@ async def process_ata(
 
 @app.delete("/expenses/{expense_id}")
 def delete_expense(expense_id: int, db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token)):
-    db_expense = db.query(models.Expense).filter(models.Expense.id == expense_id).first()
-    if not db_expense: raise HTTPException(status_code=404, detail="Gasto não encontrado")
+    uid = user.get("uid", "anonymous")
+    db_expense = db.query(models.Expense).filter(
+        models.Expense.id == expense_id,
+        models.Expense.user_id == uid
+    ).first()
+    if not db_expense: raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
     db.delete(db_expense)
     db.commit()
     cache_invalidate_all()
     return {"message": "Deletado"}
 
 @app.post("/expenses/clear-all")
-def clear_all_expenses(db: Session = Depends(get_db), _: dict = Depends(verify_firebase_token), only_trash: bool = False):
-    query = db.query(models.Expense)
+def clear_all_expenses(db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token), only_trash: bool = False):
+    uid = user.get("uid", "anonymous")
+    query = db.query(models.Expense).filter(models.Expense.user_id == uid)
     if only_trash: query = query.filter(models.Expense.deleted_at != None)
     num_deleted = query.delete(synchronize_session=False)
     db.commit()
