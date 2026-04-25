@@ -742,7 +742,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           paddingBottom: 'env(safe-area-inset-bottom)',
         }}>
           {/* Central Scan Button - Fixed and Molded (Extra Large Size) */}
-          <div className="absolute left-1/2 -translate-x-1/2 z-30 flex flex-col items-center" style={{ top: '-20px' }}>
+          <div className="absolute left-1/2 -translate-x-1/2 z-50 flex flex-col items-center" style={{ top: '-20px' }}>
             <button
               onClick={() => setShowScanMenu(true)}
               disabled={isUploading}
@@ -832,7 +832,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     >
                       <Link
                         href={item.href || "#"}
-                        className="flex flex-col items-center"
+                        className="flex flex-col items-center justify-center w-full h-full"
                         style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
                       >
                         <Icon size={22} strokeWidth={1.5} />
