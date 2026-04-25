@@ -98,7 +98,7 @@ export default function LinkPage() {
   }
 
   return (
-    <div className="p-4 md:p-5 space-y-5 font-sans" style={{ maxWidth: '100%' }}>
+    <div className="p-4 md:p-5 pt-1 md:pt-2 space-y-5 font-sans" style={{ maxWidth: '100%' }}>
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

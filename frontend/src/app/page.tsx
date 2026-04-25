@@ -979,7 +979,7 @@ function ExpenseTracker() {
 
   return (
     <div className="min-h-screen w-full overflow-x-hidden" style={{
-      paddingTop: 'max(1rem, env(safe-area-inset-top))',
+      paddingTop: 'max(0.25rem, env(safe-area-inset-top))',
       paddingBottom: 'max(5rem, calc(5rem + env(safe-area-inset-bottom)))',
       paddingLeft: 'max(1rem, env(safe-area-inset-left))',
       paddingRight: 'max(1rem, env(safe-area-inset-right))',

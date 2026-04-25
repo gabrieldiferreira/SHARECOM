@@ -267,11 +267,7 @@ export default function ReportsPage() {
   const tooltipStyle = { backgroundColor: "var(--bg-secondary)", border: "0.5px solid var(--ds-border)", borderRadius: "6px", fontSize: "12px" };
 
   return (
-    <div className="px-4 pb-4 md:px-6 md:pb-6 space-y-6 font-sans w-full max-w-[100vw] overflow-x-hidden relative" style={{ 
-      paddingTop: 'calc(env(safe-area-inset-top) + 1.5rem)',
-      paddingLeft: 'max(1rem, env(safe-area-inset-left))',
-      paddingRight: 'max(1rem, env(safe-area-inset-right))',
-    }}>
+    <div className="p-4 md:p-5 pt-1 md:pt-2 space-y-5 font-sans" style={{ maxWidth: '100%' }}>
       {/* Notification Card */}
       {notification && (
         <div className="fixed top-[calc(env(safe-area-inset-top)+5rem)] right-[calc(env(safe-area-inset-right)+1rem)] z-[100] animate-in fade-in slide-in-from-top-4 duration-300">
@@ -294,10 +290,10 @@ export default function ReportsPage() {
       )}
 
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         <div>
-          <h1 className="text-[22px] font-medium text-ds-text-primary">Relatórios Avançados</h1>
-          <p className="text-[12px] mt-1 text-ds-text-secondary">
+          <h1 className="text-xl font-semibold text-ds-text-primary">Relatórios Avançados</h1>
+          <p className="text-xs text-ds-text-tertiary mt-0.5">
             Análise detalhada de {filtered.length} transação(ões)
           </p>
         </div>

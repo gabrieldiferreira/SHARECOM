@@ -286,17 +286,17 @@ export default function SettingsPage() {
   if (!mounted) return null;
 
   return (
-    <div className="p-6 h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4">
+    <div className="p-4 md:p-5 pt-1 md:pt-2 space-y-5 font-sans" style={{ maxWidth: '100%' }}>
 
       {/* Header */}
-      <div className="flex flex-col items-center gap-2">
-        <div className="w-14 h-14 rounded-lg flex items-center justify-center bg-ds-bg-secondary text-ds-text-secondary border border-ds-border">
-          <SettingsIcon size={28} />
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-xl font-semibold text-ds-text-primary">Configurações</h1>
+          <p className="text-xs text-ds-text-tertiary mt-0.5">Gerencie sua conta e preferências</p>
         </div>
-        <h1 className="text-xl font-bold text-ds-text-primary">Configurações</h1>
       </div>
 
-      <div className="w-full space-y-4 text-left">
+      <div className="w-full max-w-md mx-auto space-y-4 text-left">
 
         {/* ── Profile card ── */}
         {isLoading ? (
