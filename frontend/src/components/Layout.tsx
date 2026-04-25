@@ -189,7 +189,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           category: ai.smart_category || 'Outros',
           currency: 'BRL',
           transaction_date: ai.transaction_date || new Date().toISOString(),
-          transaction_type: ai.transaction_type || 'Outflow',
+          transaction_type: ai.transaction_type || uploadType || 'Outflow',
           payment_method: ai.payment_method || 'Comprovante',
           description: ai.description || undefined,
           destination_institution: ai.destination_institution || undefined,

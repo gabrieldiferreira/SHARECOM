@@ -453,7 +453,7 @@ function ExpenseTracker() {
           category: ai.smart_category || 'Outros',
           currency: 'BRL',
           transaction_date: parsedDate,
-          transaction_type: ai.transaction_type || 'Outflow',
+          transaction_type: ai.transaction_type || uploadType || 'Outflow',
           payment_method: ai.payment_method || 'Comprovante',
           description: ai.description || undefined,
           destination_institution: ai.destination_institution || undefined,

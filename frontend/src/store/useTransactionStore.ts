@@ -80,8 +80,17 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       }
 
       // Calculate metrics for active only
-      const inflow = active.reduce((acc, tx) => (tx.transaction_type === 'Inflow' || tx.category === 'Receita') ? acc + tx.total_amount : acc, 0);
-      const outflow = active.reduce((acc, tx) => (tx.transaction_type === 'Outflow' && tx.category !== 'Receita') ? acc + tx.total_amount : acc, 0);
+      const inflow = active.reduce((acc, tx) => {
+        const type = (tx.transaction_type || '').toLowerCase();
+        const cat = (tx.category || '').toLowerCase();
+        return (type === 'inflow' || cat === 'receita' || cat === 'income') ? acc + tx.total_amount : acc;
+      }, 0);
+      
+      const outflow = active.reduce((acc, tx) => {
+        const type = (tx.transaction_type || '').toLowerCase();
+        const cat = (tx.category || '').toLowerCase();
+        return (type === 'outflow' && cat !== 'receita' && cat !== 'income') ? acc + tx.total_amount : acc;
+      }, 0);
       
       console.log('📊 Metrics calculated:', { active: active.length, trash: trash.length, inflow, outflow, balance: inflow - outflow });
       
