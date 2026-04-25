@@ -26,3 +26,37 @@ class Expense(ExpenseBase):
 
     class Config:
         from_attributes = True
+
+class GoalBase(BaseModel):
+    name: str
+    target_amount: float
+    current_amount: float = 0.0
+    deadline: datetime | None = None
+    category: str = "Outros"
+    status: str = "active"
+    auto_round_up: int = 0
+    auto_transfer_amount: float = 0.0
+    auto_transfer_day: int | None = None
+
+class GoalCreate(GoalBase):
+    pass
+
+class GoalUpdate(BaseModel):
+    name: str | None = None
+    target_amount: float | None = None
+    current_amount: float | None = None
+    deadline: datetime | None = None
+    category: str | None = None
+    status: str | None = None
+    auto_round_up: int | None = None
+    auto_transfer_amount: float | None = None
+    auto_transfer_day: int | None = None
+
+class Goal(GoalBase):
+    id: int
+    user_id: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+

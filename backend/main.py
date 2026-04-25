@@ -459,6 +459,66 @@ def clear_all_expenses(db: Session = Depends(get_db), user: dict = Depends(verif
     db.commit()
     cache_invalidate_all()
     return {"message": f"{num_deleted} removidos"}
+    
+# =============================================================================
+# GOALS ENDPOINTS
+# =============================================================================
+@app.get("/goals", response_model=List[schemas.Goal])
+def read_goals(
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_firebase_token)
+):
+    uid = user.get("uid", "anonymous")
+    return db.query(models.Goal).filter(models.Goal.user_id == uid).order_by(models.Goal.created_at.desc()).all()
+
+@app.post("/goals", response_model=schemas.Goal)
+def create_goal(
+    goal: schemas.GoalCreate,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_firebase_token)
+):
+    uid = user.get("uid", "anonymous")
+    db_goal = models.Goal(**goal.model_dump(), user_id=uid)
+    db.add(db_goal)
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
+
+@app.patch("/goals/{goal_id}", response_model=schemas.Goal)
+def update_goal(
+    goal_id: int,
+    updates: dict,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_firebase_token)
+):
+    uid = user.get("uid", "anonymous")
+    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id, models.Goal.user_id == uid).first()
+    if not db_goal:
+        raise HTTPException(status_code=404, detail="Meta não encontrada")
+    
+    for key, value in updates.items():
+        if hasattr(db_goal, key):
+            setattr(db_goal, key, value)
+            
+    db.commit()
+    db.refresh(db_goal)
+    return db_goal
+
+@app.delete("/goals/{goal_id}")
+def delete_goal(
+    goal_id: int,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_firebase_token)
+):
+    uid = user.get("uid", "anonymous")
+    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id, models.Goal.user_id == uid).first()
+    if not db_goal:
+        raise HTTPException(status_code=404, detail="Meta não encontrada")
+    
+    db.delete(db_goal)
+    db.commit()
+    return {"message": "Deletado"}
+
 
 @app.get("/patterns")
 def get_patterns(db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token)):

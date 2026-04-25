@@ -35,3 +35,22 @@ class PatternLog(Base):
     structural_map = Column(String)
     extracted_json = Column(String)
     hash = Column(String, unique=True)
+
+class Goal(Base):
+    __tablename__ = "goals"
+    user_id = Column(String, index=True)
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    target_amount = Column(Float, nullable=False)
+    current_amount = Column(Float, default=0.0)
+    deadline = Column(DateTime, nullable=True)
+    category = Column(String, default="Outros")
+    status = Column(String, default="active") # active, completed, archived
+    
+    # Automation flags
+    auto_round_up = Column(Integer, default=0) # 0 for off, or the rounding value (e.g. 10)
+    auto_transfer_amount = Column(Float, default=0.0)
+    auto_transfer_day = Column(Integer, nullable=True) # Day of month
+    
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
