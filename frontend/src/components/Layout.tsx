@@ -267,9 +267,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: "Histórico", href: "/timeline", icon: History },
     { name: t('nav.analytics'), href: "/reports", icon: PieChart },
     { name: t('nav.goals'), href: "/goals", icon: Target },
-    { name: "Link", href: "/link", icon: Link2 },
-    { name: t('nav.settings'), href: "/settings", icon: Settings },
-    { name: "Adicionar", href: "#", icon: Plus },
   ];
 
   const [activeNavIndex, setActiveNavIndex] = useState(0);
@@ -278,14 +275,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const handleNextNav = () => {
     if (isNavAnimating) return;
     setIsNavAnimating(true);
-    setActiveNavIndex((prev) => (prev + 1) % mobileNavItems.length);
+    const swipableCount = mobileNavItems.length - 1;
+    setActiveNavIndex((prev) => (prev + 1) % swipableCount);
     setTimeout(() => setIsNavAnimating(false), 400); // Cooldown to ensure 1-by-1
   };
 
   const handlePrevNav = () => {
     if (isNavAnimating) return;
     setIsNavAnimating(true);
-    setActiveNavIndex((prev) => (prev - 1 + mobileNavItems.length) % mobileNavItems.length);
+    const swipableCount = mobileNavItems.length - 1;
+    setActiveNavIndex((prev) => (prev - 1 + swipableCount) % swipableCount);
     setTimeout(() => setIsNavAnimating(false), 400); // Cooldown
   };
 
@@ -800,8 +799,15 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="flex items-center h-full w-full relative">
               <AnimatePresence mode="popLayout" initial={false}>
                 {[0, 1, 2, 3].map((slotIndex) => {
-                  const itemIndex = (activeNavIndex + slotIndex) % mobileNavItems.length;
-                  const item = mobileNavItems[itemIndex];
+                  let item;
+                  if (slotIndex === 0) {
+                    item = mobileNavItems[0];
+                  } else {
+                    const swipableCount = mobileNavItems.length - 1;
+                    const swipableIndex = (activeNavIndex + slotIndex - 1) % swipableCount;
+                    item = mobileNavItems[swipableIndex + 1];
+                  }
+                  
                   const Icon = item.icon;
                   const isActive = item.href ? pathname === item.href : false;
 

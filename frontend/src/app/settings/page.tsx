@@ -286,14 +286,15 @@ export default function SettingsPage() {
   if (!mounted) return null;
 
   return (
-    <div className="p-6 h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-6">
+    <div className="p-6 h-full flex flex-col items-center justify-center text-center max-w-md mx-auto space-y-4">
 
-      {/* Header icon */}
-      <div className="w-14 h-14 rounded-lg flex items-center justify-center bg-ds-bg-secondary text-ds-text-secondary border border-ds-border">
-        <SettingsIcon size={28} />
+      {/* Header */}
+      <div className="flex flex-col items-center gap-2">
+        <div className="w-14 h-14 rounded-lg flex items-center justify-center bg-ds-bg-secondary text-ds-text-secondary border border-ds-border">
+          <SettingsIcon size={28} />
+        </div>
+        <h1 className="text-xl font-bold text-ds-text-primary">Configurações</h1>
       </div>
-
-      <h1 className="text-xl font-bold text-ds-text-primary">Configurações</h1>
 
       <div className="w-full space-y-4 text-left">
 
