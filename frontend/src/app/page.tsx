@@ -114,8 +114,6 @@ function ExpenseTracker() {
   
   type DashboardMode = "cashflow" | "entities" | "payment" | "temporal" | "category" | "forensics" | "tax" | "alerts";
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>("cashflow");
-  type ActiveTab = "home" | "analytics" | "goals" | "settings";
-  const [activeTab, setActiveTab] = useState<ActiveTab>("home");
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all"); 
   const [currentPage, setCurrentPage] = useState(1);
@@ -1004,11 +1002,7 @@ function ExpenseTracker() {
         )}
       </AnimatePresence>
 
-      {/* DASHBOARD CONTENT SWITCHER - EXPOSTO APENAS SE HOUVER DADOS */}
-      {transactions.length > 0 ? (
-        <div className="space-y-4 sm:space-y-6">
-          {/* Header Section - Responsive */}
-          <div className="flex flex-col gap-4 sm:gap-6">
+      <div className="flex flex-col gap-4 sm:gap-6">
             <div className="flex flex-col lg:flex-row gap-4 items-start lg:items-center justify-between">
               
               {/* TOP ROW: Title + Mobile Avatar */}
@@ -1095,20 +1089,11 @@ function ExpenseTracker() {
 
               </div>
             </div>
-          </div>
+            </div>
 
 
           {/* TAB 1: HOME */}
-          <AnimatePresence>
-            {activeTab === "home" && (
-              <motion.div 
-                key="home"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="@container space-y-4 sm:space-y-6"
-              >
+          <div className="@container space-y-4 sm:space-y-6">
               
               {/* DATE RANGE FILTER TABS + USER GREETING */}
               <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-2">
@@ -1240,10 +1225,11 @@ function ExpenseTracker() {
               </div>
 
               {/* (5) TRANSACTIONS TABLE - Responsive */}
-              <div className="glass-card-static overflow-hidden">
+              {transactions.length > 0 ? (
+                <div className="glass-card-static overflow-hidden">
                 <div className="p-4 sm:p-5 border-b border-glass-border flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2">
                   <h3 className="text-[14px] sm:text-[16px] font-semibold text-text-primary">{t('dashboard.recentTransactions')}</h3>
-                  <button onClick={() => setActiveTab("analytics")} className="text-[11px] sm:text-[12px] font-medium text-brand-cyan hover:underline touch-manipulation" aria-label="View all transactions">{t('common.viewAll')}</button>
+                  <Link href="/reports" className="text-[11px] sm:text-[12px] font-medium text-brand-cyan hover:underline touch-manipulation">{t('common.viewAll')}</Link>
                 </div>
                 <div className="divide-y divide-[rgba(255,255,255,0.05)] stagger-children">
                   {filteredByDate.slice(0, 6).map(tx => (
@@ -1267,593 +1253,24 @@ function ExpenseTracker() {
                   ))}
                 </div>
               </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* TAB 2: ANALYTICS */}
-          <AnimatePresence>
-            {activeTab === "analytics" && (
-              <motion.div
-                key="analytics"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="@container space-y-6"
-              >
-              {/* (3) SPENDING CHART */}
-              <div className="glass-card-static p-5 md:p-6">
-                <div className="flex justify-between items-center mb-6">
-                  <h2 className="text-[16px] font-semibold text-text-primary">{t('dashboard.spendingOverview')}</h2>
-                  <div className="flex items-center gap-2">
-                    <button 
-                      onClick={() => setDateRange('7days')}
-                      className={`px-3 py-1.5 rounded-full text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${
-                        dateRange === '7days' 
-                          ? 'bg-brand-purple/20 text-brand-purple border border-brand-purple/30' 
-                          : 'bg-bg-tertiary text-text-tertiary hover:bg-bg-secondary border border-border'
-                      }`}
-                    >
-                      <CalendarIcon size={12} />
-                      <span>7 dias</span>
-                    </button>
-                    <button 
-                      onClick={() => setDateRange('month')}
-                      className={`px-3 py-1.5 rounded-full text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${
-                        dateRange === 'month' 
-                          ? 'bg-brand-orange/20 text-brand-orange border border-brand-orange/30' 
-                          : 'bg-bg-tertiary text-text-tertiary hover:bg-bg-secondary border border-border'
-                      }`}
-                    >
-                      <CalendarIcon size={12} />
-                      <span>Este mês</span>
-                    </button>
-                    <button 
-                      onClick={() => setDateRange('all')}
-                      className={`px-3 py-1.5 rounded-full text-[12px] font-semibold flex items-center gap-1.5 transition-colors ${
-                        dateRange === 'all' 
-                          ? 'bg-brand-cyan/20 text-brand-cyan border border-brand-cyan/30' 
-                          : 'bg-bg-tertiary text-text-tertiary hover:bg-bg-secondary border border-border'
-                      }`}
-                    >
-                      <CalendarIcon size={12} />
-                      <span>Todos</span>
-                    </button>
-                  </div>
-                </div>
-                <div className="h-[200px] md:h-[300px] xl:h-[400px] w-full min-w-0">
-                  {temporalData.hourly.every(d => d.val === 0) ? (
-                    <div className="h-full flex flex-col items-center justify-center text-center px-4">
-                      <div className="w-16 h-16 rounded-2xl bg-purple-500/10 flex items-center justify-center mb-4">
-                        <BarChart3 size={32} className="text-purple-400" />
-                      </div>
-                      <p className="text-text-secondary text-sm font-medium mb-2">
-                        {t('dashboard.noSpendingData')}
-                      </p>
-                      <p className="text-text-tertiary text-xs">
-                        {t('dashboard.addTransactionsToSeeChart')}
-                      </p>
-                    </div>
-                  ) : (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={temporalData.hourly} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="hour" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} cursor={{ fill: 'rgba(139,92,246,0.08)' }} />
-                        <Bar dataKey="val" fill="#8B5CF6" radius={[8, 8, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  )}
-                </div>
-              </div>
-
-              {/* (4) CATEGORY BREAKDOWN & (8) STATISTICS (Donut) */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                 {/* Categories */}
-                 <div className="glass-card-static p-5 md:p-6">
-                    <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.topCategories')}</h2>
-                    {categoriesData.length === 0 ? (
-                      <div className="h-[280px] flex flex-col items-center justify-center text-center px-4">
-                        <div className="w-14 h-14 rounded-2xl bg-pink-500/10 flex items-center justify-center mb-3">
-                          <PieChartIcon size={28} className="text-pink-400" />
-                        </div>
-                        <p className="text-text-secondary text-sm font-medium mb-1">
-                          {t('dashboard.noCategoryData')}
-                        </p>
-                        <p className="text-text-tertiary text-xs">
-                          {t('dashboard.categoriesWillAppearHere')}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="space-y-3 stagger-children">
-                        {categoriesData.slice(0, 5).map((cat, i) => {
-                         const pct = totalOutflow > 0 ? (cat.value / totalOutflow) * 100 : 0;
-                         return (
-                            <div key={i} className="p-4 rounded-[16px] bg-glass-highlight border-thin border-glass-border hover:border-brand-purple/30 hover:shadow-glow transition-all cursor-pointer flex items-center justify-between group">
-                               <div className="flex items-center gap-3">
-                                  <div className="w-10 h-10 rounded-full flex items-center justify-center text-white shrink-0 group-hover:scale-110 transition-transform" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}>
-                                     {CATEGORY_ICONS[cat.name] || <Tag size={16} />}
-                                  </div>
-                                  <div>
-                                     <p className="text-[14px] font-semibold text-text-primary">{t(`categories.${cat.name}`).replace('categories.', '')}</p>
-                                     <p className="text-[12px] text-text-tertiary mt-0.5">R$ {cat.value.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
-                                  </div>
-                               </div>
-                               <div className="text-right">
-                                  <p className="text-[18px] font-bold text-text-primary tabular-nums">{pct.toFixed(0)}%</p>
-                                  {/* Mini progress bar */}
-                                  <div className="w-16 h-1.5 bg-brand-bg rounded-full overflow-hidden mt-1.5">
-                                    <div className="h-full rounded-full animate-fill-progress" style={{ width: `${pct}%`, backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
-                                  </div>
-                               </div>
-                            </div>
-                         );
-                      })}
-                    </div>
-                    )}
-                 </div>
-
-                 {/* Donut Chart */}
-                 <div className="glass-card-static p-5 md:p-6 flex flex-col justify-between">
-                    <h2 className="text-[16px] font-semibold text-text-primary mb-4">{t('dashboard.distribution')}</h2>
-                    <div className="h-[220px] md:h-[250px] w-full relative">
-                       <ResponsiveContainer width="100%" height="100%">
-                         <PieChart>
-                           <Pie data={categoriesData} innerRadius="55%" outerRadius="80%" paddingAngle={4} dataKey="value" stroke="none">
-                             {categoriesData.map((_, i) => <Cell key={i} fill={CHART_COLORS[i % CHART_COLORS.length]} />)}
-                           </Pie>
-                           <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
-                         </PieChart>
-                       </ResponsiveContainer>
-                       {/* Center Text */}
-                       <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                          <span className="text-[11px] text-text-tertiary uppercase tracking-wider">Total</span>
-                          <span className="text-[22px] font-bold text-text-primary tabular-nums">R$ {totalOutflow.toLocaleString('pt-BR')}</span>
-                       </div>
-                    </div>
-                    {/* Legend */}
-                    <div className="flex flex-wrap gap-x-4 gap-y-2 mt-4 justify-center">
-                       {categoriesData.slice(0, 5).map((cat, i) => (
-                          <div key={cat.name} className="flex items-center gap-1.5">
-                             <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: CHART_COLORS[i % CHART_COLORS.length] }}></div>
-                             <span className="text-[11px] text-text-secondary">{t(`categories.${cat.name}`).replace('categories.', '')}</span>
-                          </div>
-                       ))}
-                    </div>
-                 </div>
-              </div>
-
-              {/* WEEKDAY INTENSITY + PAYMENT METHODS */}
-              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                {/* Weekday Chart */}
-                <div className="glass-card-static p-5 md:p-6">
-                  <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.weekdayActivity')}</h2>
-                  <div className="h-[200px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={weekdayIntensity} margin={{ top: 10, right: 0, left: -20, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: 'rgba(255,255,255,0.4)' }} tickFormatter={(v: number) => v >= 1000 ? `${(v/1000).toFixed(0)}k` : v} />
-                        <Tooltip contentStyle={{ backgroundColor: '#0D0D12', borderColor: 'rgba(255,255,255,0.08)', borderRadius: '12px', fontSize: '12px', color: '#fff' }} />
-                        <Bar dataKey="val" fill="#06B6D4" radius={[8, 8, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </div>
-                </div>
-
-                {/* Payment Methods */}
-                <div className="glass-card-static p-5 md:p-6">
-                  <h2 className="text-[16px] font-semibold text-text-primary mb-5">{t('dashboard.paymentMethods')}</h2>
-                  <div className="space-y-3 stagger-children">
-                    {paymentMethodsData.slice(0, 4).map((pm, i) => {
-                      const pct = totalOutflow > 0 ? (pm.value / totalOutflow) * 100 : 0;
-                      const colors = ['#8B5CF6', '#EC4899', '#FB923C', '#06B6D4'];
-                      const icons = [<Smartphone key="s" size={16} />, <CreditCard key="c" size={16} />, <Banknote key="b" size={16} />, <Layers key="l" size={16} />];
-                      return (
-                        <div key={pm.name} className="flex items-center gap-4 p-3 rounded-[12px] bg-glass-highlight border-thin border-glass-border hover:border-white/10 transition-all">
-                          <div className="w-9 h-9 rounded-full flex items-center justify-center text-white shrink-0" style={{ backgroundColor: colors[i % colors.length] }}>
-                            {icons[i % icons.length]}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[13px] font-medium text-text-primary">{pm.name}</p>
-                            <div className="w-full h-1.5 bg-brand-bg rounded-full overflow-hidden mt-1.5">
-                              <div className="h-full rounded-full animate-fill-progress" style={{ width: `${pct}%`, backgroundColor: colors[i % colors.length] }}></div>
-                            </div>
-                          </div>
-                          <span className="text-[14px] font-bold text-text-primary tabular-nums">{pct.toFixed(0)}%</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* SMART ALERTS SECTION */}
-              {alerts.length > 0 && (
-                <div className="glass-card-static p-5 md:p-6">
-                  <div className="flex items-center gap-2 mb-5">
-                    <Bell size={16} className="text-brand-orange" />
-                    <h2 className="text-[16px] font-semibold text-text-primary">Smart Alerts</h2>
-                    <span className="ml-auto px-2.5 py-0.5 rounded-full bg-brand-orange/20 text-brand-orange text-[11px] font-bold">{alerts.length}</span>
-                  </div>
-                  <div className="space-y-3 stagger-children">
-                    {alerts.slice(0, 5).map(alert => (
-                      <div key={alert.id} className={`p-4 rounded-[12px] border-thin flex items-start gap-3 transition-all ${
-                        alert.type === 'critical' ? 'bg-brand-red/10 border-brand-red/20' :
-                        alert.type === 'warning' ? 'bg-brand-orange/10 border-brand-orange/20' :
-                        'bg-brand-cyan/10 border-brand-cyan/20'
-                      }`}>
-                        <div className="shrink-0 mt-0.5">{alert.icon}</div>
-                        <div>
-                          <p className="text-[13px] font-semibold text-text-primary">{alert.title}</p>
-                          <p className="text-[12px] text-text-secondary mt-0.5">{alert.message}</p>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-20 text-center glass-card">
+                   <div className="w-20 h-20 bg-ds-bg-secondary rounded-3xl flex items-center justify-center mb-6 shadow-xl border-thin border-ds-border">
+                      <FileText size={40} className="text-ds-text-tertiary" />
+                   </div>
+                   <h3 className="text-[20px] font-bold text-ds-text-primary mb-2">Nenhuma transação encontrada</h3>
+                   <p className="text-[14px] text-ds-text-secondary max-w-xs mx-auto mb-8">
+                      Você ainda não possui transações registradas para este período.
+                   </p>
+                   <button 
+                      onClick={() => fileInputRef.current?.click()}
+                      className="px-6 py-3 bg-fn-balance text-white rounded-xl font-bold shadow-lg hover:scale-105 transition-all"
+                   >
+                      ENVIAR COMPROVANTE
+                   </button>
                 </div>
               )}
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* TAB 3: GOALS */}
-          <AnimatePresence>
-            {activeTab === "goals" && (
-              <motion.div
-                key="goals"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="@container space-y-6"
-              >
-               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                 {/* Left Sidebar - Goal Cards */}
-                 <div className="lg:col-span-1 space-y-4">
-                    <div className="glass-card p-5 cursor-pointer border-brand-cyan/30 shadow-glow-cyan">
-                       <div className="flex items-center justify-between mb-3">
-                         <h3 className="text-[14px] font-semibold text-text-primary">MacBook Pro M3</h3>
-                         <span className="text-[11px] font-bold text-brand-cyan tabular-nums">45%</span>
-                       </div>
-                       <p className="text-[12px] text-text-tertiary mb-4">Target: R$ 18.000</p>
-                       <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden mb-2">
-                          <div className="h-full bg-gradient-to-r from-brand-cyan to-brand-purple rounded-full animate-fill-progress" style={{ width: '45%' }}></div>
-                       </div>
-                       <div className="flex justify-between text-[11px] font-medium">
-                          <span className="text-text-primary tabular-nums">R$ 8.100 saved</span>
-                          <span className="text-text-tertiary">Due Dec 2026</span>
-                       </div>
-                    </div>
-                    <div className="glass-card p-5 cursor-pointer opacity-60 hover:opacity-100 transition-opacity">
-                       <div className="flex items-center justify-between mb-3">
-                         <h3 className="text-[14px] font-semibold text-text-primary">Emergency Fund</h3>
-                         <span className="text-[11px] font-bold text-brand-purple tabular-nums">12%</span>
-                       </div>
-                       <p className="text-[12px] text-text-tertiary mb-4">Target: R$ 50.000</p>
-                       <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden mb-2">
-                          <div className="h-full bg-gradient-to-r from-brand-purple to-brand-pink rounded-full animate-fill-progress" style={{ width: '12%' }}></div>
-                       </div>
-                       <div className="flex justify-between text-[11px] font-medium">
-                          <span className="text-text-primary tabular-nums">R$ 6.000 saved</span>
-                          <span className="text-text-tertiary">No deadline</span>
-                       </div>
-                    </div>
-                    <div className="glass-card p-5 cursor-pointer opacity-60 hover:opacity-100 transition-opacity">
-                       <div className="flex items-center justify-between mb-3">
-                         <h3 className="text-[14px] font-semibold text-text-primary">Vacation Trip</h3>
-                         <span className="text-[11px] font-bold text-brand-pink tabular-nums">68%</span>
-                       </div>
-                       <p className="text-[12px] text-text-tertiary mb-4">Target: R$ 8.000</p>
-                       <div className="w-full h-2.5 bg-brand-bg rounded-full overflow-hidden mb-2">
-                          <div className="h-full bg-gradient-to-r from-brand-pink to-brand-orange rounded-full animate-fill-progress" style={{ width: '68%' }}></div>
-                       </div>
-                       <div className="flex justify-between text-[11px] font-medium">
-                          <span className="text-text-primary tabular-nums">R$ 5.440 saved</span>
-                          <span className="text-text-tertiary">Due Jul 2026</span>
-                       </div>
-                    </div>
-                    <button className="w-full p-4 rounded-[16px] border-thin border-dashed border-text-tertiary text-text-secondary font-medium text-[13px] hover:text-text-primary hover:border-text-secondary hover:bg-glass-highlight transition-all flex items-center justify-center gap-2" aria-label="Create new goal">
-                       <Plus size={16} /> Create New Goal
-                    </button>
-                 </div>
-                 
-                 {/* Right Form */}
-                 <div className="lg:col-span-2 glass-card-static p-6 md:p-8">
-                    <h2 className="text-[20px] font-bold text-text-primary mb-6">Edit Goal</h2>
-                    <form className="space-y-5" onSubmit={e => e.preventDefault()}>
-                       <div>
-                          <label className="block text-[12px] text-text-tertiary mb-2 font-medium">Goal Name</label>
-                          <input type="text" defaultValue="MacBook Pro M3" className="glass-input w-full" />
-                       </div>
-                       <div className="grid grid-cols-2 gap-4">
-                          <div>
-                             <label className="block text-[12px] text-text-tertiary mb-2 font-medium">Target Amount (R$)</label>
-                             <input type="text" defaultValue="18000" className="glass-input w-full" />
-                          </div>
-                          <div>
-                             <label className="block text-[12px] text-text-tertiary mb-2 font-medium">Deadline</label>
-                             <input type="date" defaultValue="2026-12-31" className="glass-input w-full [color-scheme:dark]" />
-                          </div>
-                       </div>
-                       <div className="pt-4 border-t border-glass-border mt-6">
-                          <h3 className="text-[14px] font-semibold text-text-primary mb-4">Saving Rules</h3>
-                          <div className="flex items-center justify-between p-4 bg-glass-highlight rounded-[12px] mb-3 hover:bg-white/[0.07] transition-colors">
-                             <div>
-                                <p className="text-[13px] font-medium text-text-primary">Round-up Change</p>
-                                <p className="text-[11px] text-text-tertiary mt-0.5">Save spare change to the nearest R$ 10</p>
-                             </div>
-                             <div className="w-10 h-6 bg-brand-purple rounded-full relative cursor-pointer transition-colors"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
-                          </div>
-                          <div className="flex items-center justify-between p-4 bg-glass-highlight rounded-[12px] hover:bg-white/[0.07] transition-colors">
-                             <div>
-                                <p className="text-[13px] font-medium text-text-primary">Monthly Auto-Transfer</p>
-                                <p className="text-[11px] text-text-tertiary mt-0.5">Transfer R$ 500 on the 5th of every month</p>
-                             </div>
-                             <div className="w-10 h-6 bg-glass-border rounded-full relative cursor-pointer transition-colors"><div className="w-4 h-4 bg-text-tertiary rounded-full absolute left-1 top-1"></div></div>
-                          </div>
-                       </div>
-                       <div className="flex flex-col sm:flex-row justify-end gap-3 pt-6 mt-2">
-                          <button className="px-5 py-2.5 rounded-[12px] text-[13px] font-bold text-brand-red border-thin border-brand-red/30 hover:bg-brand-red/10 transition-colors glass-btn">Delete</button>
-                          <button className="px-5 py-2.5 rounded-[12px] text-[13px] font-bold text-text-primary border-thin border-glass-border hover:bg-glass-highlight transition-colors glass-btn">Duplicate</button>
-                          <button className="btn-primary">Save Goal</button>
-                       </div>
-                    </form>
-                 </div>
-               </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
-
-          {/* TAB 4: SETTINGS */}
-          <AnimatePresence>
-            {activeTab === "settings" && (
-              <motion.div
-                key="settings"
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ duration: 0.3, ease: "easeOut" }}
-                className="@container max-w-2xl mx-auto space-y-6"
-              >
-
-               {/* ── Profile card with Firestore data ── */}
-               <div className="glass-card-static p-6">
-                 <div className="flex items-center justify-between mb-5">
-                   <h3 className="text-[16px] font-semibold text-text-primary">Meu Perfil</h3>
-                   <button
-                     onClick={() => {
-                       if (isEditingProfile) {
-                         setProfileForm({ name: fireUser?.name ?? '', locale: fireUser?.locale ?? 'pt-BR', currency: fireUser?.currency ?? 'BRL' });
-                       }
-                       setIsEditingProfile(!isEditingProfile);
-                     }}
-                     className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-brand-purple text-white text-[12px] font-medium hover:bg-purple-700 transition-colors"
-                   >
-                     {isEditingProfile ? <><X size={12} /> Cancelar</> : <><Pencil size={12} /> Editar Perfil</>}
-                   </button>
-                 </div>
-
-                 {fireLoading ? (
-                   <div className="space-y-4">
-                     <div className="flex items-center gap-4">
-                       <div className="w-16 h-16 rounded-full bg-glass-highlight animate-pulse flex-shrink-0" />
-                       <div className="space-y-2 flex-1"><div className="h-4 w-32 bg-glass-highlight rounded animate-pulse" /><div className="h-3 w-48 bg-glass-highlight rounded animate-pulse" /></div>
-                     </div>
-                   </div>
-                 ) : (
-                   <>
-                     {/* Avatar + name + email */}
-                     <div className="flex items-center gap-4 mb-5">
-                       {fireUser?.photoURL ? (
-                         // eslint-disable-next-line @next/next/no-img-element
-                         <img src={fireUser.photoURL} alt="Foto" referrerPolicy="no-referrer"
-                           className="w-16 h-16 rounded-full border-2 border-brand-purple object-cover flex-shrink-0" />
-                       ) : (
-                         <div className="w-16 h-16 rounded-full bg-gradient-to-br from-brand-purple to-brand-pink flex items-center justify-center text-white text-[22px] font-bold flex-shrink-0">
-                           {fireUser?.name?.[0]?.toUpperCase() ?? '?'}
-                         </div>
-                       )}
-                       <div className="overflow-hidden">
-                         <h2 className="text-[18px] font-bold text-text-primary truncate">{fireUser?.name || '—'}</h2>
-                         <p className="text-[13px] text-text-tertiary truncate flex items-center gap-1">
-                           <Mail size={11} className="flex-shrink-0" />{fireUser?.email || '—'}
-                         </p>
-                       </div>
-                     </div>
-
-                     {/* View mode fields */}
-                     {!isEditingProfile && (
-                       <div className="space-y-0 border-t border-glass-border">
-                         <div className="flex justify-between items-center py-3 border-b border-glass-border">
-                           <span className="text-[13px] text-text-secondary flex items-center gap-1.5"><Globe size={13} /> Idioma</span>
-                           <span className="text-[13px] text-text-primary font-medium">
-                             {fireUser?.locale === 'pt-BR' ? 'Português (BR)' : fireUser?.locale === 'en' ? 'English' : fireUser?.locale === 'es' ? 'Español' : fireUser?.locale ?? '—'}
-                           </span>
-                         </div>
-                         <div className="flex justify-between items-center py-3 border-b border-glass-border">
-                           <span className="text-[13px] text-text-secondary flex items-center gap-1.5"><DollarSign size={13} /> Moeda</span>
-                           <span className="text-[13px] text-text-primary font-bold">{fireUser?.currency ?? '—'}</span>
-                         </div>
-                         <div className="flex justify-between items-center py-3 border-b border-glass-border">
-                           <span className="text-[13px] text-text-secondary">{t('common.transactions', { count: transactions.length })}</span>
-                           <span className="text-[13px] text-text-primary font-bold tabular-nums">{transactions.length}</span>
-                         </div>
-                         {fireUser?.createdAt && (
-                           <div className="flex justify-between items-center py-3">
-                             <span className="text-[13px] text-text-secondary flex items-center gap-1.5"><CalendarIcon size={13} /> {t('settings.memberSince')}</span>
-                             <span className="text-[13px] text-text-primary font-medium">
-                               {new Date(fireUser.createdAt).toLocaleDateString('pt-BR', { day: '2-digit', month: 'long', year: 'numeric' })}
-                             </span>
-                           </div>
-                         )}
-                       </div>
-                     )}
-
-                     {/* Edit form */}
-                     {isEditingProfile && (
-                       <div className="space-y-3 border-t border-glass-border pt-4">
-                         <div>
-                           <label className="text-[11px] text-text-tertiary uppercase tracking-wide mb-1 block">Nome</label>
-                           <input
-                             value={profileForm.name}
-                             onChange={e => setProfileForm({ ...profileForm, name: e.target.value })}
-                             placeholder="Seu nome"
-                             className="w-full p-3 rounded-[10px] bg-glass-highlight border-thin border-glass-border text-text-primary text-[13px] outline-none focus:border-brand-purple transition-colors"
-                           />
-                         </div>
-                         <div>
-                           <label className="text-[11px] text-text-tertiary uppercase tracking-wide mb-1 block">Idioma</label>
-                           <select
-                             value={profileForm.locale}
-                             onChange={e => setProfileForm({ ...profileForm, locale: e.target.value })}
-                             className="w-full p-3 rounded-[10px] bg-glass-highlight border-thin border-glass-border text-text-primary text-[13px] outline-none focus:border-brand-purple transition-colors"
-                           >
-                             <option value="pt-BR">Português (BR)</option>
-                             <option value="en">English</option>
-                             <option value="es">Español</option>
-                           </select>
-                         </div>
-                         <div>
-                           <label className="text-[11px] text-text-tertiary uppercase tracking-wide mb-1 block">Moeda</label>
-                           <select
-                             value={profileForm.currency}
-                             onChange={e => setProfileForm({ ...profileForm, currency: e.target.value })}
-                             className="w-full p-3 rounded-[10px] bg-glass-highlight border-thin border-glass-border text-text-primary text-[13px] outline-none focus:border-brand-purple transition-colors"
-                           >
-                             <option value="BRL">Real (R$)</option>
-                             <option value="USD">Dólar ($)</option>
-                             <option value="EUR">Euro (€)</option>
-                           </select>
-                         </div>
-                         <button
-                           onClick={handleSaveProfile}
-                           disabled={isSavingProfile}
-                           className="w-full flex items-center justify-center gap-2 py-3 rounded-[10px] bg-brand-purple text-white font-bold text-[13px] hover:bg-purple-700 disabled:opacity-60 disabled:cursor-not-allowed transition-all active:scale-95"
-                         >
-                           <Save size={15} />
-                           {isSavingProfile ? 'Salvando...' : 'Salvar Alterações'}
-                         </button>
-                       </div>
-                     )}
-                   </>
-                 )}
-               </div>
-
-               {/* Language */}
-               <div className="glass-card-static p-6">
-                 <div className="flex items-center gap-2 mb-5">
-                   <Globe size={16} className="text-brand-purple" />
-                   <h3 className="text-[16px] font-semibold text-text-primary">{t('common.language')}</h3>
-                 </div>
-                 <LanguageSwitcher />
-               </div>
-
-               {/* Preferences */}
-               <div className="glass-card-static p-6">
-                 <h3 className="text-[16px] font-semibold text-text-primary mb-5">{t('settings.preferences')}</h3>
-                 <div className="space-y-4">
-                   <div className="flex items-center justify-between">
-                     <div>
-                       <p className="text-[13px] font-medium text-text-primary">{t('settings.aiCategorization')}</p>
-                       <p className="text-[11px] text-text-tertiary mt-0.5">{t('settings.aiCategorizationDesc')}</p>
-                     </div>
-                     <div className="w-10 h-6 bg-brand-purple rounded-full relative cursor-pointer"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <div>
-                       <p className="text-[13px] font-medium text-text-primary">{t('settings.smartAlertsToggle')}</p>
-                       <p className="text-[11px] text-text-tertiary mt-0.5">{t('settings.smartAlertsDesc')}</p>
-                     </div>
-                     <div className="w-10 h-6 bg-brand-purple rounded-full relative cursor-pointer"><div className="w-4 h-4 bg-white rounded-full absolute right-1 top-1 shadow-sm"></div></div>
-                   </div>
-                   <div className="flex items-center justify-between">
-                     <div>
-                       <p className="text-[13px] font-medium text-text-primary">{t('settings.currency')}</p>
-                       <p className="text-[11px] text-text-tertiary mt-0.5">{fireUser?.currency ?? locale}</p>
-                     </div>
-                     <span className="px-3 py-1.5 rounded-lg bg-glass-highlight border-thin border-glass-border text-[12px] font-bold text-text-primary">{fireUser?.currency === 'BRL' ? 'BRL (R$)' : fireUser?.currency === 'USD' ? 'USD ($)' : fireUser?.currency ?? 'BRL (R$)'}</span>
-                   </div>
-                 </div>
-               </div>
-
-               {/* Data Management */}
-               <div className="glass-card-static p-6">
-                 <h3 className="text-[16px] font-semibold text-text-primary mb-5">{t('settings.dataManagement')}</h3>
-                 <div className="space-y-3">
-                   <button className="w-full p-4 rounded-[12px] bg-glass-highlight border-thin border-glass-border text-left hover:bg-white/[0.07] transition-colors flex items-center justify-between group">
-                     <div className="flex items-center gap-3">
-                       <Database size={16} className="text-brand-cyan" />
-                       <span className="text-[13px] font-medium text-text-primary">{t('settings.exportData')}</span>
-                     </div>
-                     <ChevronRight size={14} className="text-text-tertiary group-hover:text-text-primary transition-colors" />
-                   </button>
-                   <button
-                     disabled={isLoadingData}
-                     onClick={async () => {
-                       setIsLoadingData(true);
-                       try { await syncWithBackend(); } finally { setIsLoadingData(false); }
-                     }}
-                     className="w-full p-4 rounded-[12px] bg-glass-highlight border-thin border-glass-border text-left hover:bg-white/[0.07] transition-colors flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed"
-                   >
-                     <div className="flex items-center gap-3">
-                       {isLoadingData ? <Loader2 size={16} className="text-brand-orange animate-spin" /> : <RotateCcw size={16} className="text-brand-orange" />}
-                       <span className="text-[13px] font-medium text-text-primary">{t('settings.syncBackend')}</span>
-                     </div>
-                     <ChevronRight size={14} className="text-text-tertiary group-hover:text-text-primary transition-colors" />
-                   </button>
-                   <button
-                     disabled={isLoadingData}
-                     onClick={async () => {
-                       if(window.confirm(t('settings.clearDataConfirm'))) {
-                         setIsLoadingData(true);
-                         try { await clearAllData(); } finally { setIsLoadingData(false); }
-                       }
-                     }}
-                     className="w-full p-4 rounded-[12px] bg-brand-red/5 border-thin border-brand-red/20 text-left hover:bg-brand-red/10 transition-colors flex items-center justify-between group disabled:opacity-50 disabled:cursor-not-allowed"
-                   >
-                     <div className="flex items-center gap-3">
-                       <Trash2 size={16} className="text-brand-red" />
-                       <span className="text-[13px] font-medium text-brand-red">{t('settings.clearData')}</span>
-                     </div>
-                     <ChevronRight size={14} className="text-brand-red/50 group-hover:text-brand-red transition-colors" />
-                   </button>
-                 </div>
-               </div>
-
-               <p className="text-center text-[11px] text-text-tertiary py-4">{t('settings.version')} • Built with 🧠 by Neural Analytics</p>
-              </motion.div>
-            )}
-          </AnimatePresence>
-        </div>
-      ) : (
-        /* EMPTY STATE */
-        <EmptyState
-          icon={<FileText size={64} />}
-          title="Nenhuma transação ainda"
-          description="Envie seu primeiro comprovante para começar a usar os dashboards inteligentes do SHARECOM"
-          action={
-            <div className="flex flex-col items-center gap-4">
-              <button 
-                onClick={() => fileInputRef.current?.click()}
-                className="px-8 py-4 bg-accent-purple text-white rounded-2xl font-bold shadow-xl hover:scale-105 active:scale-95 transition-all flex items-center gap-3"
-              >
-                <Plus size={20} />
-                ENVIAR PRIMEIRO COMPROVANTE
-              </button>
-              
-              <button 
-                onClick={() => setShowManualModal(true)}
-                className="text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
-              >
-                Registrar manualmente
-              </button>
             </div>
-          }
-        />
-      )}
 
       {/* TRASH MODAL */}
       <AnimatePresence>
@@ -1899,7 +1316,7 @@ function ExpenseTracker() {
                     <div key={tx.id} className="p-4 rounded-xl bg-ds-bg-secondary border-thin border-ds-border flex items-center justify-between group">
                       <div className="min-w-0">
                         <p className="text-[14px] font-bold text-ds-text-primary truncate">{tx.merchant_name}</p>
-                        <p className="text-[11px] text-ds-text-tertiary">R$ {tx.total_amount.toLocaleString('pt-BR')} • Excluído em {formatDate(tx.deleted_at || "")}</p>
+                        <p className="text-[11px] text-ds-text-tertiary">R$ {tx.total_amount.toLocaleString('pt-BR')} • Excluído</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <button 
@@ -1910,7 +1327,6 @@ function ExpenseTracker() {
                             }
                           }}
                           className="p-2 rounded-lg hover:bg-emerald-500/10 text-emerald-500 transition-colors"
-                          title={t('trash.restore')}
                         >
                           <RotateCcw size={18} />
                         </button>
@@ -1922,7 +1338,6 @@ function ExpenseTracker() {
                             }
                           }}
                           className="p-2 rounded-lg hover:bg-red-500/10 text-red-500 transition-colors"
-                          title={t('trash.deletePermanently')}
                         >
                           <X size={18} />
                         </button>

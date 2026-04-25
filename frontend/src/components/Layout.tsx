@@ -258,8 +258,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: "Histórico", href: "/timeline", icon: History },
     { name: t('nav.analytics'), href: "/reports", icon: PieChart },
     { name: t('nav.goals'), href: "/goals", icon: Target },
-    { name: "Link", href: "/link", icon: Link2 },
-    { name: t('nav.settings'), href: "/settings", icon: Settings },
   ];
 
   const mobileNavItems = [
@@ -742,11 +740,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           paddingBottom: 'env(safe-area-inset-bottom)',
         }}>
           {/* Central Scan Button - Fixed and Molded (Extra Large Size) */}
-          <div className="absolute left-1/2 -translate-x-1/2 z-50 flex flex-col items-center" style={{ top: '-20px' }}>
+          <div className="absolute left-1/2 -translate-x-1/2 z-[100] flex flex-col items-center" style={{ top: '-25px' }}>
             <button
               onClick={() => setShowScanMenu(true)}
               disabled={isUploading}
-              className="w-20 h-20 rounded-full flex items-center justify-center active:scale-95 transition-all text-white"
+              className="w-20 h-20 rounded-full flex items-center justify-center active:scale-90 hover:scale-105 transition-all text-white cursor-pointer touch-manipulation select-none"
               style={{
                 backgroundColor: uploadSuccess ? '#10B981' : '#3B82F6',
                 boxShadow: '0 8px 20px rgba(59, 130, 246, 0.5)',
@@ -832,7 +830,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     >
                       <Link
                         href={item.href || "#"}
-                        className="flex flex-col items-center justify-center w-full h-full"
+                        className="flex flex-col items-center justify-center w-full h-full active:opacity-60 transition-opacity touch-manipulation"
                         style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
                       >
                         <Icon size={22} strokeWidth={1.5} />
