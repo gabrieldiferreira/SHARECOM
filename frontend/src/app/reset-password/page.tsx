@@ -112,8 +112,17 @@ function ResetPasswordContent() {
 
   useEffect(() => {
     document.body.classList.add("login-page");
+    // Force background color on html/body for mobile safe areas
+    const originalBodyBg = document.body.style.backgroundColor;
+    const originalHtmlBg = document.documentElement.style.backgroundColor;
+
+    document.body.style.backgroundColor = "#0D0D12";
+    document.documentElement.style.backgroundColor = "#0D0D12";
+
     return () => {
       document.body.classList.remove("login-page");
+      document.body.style.backgroundColor = originalBodyBg;
+      document.documentElement.style.backgroundColor = originalHtmlBg;
     };
   }, []);
 
