@@ -30,3 +30,4 @@ httpx
 reportlab
 openpyxl
 numpy
+psutil
