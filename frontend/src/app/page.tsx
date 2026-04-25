@@ -347,7 +347,7 @@ function ExpenseTracker() {
 
 
   const filteredTransactions = useMemo(() => {
-    return filteredByDate.filter(tx => {
+    const result = filteredByDate.filter(tx => {
       const merchant = tx.merchant_name || "Desconhecido";
       const matchesSearch = merchant.toLowerCase().includes(searchQuery.toLowerCase()) || 
                            (tx.note && tx.note.toLowerCase().includes(searchQuery.toLowerCase())) ||
@@ -355,8 +355,9 @@ function ExpenseTracker() {
       
       let matchesFilter = true;
       const type = (tx.transaction_type || '').toLowerCase();
-      if (activeFilter === "inflow") matchesFilter = type === "inflow" || (tx.category || '').toLowerCase() === "receita";
-      if (activeFilter === "high_value") matchesFilter = tx.total_amount > 500;
+      const cat = (tx.category || '').toLowerCase();
+      if (activeFilter === "inflow") matchesFilter = type === "inflow" || cat === "receita" || cat === "income";
+      if (activeFilter === "high_value") matchesFilter = Number(tx.total_amount || 0) > 500;
       if (activeFilter === "with_notes") matchesFilter = !!tx.note;
       if (activeFilter === "today") {
         const todayLocal = new Date().toLocaleDateString('sv-SE');
@@ -365,6 +366,14 @@ function ExpenseTracker() {
       }
 
       return matchesSearch && matchesFilter;
+    });
+
+    // Explicitly sort by date (newest first)
+    return result.sort((a, b) => {
+      const dateA = new Date(a.transaction_date).getTime();
+      const dateB = new Date(b.transaction_date).getTime();
+      if (isNaN(dateA) || isNaN(dateB)) return 0;
+      return dateB - dateA;
     });
   }, [filteredByDate, searchQuery, activeFilter]);
 
@@ -600,7 +609,8 @@ function ExpenseTracker() {
     filteredByDate.forEach(tx => {
         const type = (tx.transaction_type || '').toLowerCase();
         if(type === 'outflow' && tx.total_amount) {
-            map[tx.category] = (map[tx.category] || 0) + (Number(tx.total_amount) || 0);
+            const cat = tx.category || 'Outros';
+            map[cat] = (map[cat] || 0) + (Number(tx.total_amount) || 0);
         }
     });
     const result = Object.entries(map).map(([name, value]) => ({ name, value })).sort((a,b)=>b.value-a.value);
@@ -656,11 +666,16 @@ function ExpenseTracker() {
     const intensity = [0, 0, 0, 0, 0, 0, 0];
     let processedCount = 0;
     filteredByDate.forEach(tx => {
-      if (tx.transaction_type !== 'Outflow') return; // Only count expenses
-      const date = new Date(tx.transaction_date);
-      if (!isNaN(date.getTime())) {
-        intensity[date.getDay()] += tx.total_amount;
-        processedCount++;
+      const type = (tx.transaction_type || '').toLowerCase();
+      const cat = (tx.category || '').toLowerCase();
+      const isOutflow = type === 'outflow' && cat !== 'receita' && cat !== 'income';
+      
+      if (isOutflow) {
+        const date = new Date(tx.transaction_date);
+        if (!isNaN(date.getTime())) {
+          intensity[date.getDay()] += Number(tx.total_amount || 0);
+          processedCount++;
+        }
       }
     });
     const result = days.map((day, i) => ({ day, val: intensity[i] }));
@@ -671,9 +686,13 @@ function ExpenseTracker() {
   const paymentMethodsData = useMemo(() => {
     const map: Record<string, number> = {};
     filteredByDate.forEach(tx => {
-      if (tx.transaction_type === 'Outflow') {
+      const type = (tx.transaction_type || '').toLowerCase();
+      const cat = (tx.category || '').toLowerCase();
+      const isOutflow = type === 'outflow' && cat !== 'receita' && cat !== 'income';
+      
+      if (isOutflow) {
         const method = tx.payment_method || 'Outros';
-        map[method] = (map[method] || 0) + tx.total_amount;
+        map[method] = (map[method] || 0) + Number(tx.total_amount || 0);
       }
     });
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
@@ -715,19 +734,23 @@ function ExpenseTracker() {
     
     let outflowCount = 0;
     filteredByDate.forEach(tx => {
-      if (tx.transaction_type !== 'Outflow') return;
+      const type = (tx.transaction_type || '').toLowerCase();
+      const cat = (tx.category || '').toLowerCase();
+      const isOutflow = type === 'outflow' && cat !== 'receita' && cat !== 'income';
+      
+      if (!isOutflow) return;
       outflowCount++;
       const date = new Date(tx.transaction_date);
       if (isNaN(date.getTime())) return;
       
       const hour = date.getHours();
-      hourlyMap[hour] += tx.total_amount;
+      hourlyMap[hour] += Number(tx.total_amount || 0);
       
       const dom = date.getDate();
-      dayOfMonthMap[dom] = (dayOfMonthMap[dom] || 0) + tx.total_amount;
+      dayOfMonthMap[dom] = (dayOfMonthMap[dom] || 0) + Number(tx.total_amount || 0);
 
       const month = date.toLocaleString('pt-BR', { month: 'short' });
-      monthlyMap[month] = (monthlyMap[month] || 0) + tx.total_amount;
+      monthlyMap[month] = (monthlyMap[month] || 0) + Number(tx.total_amount || 0);
     });
 
     const result = {
