@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { getApiUrl } from '@/lib/utils';
+import { getApiUrl } from '@/lib/api';
 import { authenticatedFetch } from '@/lib/auth';
 
 export interface Goal {
