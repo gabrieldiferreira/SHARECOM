@@ -354,7 +354,8 @@ function ExpenseTracker() {
                            (tx.destination_institution && tx.destination_institution.toLowerCase().includes(searchQuery.toLowerCase()));
       
       let matchesFilter = true;
-      if (activeFilter === "inflow") matchesFilter = tx.transaction_type === "Inflow";
+      const type = (tx.transaction_type || '').toLowerCase();
+      if (activeFilter === "inflow") matchesFilter = type === "inflow" || (tx.category || '').toLowerCase() === "receita";
       if (activeFilter === "high_value") matchesFilter = tx.total_amount > 500;
       if (activeFilter === "with_notes") matchesFilter = !!tx.note;
       if (activeFilter === "today") {
@@ -597,7 +598,8 @@ function ExpenseTracker() {
     console.log('📊 Calculating categoriesData from', filteredByDate.length, 'transactions');
     const map: Record<string, number> = {};
     filteredByDate.forEach(tx => {
-        if(tx.transaction_type === 'Outflow' && tx.total_amount) {
+        const type = (tx.transaction_type || '').toLowerCase();
+        if(type === 'outflow' && tx.total_amount) {
             map[tx.category] = (map[tx.category] || 0) + (Number(tx.total_amount) || 0);
         }
     });
@@ -613,7 +615,10 @@ function ExpenseTracker() {
         .sort((a,b) => new Date(a.transaction_date).getTime() - new Date(b.transaction_date).getTime());
      const data = sorted.map(tx => {
          const val = Number(tx.total_amount) || 0;
-         current += (tx.transaction_type === 'Inflow' ? val : -val);
+         const type = (tx.transaction_type || '').toLowerCase();
+         const cat = (tx.category || '').toLowerCase();
+         const isInflow = type === 'inflow' || cat === 'receita' || cat === 'income';
+         current += (isInflow ? val : -val);
          const date = new Date(tx.transaction_date);
          return { date: new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric' }).format(date), capital: current };
      });
@@ -624,8 +629,16 @@ function ExpenseTracker() {
   const dailyInsights = useMemo(() => {
     const today = new Date().toLocaleDateString('sv-SE');
     const todayTxs = filteredByDate.filter(tx => tx.transaction_date && new Date(tx.transaction_date).toLocaleDateString('sv-SE') === today);
-    const todayInflow = todayTxs.reduce((acc, tx) => tx.transaction_type === "Inflow" ? acc + tx.total_amount : acc, 0);
-    const todayOutflow = todayTxs.reduce((acc, tx) => tx.transaction_type === "Outflow" ? acc + tx.total_amount : acc, 0);
+    const todayInflow = todayTxs.reduce((acc, tx) => {
+      const type = (tx.transaction_type || '').toLowerCase();
+      const cat = (tx.category || '').toLowerCase();
+      return (type === "inflow" || cat === "receita" || cat === "income") ? acc + tx.total_amount : acc;
+    }, 0);
+    const todayOutflow = todayTxs.reduce((acc, tx) => {
+      const type = (tx.transaction_type || '').toLowerCase();
+      const cat = (tx.category || '').toLowerCase();
+      return (type === "outflow" && cat !== "receita" && cat !== "income") ? acc + tx.total_amount : acc;
+    }, 0);
     const delta = todayInflow - todayOutflow;
     return {
       delta, absDelta: Math.abs(delta),
@@ -666,17 +679,28 @@ function ExpenseTracker() {
     return Object.entries(map).map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
   }, [filteredByDate]);
 
-  const inflowCount = useMemo(() => filteredByDate.filter(t => t.transaction_type === 'Inflow').length, [filteredByDate]);
-  const outflowCount = useMemo(() => filteredByDate.filter(t => t.transaction_type === 'Outflow').length, [filteredByDate]);
+  const inflowCount = useMemo(() => filteredByDate.filter(t => {
+    const type = (t.transaction_type || '').toLowerCase();
+    const cat = (t.category || '').toLowerCase();
+    return type === 'inflow' || cat === 'receita' || cat === 'income';
+  }).length, [filteredByDate]);
+  
+  const outflowCount = useMemo(() => filteredByDate.filter(t => {
+    const type = (t.transaction_type || '').toLowerCase();
+    const cat = (t.category || '').toLowerCase();
+    return type === 'outflow' && cat !== 'receita' && cat !== 'income';
+  }).length, [filteredByDate]);
   const totalInflowFiltered = useMemo(() => filteredByDate.reduce((acc, tx) => {
     const type = (tx.transaction_type || '').toLowerCase();
-    const isInflow = type === 'inflow' || type === 'entrada' || tx.category === 'Receita';
+    const cat = (tx.category || '').toLowerCase();
+    const isInflow = type === 'inflow' || type === 'entrada' || cat === 'receita' || cat === 'income';
     return isInflow ? acc + Number(tx.total_amount || 0) : acc;
   }, 0), [filteredByDate]);
   
   const totalOutflowFiltered = useMemo(() => filteredByDate.reduce((acc, tx) => {
     const type = (tx.transaction_type || '').toLowerCase();
-    const isInflow = type === 'inflow' || type === 'entrada' || tx.category === 'Receita';
+    const cat = (tx.category || '').toLowerCase();
+    const isInflow = type === 'inflow' || type === 'entrada' || cat === 'receita' || cat === 'income';
     return !isInflow ? acc + Number(tx.total_amount || 0) : acc;
   }, 0), [filteredByDate]);
   const avgOutflow = outflowCount > 0 ? totalOutflowFiltered / outflowCount : 0;
