@@ -461,8 +461,9 @@ def clear_all_expenses(db: Session = Depends(get_db), user: dict = Depends(verif
     return {"message": f"{num_deleted} removidos"}
 
 @app.get("/patterns")
-def get_patterns(db: Session = Depends(get_db), _: dict = Depends(verify_firebase_token)):
-    return db.query(models.PatternLog).order_by(models.PatternLog.timestamp.desc()).all()
+def get_patterns(db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token)):
+    uid = user.get("uid", "anonymous")
+    return db.query(models.PatternLog).filter(models.PatternLog.user_id == uid).order_by(models.PatternLog.timestamp.desc()).all()
 
 import psutil
 import os
