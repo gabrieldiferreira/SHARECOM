@@ -30,14 +30,14 @@ function AuthShell({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen w-full bg-[#0D0D12]">
-      <div className="absolute inset-0 pointer-events-none">
+    <div className="min-h-[100dvh] w-full bg-[#0D0D12] overflow-x-hidden">
+      <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.4)_0%,_rgba(236,72,153,0.25)_40%,_transparent_70%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(139,92,246,0.3)_0%,_rgba(236,72,153,0.15)_40%,_transparent_70%)]" />
       </div>
 
       {/* Left Side Image / Background - Contextual */}
-      <div className="absolute left-0 top-0 w-full lg:w-1/2 h-full pointer-events-none bg-brand-purple overflow-hidden">
+      <div className="fixed left-0 top-0 w-full lg:w-1/2 h-[100dvh] pointer-events-none bg-brand-purple overflow-hidden z-10">
         {/* Dark overlay to ensure contrast - More aggressive on mobile, removed on desktop */}
         <div className="absolute inset-0 bg-black/60 lg:bg-transparent z-20" />
         {/* Subtle gradients to blend with the dark theme */}
@@ -46,7 +46,7 @@ function AuthShell({
         <Image src="/ceo-mobile.png" fill className="object-cover opacity-30 lg:opacity-100 grayscale-[0.2] brightness-[0.4] lg:brightness-100" alt="CEO Mobile" />
       </div>
 
-      <div className="relative z-50 flex min-h-screen items-center justify-center p-4">
+      <div className="relative z-50 flex min-h-[100dvh] items-center justify-center p-4">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <div className="w-20 h-20 mx-auto mb-5 p-3 bg-white/5 rounded-3xl border border-white/10 shadow-2xl">

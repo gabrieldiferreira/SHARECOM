@@ -238,15 +238,15 @@ export default function LoginPage() {
   if (!mounted) return null;
 
   return (
-    <div className="min-h-screen w-full bg-[#0D0D12]">
+    <div className="min-h-[100dvh] w-full bg-[#0D0D12] overflow-x-hidden">
       {/* Background gradients - pointer-events-none */}
-      <div className="absolute inset-0 pointer-events-none">
+      <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.4)_0%,_rgba(236,72,153,0.25)_40%,_transparent_70%)]" />
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(139,92,246,0.3)_0%,_rgba(236,72,153,0.15)_40%,_transparent_70%)]" />
       </div>
 
       {/* Left Side Image / Background - Contextual */}
-      <div className="absolute left-0 top-0 w-full lg:w-1/2 h-full pointer-events-none bg-brand-purple overflow-hidden">
+      <div className="fixed left-0 top-0 w-full lg:w-1/2 h-[100dvh] pointer-events-none bg-brand-purple overflow-hidden z-10">
         {/* Dark overlay to ensure contrast - More aggressive on mobile, removed on desktop */}
         <div className="absolute inset-0 bg-black/60 lg:bg-transparent z-20" />
         {/* Subtle gradients to blend with the dark theme */}
@@ -256,7 +256,7 @@ export default function LoginPage() {
       </div>
 
       {/* Main content - z-50 */}
-      <div className="relative z-50 flex min-h-screen items-center justify-center p-4">
+      <div className="relative z-50 flex min-h-[100dvh] items-center justify-center p-4">
         <div className="w-full max-w-md space-y-8">
           {/* Logo */}
           <div className="text-center">
