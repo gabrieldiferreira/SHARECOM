@@ -340,7 +340,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-lg overflow-hidden border border-black/5 dark:border-white/10 shadow-sm">
-                <NextImage src="/logo.png" alt="Logo" width={32} height={32} className="w-full h-full object-cover mix-blend-screen [mask-image:radial-gradient(circle,black_50%,transparent_95%)]" />
+                <NextImage src="/logo.png" alt="Logo" width={32} height={32} className="w-full h-full object-cover [mask-image:radial-gradient(circle,black_55%,transparent_75%)]" />
               </div>
               <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARE<span className="text-purple-500">COM</span></h1>
             </div>
@@ -364,7 +364,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div className="flex items-center justify-between px-2 pt-2">
           <div className="flex items-center gap-2">
              <div className="w-7 h-7 rounded-md overflow-hidden border border-black/5 shadow-sm">
-               <NextImage src="/logo.png" alt="Logo" width={28} height={28} className="w-full h-full object-cover mix-blend-screen [mask-image:radial-gradient(circle,black_50%,transparent_95%)]" />
+               <NextImage src="/logo.png" alt="Logo" width={28} height={28} className="w-full h-full object-cover [mask-image:radial-gradient(circle,black_55%,transparent_75%)]" />
              </div>
              <h1 className="text-xl font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARE<span className="text-purple-500">COM</span></h1>
           </div>
