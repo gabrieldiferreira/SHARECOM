@@ -248,177 +248,189 @@ export default function LoginPage() {
 
   return (
     <div className="fixed inset-0 w-full h-full bg-[#0D0D12] overflow-y-auto overflow-x-hidden">
-      {/* Background gradients - pointer-events-none */}
-      <div className="fixed inset-0 pointer-events-none z-0">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.4)_0%,_rgba(236,72,153,0.25)_40%,_transparent_70%)]" />
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_bottom_left,_rgba(139,92,246,0.3)_0%,_rgba(236,72,153,0.15)_40%,_transparent_70%)]" />
+      
+      {/* --- MOBILE BACKGROUND (Hidden on Desktop) --- */}
+      <div className="fixed inset-0 z-0 lg:hidden pointer-events-none">
+        {/* Top Image with dramatic fade */}
+        <div className="absolute top-0 left-0 w-full h-[55vh]">
+          <Image src="/ceo-mobile.png" fill className="object-cover opacity-50 mix-blend-luminosity" alt="Background" />
+          <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0D0D12]/50 to-[#0D0D12] z-10" />
+        </div>
+        {/* Animated Ambient Glows */}
+        <div className="absolute bottom-[20%] left-[-20%] w-[70vw] h-[70vw] bg-purple-600/30 blur-[120px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '4s' }} />
+        <div className="absolute bottom-[40%] right-[-20%] w-[60vw] h-[60vw] bg-pink-600/20 blur-[100px] rounded-full mix-blend-screen animate-pulse" style={{ animationDuration: '6s' }} />
       </div>
 
-      {/* Left Side Image / Background - Contextual */}
-      <div className="fixed left-0 top-0 w-full lg:w-1/2 h-[100dvh] pointer-events-none bg-brand-purple overflow-hidden z-10">
-        {/* Dark overlay to ensure contrast - More aggressive on mobile, removed on desktop */}
-        <div className="absolute inset-0 bg-black/60 lg:bg-transparent z-20" />
-        {/* Subtle gradients to blend with the dark theme */}
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-purple/30 via-black/40 to-[#0D0D12] lg:hidden z-10" />
-        <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#0D0D12] hidden lg:block z-10" />
-        <Image src="/ceo-mobile.png" fill className="object-cover opacity-30 lg:opacity-100 grayscale-[0.2] brightness-[0.4] lg:brightness-100" alt="CEO Mobile" />
+      {/* --- DESKTOP BACKGROUND (Hidden on Mobile) --- */}
+      <div className="fixed inset-0 z-0 hidden lg:block pointer-events-none">
+        {/* Left Side */}
+        <div className="absolute left-0 top-0 w-1/2 h-full bg-brand-purple overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#0D0D12] z-10" />
+          <Image src="/ceo-mobile.png" fill className="object-cover opacity-100" alt="Left background" />
+        </div>
+        {/* Right Side */}
+        <div className="absolute right-0 top-0 w-1/2 h-full overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D12] via-transparent to-transparent z-10" />
+          <Image src="/user-working.png" fill className="object-cover grayscale-[0.15]" alt="Right background" priority />
+        </div>
+        {/* Subtle overall gradient */}
+        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.3)_0%,_transparent_60%)]" />
       </div>
 
-      {/* Main content - z-50 */}
-      <div className="relative z-50 flex min-h-[100dvh] items-center justify-center p-4">
-        <div className="w-full max-w-md space-y-8">
-          {/* Logo */}
-          <div className="text-center">
-            <div className="w-20 h-20 mx-auto mb-5 p-3 bg-white/5 rounded-3xl border border-white/10 shadow-2xl">
+      {/* --- MAIN CONTENT --- */}
+      <div className="relative z-50 flex min-h-[100dvh] flex-col lg:flex-row items-center justify-end lg:justify-center p-4 pb-8 lg:pb-4">
+        
+        <div className="w-full max-w-md flex flex-col mt-auto lg:mt-0 lg:space-y-8">
+          
+          {/* Logo Section */}
+          <div className="text-center mb-6 lg:mb-0 transform transition-all duration-700 translate-y-0">
+            <div className="w-16 h-16 lg:w-20 lg:h-20 mx-auto mb-4 lg:mb-5 p-3 bg-white/5 backdrop-blur-md rounded-2xl lg:rounded-3xl border border-white/10 shadow-[0_0_30px_rgba(139,92,246,0.2)]">
               <Image src="/logo.png" width={80} height={80} className="w-full h-full object-contain" alt="Logo" priority />
             </div>
-            <h1 className="text-4xl font-black tracking-[0.15em] mb-1.5 text-white">
+            <h1 className="text-3xl lg:text-4xl font-black tracking-[0.15em] mb-1.5 text-white drop-shadow-md">
               SHARECOM
             </h1>
-            <p className="text-purple-400/60 font-medium tracking-widest text-[9px] uppercase">
+            <p className="text-purple-300/70 font-medium tracking-widest text-[8px] lg:text-[9px] uppercase">
               Intelligence Control Systems
             </p>
           </div>
 
-          {/* Login Card - NO backdrop-filter */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-8 shadow-2xl">
-            {isCheckingSession ? (
-              <div className="flex flex-col items-center justify-center py-8 space-y-4">
-                <Loader2 className="w-10 h-10 border-4 border-white/10 border-t-purple-500 animate-spin rounded-full" />
-                <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Validando Sessão...</p>
-              </div>
-            ) : (
-              <div className="space-y-5">
-                <div className="text-center space-y-1 mb-6">
-                  <h2 className="text-2xl font-bold text-white">Boas-vindas</h2>
-                  <p className="text-white/50 text-sm">Conecte sua conta para acessar.</p>
+          {/* Login Card */}
+          <div className="bg-[#0f0f13]/80 lg:bg-white/5 backdrop-blur-3xl border border-white/10 rounded-[2rem] lg:rounded-2xl p-6 lg:p-8 shadow-2xl relative overflow-hidden">
+            {/* Subtle inner reflection for glass effect on mobile */}
+            <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none lg:hidden" />
+            
+            <div className="relative z-10">
+              {isCheckingSession ? (
+                <div className="flex flex-col items-center justify-center py-12 space-y-4">
+                  <Loader2 className="w-10 h-10 border-4 border-white/5 border-t-purple-500 animate-spin rounded-full" />
+                  <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Validando Sessão...</p>
                 </div>
-
-                {/* Email Input */}
-                <div className="relative">
-                  <div 
-                    className="relative rounded-xl transition-all duration-200"
-                    style={{ 
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: emailFocused ? '1px solid rgba(139, 92, 246, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
-                      boxShadow: emailFocused ? '0 0 0 3px rgba(139, 92, 246, 0.15)' : 'none',
-                    }}
-                  >
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-                    <input
-                      type="email"
-                      value={email}
-                      onChange={(e) => setEmail(e.target.value)}
-                      onFocus={() => setEmailFocused(true)}
-                      onBlur={() => setEmailFocused(false)}
-                      placeholder="E-mail"
-                      aria-label="E-mail"
-                      className="w-full bg-transparent py-3.5 pl-10 pr-3 text-sm text-white placeholder:text-white/35 outline-none"
-                    />
+              ) : (
+                <div className="space-y-5 lg:space-y-5 space-y-4">
+                  <div className="text-center space-y-1 mb-6">
+                    <h2 className="text-xl lg:text-2xl font-bold text-white">Boas-vindas</h2>
+                    <p className="text-white/50 text-xs lg:text-sm">Conecte sua conta para acessar.</p>
                   </div>
-                </div>
 
-                {/* Password Input */}
-                <div className="relative">
-                  <div 
-                    className="relative rounded-xl transition-all duration-200"
-                    style={{ 
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      border: passwordFocused ? '1px solid rgba(139, 92, 246, 0.5)' : '1px solid rgba(255, 255, 255, 0.1)',
-                      boxShadow: passwordFocused ? '0 0 0 3px rgba(139, 92, 246, 0.15)' : 'none',
-                    }}
-                  >
-                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
-                    <input
-                      type={showPassword ? "text" : "password"}
-                      value={password}
-                      onChange={(e) => setPassword(e.target.value)}
-                      onFocus={() => setPasswordFocused(true)}
-                      onBlur={() => setPasswordFocused(false)}
-                      placeholder="Senha"
-                      aria-label="Senha"
-                      className="w-full bg-transparent py-3.5 pl-10 pr-10 text-sm text-white placeholder:text-white/35 outline-none"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/60 transition-colors z-10"
+                  {/* Email Input */}
+                  <div className="relative">
+                    <div 
+                      className="relative rounded-xl transition-all duration-300"
+                      style={{ 
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: emailFocused ? '1px solid rgba(139, 92, 246, 0.6)' : '1px solid rgba(255, 255, 255, 0.08)',
+                        boxShadow: emailFocused ? '0 0 15px rgba(139, 92, 246, 0.15)' : 'none',
+                      }}
                     >
-                      {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                      <input
+                        type="email"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        onFocus={() => setEmailFocused(true)}
+                        onBlur={() => setEmailFocused(false)}
+                        placeholder="E-mail corporativo"
+                        aria-label="E-mail"
+                        className="w-full bg-transparent py-3.5 pl-11 pr-4 text-sm text-white placeholder:text-white/30 outline-none"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Password Input */}
+                  <div className="relative">
+                    <div 
+                      className="relative rounded-xl transition-all duration-300"
+                      style={{ 
+                        background: 'rgba(255, 255, 255, 0.04)',
+                        border: passwordFocused ? '1px solid rgba(139, 92, 246, 0.6)' : '1px solid rgba(255, 255, 255, 0.08)',
+                        boxShadow: passwordFocused ? '0 0 15px rgba(139, 92, 246, 0.15)' : 'none',
+                      }}
+                    >
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40" />
+                      <input
+                        type={showPassword ? "text" : "password"}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        onFocus={() => setPasswordFocused(true)}
+                        onBlur={() => setPasswordFocused(false)}
+                        placeholder="Senha de acesso"
+                        aria-label="Senha"
+                        className="w-full bg-transparent py-3.5 pl-11 pr-12 text-sm text-white placeholder:text-white/30 outline-none"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPassword(!showPassword)}
+                        className="absolute right-4 top-1/2 -translate-y-1/2 text-white/40 hover:text-white/70 transition-colors z-10"
+                      >
+                        {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Forgot Password */}
+                  <div className="flex justify-end -mt-2">
+                    <button 
+                      type="button"
+                      onClick={handleForgotPassword}
+                      className="text-[11px] font-medium text-purple-400/70 hover:text-purple-400 transition-colors"
+                    >
+                      Esqueci minha senha
                     </button>
                   </div>
-                </div>
 
-                {/* Forgot Password */}
-                <div className="flex justify-end -mt-1">
-                  <button 
+                  {/* Primary Button */}
+                  <button
                     type="button"
-                    onClick={handleForgotPassword}
-                    className="text-[11px] text-white/40 hover:text-white/60 transition-colors"
+                    onClick={handleEmailLogin}
+                    disabled={isSigningIn}
+                    className="w-full py-4 rounded-xl font-bold text-sm text-white transition-all duration-300 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-[0_8px_25px_rgba(139,92,246,0.3)] relative overflow-hidden group"
+                    style={{ background: 'linear-gradient(135deg, #8B5CF6, #D946EF)' }}
                   >
-                    Esqueci minha senha
+                    <div className="absolute inset-0 bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+                    <span className="relative z-10 flex items-center justify-center gap-2">
+                      {isSigningIn ? (
+                        <Loader2 className="w-5 h-5 animate-spin" />
+                      ) : (
+                        "ENTRAR NO SISTEMA"
+                      )}
+                    </span>
                   </button>
-                </div>
 
-                {/* Primary Button */}
-                <button
-                  type="button"
-                  onClick={handleEmailLogin}
-                  disabled={isSigningIn}
-                  className="w-full py-3.5 px-6 rounded-xl font-bold text-sm text-white transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed hover:shadow-lg"
-                  style={{
-                    background: 'linear-gradient(135deg, #8B5CF6, #EC4899)',
-                    boxShadow: '0 4px 20px rgba(139, 92, 246, 0.35)',
-                  }}
-                >
-                  {isSigningIn ? (
-                    <Loader2 className="w-5 h-5 animate-spin mx-auto" />
-                  ) : (
-                    "ENTRAR COM E-MAIL"
-                  )}
-                </button>
+                  {/* Divider */}
+                  <div className="flex items-center gap-4 py-2">
+                    <div className="flex-1 h-px bg-white/5" />
+                    <span className="text-[10px] text-white/20 font-medium uppercase tracking-widest">ou acesso rápido</span>
+                    <div className="flex-1 h-px bg-white/5" />
+                  </div>
 
-                {/* Divider */}
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-px bg-white/10" />
-                  <span className="text-[10px] text-white/30 uppercase">ou</span>
-                  <div className="flex-1 h-px bg-white/10" />
-                </div>
-
-                {/* Social Login Buttons */}
-                <div className="flex gap-3">
+                  {/* Social Login Buttons */}
                   <button
                     type="button"
                     onClick={handleGoogleLogin}
                     disabled={isSigningIn}
-                    className="flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-xl font-medium text-sm text-white transition-all active:scale-[0.98] disabled:opacity-50 hover:bg-white/5 bg-white/5 border border-white/10"
+                    className="w-full flex items-center justify-center gap-3 px-4 py-3.5 rounded-xl font-medium text-sm text-white/90 transition-all active:scale-[0.98] disabled:opacity-50 hover:bg-white/10 bg-white/5 border border-white/10 backdrop-blur-md"
                   >
-                    <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={16} height={16} className="w-4 h-4" alt="Google" />
-                    Google
+                    <Image src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" width={18} height={18} className="w-4 h-4" alt="Google" />
+                    Continuar com Google
                   </button>
-                </div>
 
-                {errorMessage && (
-                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20">
-                    <p className="text-red-400 text-[10px] text-center font-bold uppercase tracking-widest leading-relaxed">
-                      {errorMessage}
-                    </p>
-                  </div>
-                )}
-              </div>
-            )}
+                  {errorMessage && (
+                    <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 backdrop-blur-sm mt-4 animate-in fade-in slide-in-from-bottom-2">
+                      <p className="text-red-400 text-[10px] text-center font-bold uppercase tracking-widest leading-relaxed">
+                        {errorMessage}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          <p className="text-center text-white/30 text-[9px] uppercase tracking-[0.25em]">
+          <p className="text-center text-white/20 text-[9px] uppercase tracking-[0.3em] mt-6 lg:mt-8">
             Secure Corporate Access
           </p>
         </div>
-      </div>
-
-      {/* Right Side Image - Desktop Only */}
-      <div className="hidden lg:block fixed right-0 top-0 w-1/2 h-full pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D12] via-transparent to-transparent z-10" />
-        <Image src="/user-working.png" fill className="object-cover grayscale-[0.15]" alt="Work" priority />
       </div>
     </div>
   );
