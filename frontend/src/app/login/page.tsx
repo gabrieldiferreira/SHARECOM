@@ -255,7 +255,7 @@ export default function LoginPage() {
       </div>
 
       {/* Left Side Image / Background - Contextual */}
-      <div className="fixed left-0 top-0 w-full lg:w-1/2 h-[100dvh] pointer-events-none bg-brand-purple overflow-hidden z-10">
+      <div className="fixed left-0 top-0 w-full lg:w-1/2 h-full pointer-events-none bg-brand-purple overflow-hidden z-10">
         {/* Dark overlay to ensure contrast - More aggressive on mobile, removed on desktop */}
         <div className="absolute inset-0 bg-black/60 lg:bg-transparent z-20" />
         {/* Subtle gradients to blend with the dark theme */}
@@ -265,7 +265,7 @@ export default function LoginPage() {
       </div>
 
       {/* Main content - z-50 */}
-      <div className="relative z-50 flex min-h-[100dvh] items-center justify-center p-4">
+      <div className="relative z-50 flex min-h-full items-center justify-center p-4">
         <div className="w-full max-w-md space-y-8">
           {/* Logo */}
           <div className="text-center">
