@@ -83,7 +83,7 @@ export default function InstallPrompt() {
                 className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
                 style={{ border: '1px solid var(--ds-border)' }}
               >
-                <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover" />
+                <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover mix-blend-screen [mask-image:radial-gradient(circle,black_50%,transparent_95%)]" />
               </div>
               <div className="flex-1">
                 <p className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>
@@ -123,7 +123,7 @@ export default function InstallPrompt() {
                 className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
                 style={{ border: '1px solid var(--ds-border)' }}
               >
-                <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover" />
+                <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover mix-blend-screen [mask-image:radial-gradient(circle,black_50%,transparent_95%)]" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-semibold truncate" style={{ color: "var(--text-primary)" }}>

@@ -50,7 +50,7 @@ function AuthShell({
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
             <div className="w-20 h-20 mx-auto mb-5 p-3 bg-white/5 rounded-3xl border border-white/10 shadow-2xl">
-              <Image src="/logo.png" width={80} height={80} className="w-full h-full object-contain" alt="Logo" priority />
+              <Image src="/logo.png" width={80} height={80} className="w-full h-full object-contain mix-blend-screen [mask-image:radial-gradient(circle,black_50%,transparent_95%)]" alt="Logo" priority />
             </div>
             <h1 className="text-4xl font-black tracking-[0.15em] mb-1.5 text-white">
               SHARE<span className="text-purple-500">COM</span>
