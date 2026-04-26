@@ -249,7 +249,10 @@ export default function LoginPage() {
   return (
     <div 
       className="fixed inset-0 w-full h-full bg-[#0D0D12] overflow-y-auto overflow-x-hidden"
-      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+      style={{ 
+        paddingBottom: 'max(1rem, env(safe-area-inset-bottom))',
+        paddingTop: 'max(1rem, env(safe-area-inset-top))' 
+      }}
     >
       {/* Background gradients - pointer-events-none */}
       <div className="fixed inset-0 pointer-events-none z-0">
