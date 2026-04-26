@@ -247,7 +247,7 @@ export default function LoginPage() {
   if (!mounted) return null;
 
   return (
-    <div className="relative min-h-[100dvh] w-full bg-[#0D0D12]">
+    <div className="fixed inset-0 w-full h-full bg-[#0D0D12] overflow-y-auto overflow-x-hidden">
       {/* Background gradients - pointer-events-none */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.4)_0%,_rgba(236,72,153,0.25)_40%,_transparent_70%)]" />
@@ -255,21 +255,17 @@ export default function LoginPage() {
       </div>
 
       {/* Left Side Image / Background - Contextual */}
-      <div className="fixed inset-0 w-full lg:w-1/2 h-[120vh] -top-[10vh] pointer-events-none overflow-hidden z-10">
-        {/* Soft overlay to ensure white text is readable over bright parts of image */}
-        <div className="absolute inset-0 bg-black/40 z-20" />
+      <div className="fixed left-0 top-0 w-full lg:w-1/2 h-[100dvh] pointer-events-none bg-brand-purple overflow-hidden z-10">
+        {/* Dark overlay to ensure contrast - More aggressive on mobile, removed on desktop */}
+        <div className="absolute inset-0 bg-black/60 lg:bg-transparent z-20" />
+        {/* Subtle gradients to blend with the dark theme */}
+        <div className="absolute inset-0 bg-gradient-to-b from-brand-purple/30 via-black/40 to-[#0D0D12] lg:hidden z-10" />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#0D0D12] hidden lg:block z-10" />
-        <Image src="/ceo-mobile.png" fill className="object-cover opacity-100" alt="CEO Mobile" />
-      </div>
-
-      {/* Right Side Image - Desktop Only */}
-      <div className="hidden lg:block fixed right-0 top-0 w-1/2 h-[120vh] -top-[10vh] pointer-events-none z-10">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D12] via-transparent to-transparent z-10" />
-        <Image src="/user-working.png" fill className="object-cover grayscale-[0.15]" alt="Work" priority />
+        <Image src="/ceo-mobile.png" fill className="object-cover opacity-30 lg:opacity-100 grayscale-[0.2] brightness-[0.4] lg:brightness-100" alt="CEO Mobile" />
       </div>
 
       {/* Main content - z-50 */}
-      <div className="relative z-50 flex min-h-[100dvh] w-full items-center justify-center p-4">
+      <div className="relative z-50 flex min-h-[100dvh] items-center justify-center p-4">
         <div className="w-full max-w-md space-y-8">
           {/* Logo */}
           <div className="text-center">
@@ -284,8 +280,8 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Login Card - Glassmorphism */}
-          <div className="bg-black/30 backdrop-blur-2xl border border-white/10 rounded-2xl p-8 shadow-2xl">
+          {/* Login Card - NO backdrop-filter */}
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-8 shadow-2xl">
             {isCheckingSession ? (
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <Loader2 className="w-10 h-10 border-4 border-white/10 border-t-purple-500 animate-spin rounded-full" />
@@ -419,6 +415,11 @@ export default function LoginPage() {
         </div>
       </div>
 
+      {/* Right Side Image - Desktop Only */}
+      <div className="hidden lg:block fixed right-0 top-0 w-1/2 h-full pointer-events-none">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D12] via-transparent to-transparent z-10" />
+        <Image src="/user-working.png" fill className="object-cover grayscale-[0.15]" alt="Work" priority />
+      </div>
     </div>
   );
 }
