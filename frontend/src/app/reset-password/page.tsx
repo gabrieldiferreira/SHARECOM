@@ -53,7 +53,7 @@ function AuthShell({
               <Image src="/logo.png" width={80} height={80} className="w-full h-full object-contain" alt="Logo" priority />
             </div>
             <h1 className="text-4xl font-black tracking-[0.15em] mb-1.5 text-white">
-              SHARECOM
+              SHARE<span className="text-purple-500">COM</span>
             </h1>
             <p className="text-purple-400/60 font-medium tracking-widest text-[9px] uppercase">
               Intelligence Control Systems
