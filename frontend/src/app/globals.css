@@ -123,6 +123,8 @@
   html {
     color-scheme: dark light;
     overscroll-behavior: none;
+    height: 100%;
+    width: 100%;
   }
 
   body {
@@ -134,6 +136,11 @@
     transition: background-color 200ms ease, color 200ms ease;
     overscroll-behavior: none;
     overflow-x: hidden;
+    height: 100%;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    -webkit-overflow-scrolling: touch;
   }
 
   /* Prevent zoom on input focus (iOS) */

@@ -247,7 +247,10 @@ export default function LoginPage() {
   if (!mounted) return null;
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-[#0D0D12] overflow-y-auto overflow-x-hidden">
+    <div 
+      className="fixed inset-0 w-full h-full bg-[#0D0D12] overflow-y-auto overflow-x-hidden"
+      style={{ paddingBottom: 'env(safe-area-inset-bottom)' }}
+    >
       {/* Background gradients - pointer-events-none */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.4)_0%,_rgba(236,72,153,0.25)_40%,_transparent_70%)]" />
