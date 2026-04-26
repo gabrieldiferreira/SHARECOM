@@ -255,11 +255,9 @@ export default function LoginPage() {
       </div>
 
       {/* Left Side Image / Background - Contextual */}
-      <div className="fixed left-0 top-0 w-full lg:w-1/2 h-[100dvh] pointer-events-none bg-brand-purple overflow-hidden z-10">
+      <div className="fixed inset-0 w-full lg:w-1/2 h-full pointer-events-none bg-brand-purple overflow-hidden z-10">
         {/* Dark overlay to ensure contrast - More aggressive on mobile, removed on desktop */}
         <div className="absolute inset-0 bg-black/60 lg:bg-transparent z-20" />
-        {/* Subtle gradients to blend with the dark theme */}
-        <div className="absolute inset-0 bg-gradient-to-b from-brand-purple/30 to-black/60 lg:hidden z-10" />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#0D0D12] hidden lg:block z-10" />
         <Image src="/ceo-mobile.png" fill className="object-cover opacity-30 lg:opacity-100 grayscale-[0.2] brightness-[0.4] lg:brightness-100" alt="CEO Mobile" />
       </div>
