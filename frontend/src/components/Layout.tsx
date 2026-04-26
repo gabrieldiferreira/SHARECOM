@@ -319,8 +319,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         <div
           className="h-[3px] transition-all ease-out"
           style={{
-            background: 'linear-gradient(90deg, #10B981, #34D399)',
-            boxShadow: '0 0 8px rgba(16,185,129,0.6)',
+            background: uploadType === 'Outflow' ? 'linear-gradient(90deg, #EF4444, #F87171)' : 'linear-gradient(90deg, #10B981, #34D399)',
+            boxShadow: uploadType === 'Outflow' ? '0 0 8px rgba(239,68,68,0.6)' : '0 0 8px rgba(16,185,129,0.6)',
             width: uploadSuccess ? '100%' : (isUploading ? '90%' : '0%'),
             transitionDuration: isUploading ? '15s' : '0.5s',
             borderRadius: '0 2px 2px 0',
@@ -706,12 +706,16 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {/* Global Success Notification Toast */}
         {uploadSuccess && lastAdded && (
           <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[300] w-[90%] max-w-sm animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className="bg-emerald-600 text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 backdrop-blur-md bg-opacity-90">
+            <div className={`text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 backdrop-blur-md bg-opacity-90 ${
+              uploadType === 'Outflow' ? 'bg-red-600' : 'bg-emerald-600'
+            }`}>
               <div className="bg-white/20 p-2 rounded-full">
                 <CheckCircle2 size={24} />
               </div>
               <div className="flex-1 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">Gasto Adicionado</p>
+                <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
+                  {uploadType === 'Outflow' ? 'Gasto Adicionado' : 'Receita Adicionada'}
+                </p>
                 <p className="text-sm font-semibold truncate">{lastAdded.merchant}</p>
               </div>
               <div className="text-right whitespace-nowrap">
