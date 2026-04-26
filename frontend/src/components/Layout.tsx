@@ -312,7 +312,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* ── Global Loading Bar ── fixed to the true viewport top ── */}
       <div
         className={`fixed left-0 right-0 z-[500] transition-opacity duration-300 pointer-events-none ${
-          (isUploading || uploadSuccess) ? 'opacity-100' : 'opacity-0'
+          isUploading ? 'opacity-100' : 'opacity-0'
         }`}
         style={{ top: 'env(safe-area-inset-top, 0px)' }}
       >
