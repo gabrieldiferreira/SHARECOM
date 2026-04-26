@@ -255,11 +255,11 @@ export default function LoginPage() {
       </div>
 
       {/* Left Side Image / Background - Contextual */}
-      <div className="fixed inset-0 w-full lg:w-1/2 h-full pointer-events-none bg-brand-purple overflow-hidden z-10">
-        {/* Dark overlay to ensure contrast - More aggressive on mobile, removed on desktop */}
-        <div className="absolute inset-0 bg-black/60 lg:bg-transparent z-20" />
+      <div className="fixed inset-0 w-full lg:w-1/2 h-[120vh] -top-[10vh] pointer-events-none overflow-hidden z-10">
+        {/* Soft overlay to ensure white text is readable over bright parts of image */}
+        <div className="absolute inset-0 bg-black/40 z-20" />
         <div className="absolute inset-0 bg-gradient-to-r from-transparent to-[#0D0D12] hidden lg:block z-10" />
-        <Image src="/ceo-mobile.png" fill className="object-cover opacity-30 lg:opacity-100 grayscale-[0.2] brightness-[0.4] lg:brightness-100" alt="CEO Mobile" />
+        <Image src="/ceo-mobile.png" fill className="object-cover opacity-100" alt="CEO Mobile" />
       </div>
 
       {/* Main content - z-50 */}
@@ -278,8 +278,8 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Login Card - NO backdrop-filter */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-8 shadow-2xl">
+          {/* Login Card - Glassmorphism */}
+          <div className="bg-black/30 backdrop-blur-2xl border border-white/10 rounded-2xl p-8 shadow-2xl">
             {isCheckingSession ? (
               <div className="flex flex-col items-center justify-center py-8 space-y-4">
                 <Loader2 className="w-10 h-10 border-4 border-white/10 border-t-purple-500 animate-spin rounded-full" />
