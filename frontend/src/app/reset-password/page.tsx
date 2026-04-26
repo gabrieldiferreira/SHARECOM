@@ -49,7 +49,7 @@ function AuthShell({
       <div className="relative z-50 flex min-h-[100dvh] items-center justify-center p-4">
         <div className="w-full max-w-md space-y-8">
           <div className="text-center">
-            <div className="w-20 h-20 mx-auto mb-5 overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
+            <div className="w-20 h-20 mx-auto mb-5 overflow-hidden rounded-3xl border-2 border-purple-500/50 shadow-[0_0_30px_rgba(139,92,246,0.4)]">
               <Image src="/logo.png" width={80} height={80} className="w-full h-full object-cover scale-[1.15]" alt="Logo" priority />
             </div>
             <h1 className="text-4xl font-black tracking-[0.15em] mb-1.5 text-white">

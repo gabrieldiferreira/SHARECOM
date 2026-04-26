@@ -284,7 +284,7 @@ export default function LoginPage() {
           
           {/* Logo Section */}
           <div className="text-center mb-6 lg:mb-0 transform transition-all duration-700 translate-y-0">
-            <div className="w-16 h-16 lg:w-20 lg:h-20 mx-auto mb-4 lg:mb-5 overflow-hidden rounded-2xl lg:rounded-3xl border border-white/10 shadow-[0_0_30px_rgba(139,92,246,0.2)]">
+            <div className="w-16 h-16 lg:w-20 lg:h-20 mx-auto mb-4 lg:mb-5 overflow-hidden rounded-2xl lg:rounded-3xl border-2 border-purple-500/50 shadow-[0_0_30px_rgba(139,92,246,0.4)]">
               <Image src="/logo.png" width={80} height={80} className="w-full h-full object-cover scale-[1.15]" alt="Logo" priority />
             </div>
             <h1 className="text-3xl lg:text-4xl font-black tracking-[0.15em] mb-1.5 text-white drop-shadow-md">

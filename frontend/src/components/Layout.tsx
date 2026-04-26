@@ -339,7 +339,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-lg overflow-hidden border border-black/5 dark:border-white/10 shadow-sm">
+              <div className="w-8 h-8 rounded-lg overflow-hidden border-2 border-purple-500/60 shadow-[0_0_15px_rgba(139,92,246,0.3)]">
                 <NextImage src="/logo.png" alt="Logo" width={32} height={32} className="w-full h-full object-cover scale-[1.15]" />
               </div>
               <h1 className="text-lg font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARE<span className="text-purple-500">COM</span></h1>
@@ -363,7 +363,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex flex-col w-60 p-4 space-y-6 overflow-y-auto scroll-container no-scrollbar h-screen sticky top-0" style={{ backgroundColor: 'var(--bg-secondary)', borderRight: '0.5px solid var(--ds-border)' }}>
         <div className="flex items-center justify-between px-2 pt-2">
           <div className="flex items-center gap-2">
-             <div className="w-7 h-7 rounded-md overflow-hidden border border-black/5 shadow-sm">
+             <div className="w-7 h-7 rounded-md overflow-hidden border-2 border-purple-500/60 shadow-[0_0_10px_rgba(139,92,246,0.3)]">
                <NextImage src="/logo.png" alt="Logo" width={28} height={28} className="w-full h-full object-cover scale-[1.15]" />
              </div>
              <h1 className="text-xl font-semibold tracking-wide" style={{ color: 'var(--text-primary)' }}>SHARE<span className="text-purple-500">COM</span></h1>

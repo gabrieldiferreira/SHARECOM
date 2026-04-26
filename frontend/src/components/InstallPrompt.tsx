@@ -80,8 +80,8 @@ export default function InstallPrompt() {
           >
             <div className="flex items-start gap-3">
               <div
-                className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
-                style={{ border: '1px solid var(--ds-border)' }}
+                className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-[0_0_15px_rgba(139,92,246,0.3)]"
+                style={{ border: '2px solid rgba(139, 92, 246, 0.6)' }}
               >
                 <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover scale-[1.15]" />
               </div>
@@ -120,8 +120,8 @@ export default function InstallPrompt() {
           >
             <div className="flex items-center gap-3 p-4">
               <div
-                className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-md"
-                style={{ border: '1px solid var(--ds-border)' }}
+                className="w-10 h-10 rounded-xl overflow-hidden shrink-0 shadow-[0_0_15px_rgba(139,92,246,0.3)]"
+                style={{ border: '2px solid rgba(139, 92, 246, 0.6)' }}
               >
                 <Image src="/logo.png" alt="SHARECOM App Logo" width={40} height={40} className="w-full h-full object-cover scale-[1.15]" />
               </div>
