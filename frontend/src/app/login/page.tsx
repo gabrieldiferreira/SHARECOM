@@ -247,7 +247,7 @@ export default function LoginPage() {
   if (!mounted) return null;
 
   return (
-    <div className="fixed inset-0 w-full h-full bg-[#0D0D12] overflow-y-auto overflow-x-hidden">
+    <div className="relative min-h-[100dvh] w-full bg-[#0D0D12]">
       {/* Background gradients - pointer-events-none */}
       <div className="fixed inset-0 pointer-events-none z-0">
         <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_rgba(139,92,246,0.4)_0%,_rgba(236,72,153,0.25)_40%,_transparent_70%)]" />
@@ -262,8 +262,14 @@ export default function LoginPage() {
         <Image src="/ceo-mobile.png" fill className="object-cover opacity-100" alt="CEO Mobile" />
       </div>
 
+      {/* Right Side Image - Desktop Only */}
+      <div className="hidden lg:block fixed right-0 top-0 w-1/2 h-[120vh] -top-[10vh] pointer-events-none z-10">
+        <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D12] via-transparent to-transparent z-10" />
+        <Image src="/user-working.png" fill className="object-cover grayscale-[0.15]" alt="Work" priority />
+      </div>
+
       {/* Main content - z-50 */}
-      <div className="relative z-50 flex min-h-[100dvh] items-center justify-center p-4">
+      <div className="relative z-50 flex min-h-[100dvh] w-full items-center justify-center p-4">
         <div className="w-full max-w-md space-y-8">
           {/* Logo */}
           <div className="text-center">
@@ -413,11 +419,6 @@ export default function LoginPage() {
         </div>
       </div>
 
-      {/* Right Side Image - Desktop Only */}
-      <div className="hidden lg:block fixed right-0 top-0 w-1/2 h-full pointer-events-none">
-        <div className="absolute inset-0 bg-gradient-to-r from-[#0D0D12] via-transparent to-transparent z-10" />
-        <Image src="/user-working.png" fill className="object-cover grayscale-[0.15]" alt="Work" priority />
-      </div>
     </div>
   );
 }
