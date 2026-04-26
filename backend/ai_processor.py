@@ -57,8 +57,9 @@ async def analyze_receipt_with_ai(image_content: bytes, extension: str, ocr_text
         "transaction_date": "YYYY-MM-DDTHH:MM:SS",
         "merchant_name": "string",
         "payment_method": "Pix|Boleto|Cartão|Depósito|Transferência|Link",
+        "smart_category": "Alimentação|Compras|Transporte|Casa|Educação|Lazer|Saúde|Serviços|Receita|Outros",
         "transaction_id": "string",
-        "description": "breve resumo do que se trata o conteúdo"
+        "description": "Formato OBRIGATÓRIO: 'De: [Nome do Remetente] Para: [Nome do Destinatário] - [Breve resumo do que se trata]'"
     }
     Se 'is_financial_receipt' for false, preencha apenas a description e merchant_name com o resumo do link.
     Retorne APENAS o JSON, sem explicações.

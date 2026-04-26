@@ -4,7 +4,8 @@ export interface TransactionEntity {
   id?: number;
   total_amount: number;
   currency: string;
-  transaction_date: string;
+  transaction_date: string;  // Date printed on the receipt
+  scanned_at?: string;       // ISO timestamp of when it was scanned into the system
   transaction_type: 'Inflow' | 'Outflow';
   payment_method: string;
   merchant_name: string;
@@ -34,7 +35,7 @@ export function getDB() {
   if (typeof window === 'undefined') return null;
   
   if (!dbPromise) {
-    dbPromise = openDB<SharecomDB>('sharecom-db', 3, {
+    dbPromise = openDB<SharecomDB>('sharecom-db', 4, {
       upgrade(db, oldVersion, newVersion, transaction) {
         if (oldVersion < 1) {
           const store = db.createObjectStore('transactions', {
@@ -45,12 +46,13 @@ export function getDB() {
           store.createIndex('by-hash', 'receipt_hash', { unique: true });
         }
         if (oldVersion < 3) {
-          // v3: Corrige mapeamento errado dos campos vindos do backend.
-          // Limpa o cache local — dados corretos são re-baixados via syncWithBackend.
+          // v3: Fix field mapping from backend. Clear local cache — data re-downloaded via syncWithBackend.
           if (db.objectStoreNames.contains('transactions')) {
             transaction.objectStore('transactions').clear();
           }
         }
+        // v4: Added scanned_at field — no data migration needed, field is optional.
+        // Existing records without scanned_at will fall back to transaction_date in filters.
       },
     });
   }

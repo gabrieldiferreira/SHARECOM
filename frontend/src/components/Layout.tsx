@@ -308,6 +308,26 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex h-screen flex-col md:flex-row" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
+
+      {/* ── Global Loading Bar ── fixed to the true viewport top ── */}
+      <div
+        className={`fixed left-0 right-0 z-[500] transition-opacity duration-300 pointer-events-none ${
+          (isUploading || uploadSuccess) ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{ top: 'env(safe-area-inset-top, 0px)' }}
+      >
+        <div
+          className="h-[3px] transition-all ease-out"
+          style={{
+            background: 'linear-gradient(90deg, #10B981, #34D399)',
+            boxShadow: '0 0 8px rgba(16,185,129,0.6)',
+            width: uploadSuccess ? '100%' : (isUploading ? '90%' : '0%'),
+            transitionDuration: isUploading ? '15s' : '0.5s',
+            borderRadius: '0 2px 2px 0',
+          }}
+        />
+      </div>
+
       {/* Mobile Header */}
       <div className="md:hidden sticky top-0 z-50 mobile-header-shell">
         <div className="mobile-status-bridge" aria-hidden="true" />
@@ -703,17 +723,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Global Loading Bar */}
-        <div className={`fixed top-0 left-0 w-full h-1 z-[100] transition-opacity duration-300 ${(isUploading || uploadSuccess) ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-          <div
-            className="h-full transition-all ease-out"
-            style={{
-              backgroundColor: '#10B981',
-              width: uploadSuccess ? '100%' : (isUploading ? '90%' : '0%'),
-              transitionDuration: isUploading ? '15s' : '0.5s'
-            }}
-          ></div>
-        </div>
+
 
         <div className="flex-1 overflow-y-auto scroll-container pb-28 md:pb-0">
           <div className="max-w-7xl mx-auto w-full grid grid-cols-1 grid-rows-1">

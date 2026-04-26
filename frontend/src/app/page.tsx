@@ -110,7 +110,7 @@ function ExpenseTracker() {
   const [mounted, setMounted] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
   const [dashboardError, setDashboardError] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState<'7days' | 'month' | 'all'>('7days');
+  const [dateRange, setDateRange] = useState<'7days' | 'month' | 'all'>('month');
   
   type DashboardMode = "cashflow" | "entities" | "payment" | "temporal" | "category" | "forensics" | "tax" | "alerts";
   const [dashboardMode, setDashboardMode] = useState<DashboardMode>("cashflow");
@@ -337,10 +337,15 @@ function ExpenseTracker() {
     const startDate = getDateFilter();
     console.log('📅 Filtering transactions by date:', { dateRange, startDate: startDate.toISOString(), totalTxs: transactions.length });
     const filtered = transactions.filter(tx => {
-      const txDate = new Date(tx.transaction_date);
+      // Use scanned_at if available, otherwise fallback to transaction_date
+      const txDate = new Date(tx.scanned_at || tx.transaction_date);
       if (isNaN(txDate.getTime())) return true; // Include invalid dates rather than hiding them
       return txDate >= startDate;
-    });
+    }).map(tx => ({
+      ...tx,
+      _original_date: tx.transaction_date, // preserve original date for the details modal
+      transaction_date: tx.scanned_at || tx.transaction_date // override for all dashboard charts/lists
+    }));
     console.log('📅 Filtered result:', { filtered: filtered.length, outflow: filtered.filter(t => t.transaction_type === 'Outflow').length });
     return filtered;
   }, [transactions, getDateFilter, dateRange]);
@@ -566,28 +571,29 @@ function ExpenseTracker() {
   }, [transactions]);
 
   const mostRecentReceipt = useMemo(() => {
-    if (transactions.length === 0) return null;
-    return [...transactions].sort((a, b) => {
+    if (filteredByDate.length === 0) return null;
+    return [...filteredByDate].sort((a, b) => {
       const idDiff = (Number(b.id) || 0) - (Number(a.id) || 0);
       if (idDiff !== 0) return idDiff;
       return new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime();
     })[0];
-  }, [transactions]);
+  }, [filteredByDate]);
 
   const recentReceipts = useMemo(() => {
     if (!mostRecentReceipt) return [];
     return [
       mostRecentReceipt,
-      ...transactions.filter((tx) => tx.id !== mostRecentReceipt.id).slice(0, 4),
+      ...filteredByDate.filter((tx) => tx.id !== mostRecentReceipt.id).slice(0, 4),
     ];
-  }, [transactions, mostRecentReceipt]);
+  }, [filteredByDate, mostRecentReceipt]);
 
   const getReceiptFields = (tx: TransactionEntity) => {
     const fields = [
       { label: t('fields.merchant'), value: tx.merchant_name },
       { label: t('fields.category'), value: t(`categories.${tx.category}`).replace('categories.', '') },
       { label: t('fields.amount'), value: formatCurrency(tx.total_amount) },
-      { label: t('fields.date'), value: formatDate(tx.transaction_date) },
+      // Use original_date if available (from our dashboard mapping), otherwise fallback to transaction_date
+      { label: t('fields.date'), value: formatDate((tx as any)._original_date || tx.transaction_date) },
       { label: t('fields.type'), value: tx.transaction_type === 'Inflow' ? t('fields.inflow') : t('fields.outflow') },
       { label: t('fields.payment'), value: tx.payment_method },
       { label: t('fields.institution'), value: tx.destination_institution },
@@ -1276,7 +1282,7 @@ function ExpenseTracker() {
                 <div className="glass-card-static overflow-hidden">
                 <div className="p-4 sm:p-5 border-b border-glass-border flex flex-col xs:flex-row justify-between items-start xs:items-center gap-2">
                   <h3 className="text-[14px] sm:text-[16px] font-semibold text-text-primary">{t('dashboard.recentTransactions')}</h3>
-                  <Link href="/reports" className="text-[11px] sm:text-[12px] font-medium text-brand-cyan hover:underline touch-manipulation">{t('common.viewAll')}</Link>
+                  <Link href="/timeline" className="text-[11px] sm:text-[12px] font-medium text-brand-cyan hover:underline touch-manipulation">{t('common.viewAll')}</Link>
                 </div>
                 <div className="divide-y divide-[rgba(255,255,255,0.05)] stagger-children">
                   {filteredByDate.slice(0, 6).map(tx => (

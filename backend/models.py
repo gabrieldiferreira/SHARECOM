@@ -1,9 +1,12 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime
+from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint
 from database import Base
 import datetime
 
 class Expense(Base):
     __tablename__ = "expenses"
+    __table_args__ = (
+        UniqueConstraint('user_id', 'transaction_id', name='uq_user_transaction_id'),
+    )
     user_id = Column(String, index=True)
 
 

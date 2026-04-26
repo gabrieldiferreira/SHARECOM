@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
+from starlette.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -11,10 +12,11 @@ import re
 import time
 from auth import verify_firebase_token
 
-from database import engine, get_db, Base
+from database import engine, get_db, Base, DATABASE_URL
 from export_routes import router as export_router
 import models
 import schemas
+from sqlalchemy.exc import IntegrityError
 
 # Create tables
 Base.metadata.create_all(bind=engine)
@@ -62,12 +64,52 @@ async def apply_migrations():
     try:
         inspector = inspect(engine)
         existing_columns = [c["name"] for c in inspector.get_columns("expenses")]
+        existing_indexes = [idx['name'] for idx in inspector.get_indexes("expenses")]
 
-        with engine.begin() as conn: # engine.begin() abre e commita automaticamente
+        with engine.begin() as conn:
             for col_name, col_def in columns_to_ensure:
                 if col_name not in existing_columns:
                     print(f"MIGRAÇÃO: Adicionando coluna {col_name}...")
                     conn.execute(text(f"ALTER TABLE expenses ADD COLUMN {col_name} {col_def}"))
+            
+            if "sqlite" in DATABASE_URL:
+                # Step 1: Drop the global unique index on transaction_id if it exists.
+                # This was incorrectly preventing different users from having the same transaction_id.
+                for idx_name in existing_indexes:
+                    if "transaction_id" in idx_name and "user" not in idx_name:
+                        try:
+                            print(f"MIGRAÇÃO: Removendo índice global incorreto: {idx_name}")
+                            conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
+                        except Exception as drop_err:
+                            print(f"MIGRAÇÃO: Não foi possível remover {idx_name}: {drop_err}")
+
+                # Step 2: Recreate as non-unique plain index (for query performance only)
+                try:
+                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_expenses_transaction_id ON expenses(transaction_id)"))
+                    print("MIGRAÇÃO: Índice simples ix_expenses_transaction_id garantido.")
+                except Exception as e:
+                    print(f"MIGRAÇÃO: Índice simples já existe: {e}")
+
+                # Step 3: Create per-user composite unique index (the correct behavior)
+                if "uq_user_transaction_id" not in existing_indexes:
+                    try:
+                        conn.execute(text(
+                            "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_transaction_id "
+                            "ON expenses(user_id, transaction_id) "
+                            "WHERE transaction_id IS NOT NULL"
+                        ))
+                        print("MIGRAÇÃO: Índice único composto (user_id, transaction_id) criado com sucesso.")
+                    except Exception as idx_err:
+                        print(f"MIGRAÇÃO: Índice composto já existe ou erro: {idx_err}")
+            else:
+                # PostgreSQL
+                if "uq_user_transaction_id" not in existing_indexes:
+                    try:
+                        print("MIGRAÇÃO: Adicionando unique constraint (user_id, transaction_id)...")
+                        conn.execute(text("ALTER TABLE expenses ADD CONSTRAINT uq_user_transaction_id UNIQUE(user_id, transaction_id)"))
+                    except Exception as constraint_error:
+                        print(f"MIGRAÇÃO: Unique constraint já existe ou erro: {constraint_error}")
+        
         print("MIGRAÇÃO: Verificação concluída com sucesso.")
     except Exception as e:
         print(f"MIGRAÇÃO: Erro crítico durante migração: {e}")
@@ -361,14 +403,35 @@ async def process_ata(
         else:
             raise HTTPException(status_code=400, detail="Nenhum dado enviado.")
 
-        # Check for idempotency (per user)
+        # Check for idempotency (per user) using receipt hash
         existing_expense = db.query(models.Expense).filter(
             models.Expense.receipt == sha256_hash,
             models.Expense.user_id == uid
         ).first()
         if existing_expense:
             if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
-            return {"idempotent": True, "ai_data": {"total_amount": existing_expense.amount, "merchant_name": existing_expense.merchant}, "database_id": existing_expense.id}
+            print(f"DEBUG: Idempotency hit for receipt hash: {sha256_hash} - Returning duplicate", flush=True)
+            return JSONResponse(
+                status_code=200, 
+                content={
+                    "idempotent": True,
+                    "database_id": existing_expense.id,
+                    "receipt_hash": sha256_hash,
+                    "ai_data": {
+                        "total_amount": float(existing_expense.amount) if existing_expense.amount else 0.0,
+                        "merchant_name": existing_expense.merchant,
+                        "transaction_date": str(existing_expense.date),
+                        "transaction_type": existing_expense.transaction_type,
+                        "smart_category": existing_expense.category,
+                        "payment_method": existing_expense.payment_method,
+                        "destination_institution": existing_expense.destination_institution,
+                        "transaction_id": existing_expense.transaction_id,
+                        "masked_cpf": existing_expense.masked_cpf,
+                        "description": existing_expense.description,
+                    },
+                    "status": "duplicate"
+                }
+            )
 
         raw_text = note or ""
         extracted_data = None
@@ -401,6 +464,7 @@ async def process_ata(
         if tx_id and str(tx_id).strip():
             tx_id = re.sub(r'[^A-Z0-9]', '', str(tx_id).upper())
             tx_id = tx_id.replace('O', '0').replace('I', '1').replace('S', '5')
+            # Check if THIS user already has this transaction_id (idempotency)
             existing = db.query(models.Expense).filter(
                 models.Expense.transaction_id == tx_id,
                 models.Expense.user_id == uid
@@ -410,10 +474,26 @@ async def process_ata(
                     existing.deleted_at = None
                     db.commit()
                     cache_invalidate_all()
-                return {"idempotent": True, "database_id": existing.id}
+                return {"idempotent": True, "receipt_hash": existing.receipt, "database_id": existing.id}
         else:
             tx_id = None
 
+        # IDEMPOTENCY CHECK: Verify transaction doesn't already exist before db.add()
+        if tx_id:
+            existing_by_tx_id = db.query(models.Expense).filter(
+                models.Expense.transaction_id == tx_id,
+                models.Expense.user_id == uid
+            ).first()
+            if existing_by_tx_id:
+                print(f"DEBUG: Duplicate transaction_id detected during pre-insert check: {tx_id} for user {uid}", flush=True)
+                return {
+                    "status": "duplicate",
+                    "message": "Transaction already exists",
+                    "expense_id": existing_by_tx_id.id,
+                    "amount": existing_by_tx_id.amount,
+                    "idempotent": True
+                }
+        
         db_expense = models.Expense(
             user_id=uid,
             date=date_obj, amount=amount, category=category, merchant=merchant,
@@ -424,12 +504,57 @@ async def process_ata(
             transaction_id=tx_id, note=note
         )
         
-        db.add(db_expense)
-        db.commit()
-        db.refresh(db_expense)
-        cache_invalidate_all()
+        try:
+            db.add(db_expense)
+            db.commit()
+            db.refresh(db_expense)
+            cache_invalidate_all()
+            print(f"DEBUG: New expense created successfully - ID: {db_expense.id}, TX_ID: {tx_id}", flush=True)
+            return {"idempotent": False, "receipt_hash": sha256_hash, "ai_data": extracted_data, "database_id": db_expense.id}
+        except IntegrityError as e:
+            print('DEBUG: IntegrityError, checking for existing BEFORE rollback', flush=True)
+            try:
+                # Query globally because SQLite unique constraint on transaction_id might be global
+                existing = db.query(models.Expense).filter(models.Expense.transaction_id == tx_id).first()
+                print(f'DEBUG: Found existing (before rollback): {existing}', flush=True)
+            except Exception as query_err:
+                print(f'DEBUG: Query before rollback failed (PendingRollbackError?): {query_err}', flush=True)
+                db.rollback()
+                existing = db.query(models.Expense).filter(models.Expense.transaction_id == tx_id).first()
+                print(f'DEBUG: Found existing (after rollback fallback): {existing}', flush=True)
+            else:
+                db.rollback()
 
-        return {"idempotent": False, "ai_data": extracted_data, "database_id": db_expense.id}
+            if existing:
+                cache_invalidate_all()
+                return JSONResponse(
+                    status_code=200, 
+                    content={
+                        "idempotent": True,
+                        "database_id": existing.id,
+                        "receipt_hash": existing.receipt,
+                        "ai_data": {
+                            "total_amount": float(existing.amount) if existing.amount else 0.0,
+                            "merchant_name": existing.merchant,
+                            "transaction_date": str(existing.date),
+                            "transaction_type": existing.transaction_type,
+                            "smart_category": existing.category,
+                            "payment_method": existing.payment_method,
+                            "destination_institution": existing.destination_institution,
+                            "transaction_id": existing.transaction_id,
+                            "masked_cpf": existing.masked_cpf,
+                            "description": existing.description,
+                        },
+                        "status": "duplicate"
+                    }
+                )
+            else:
+                all_txs = db.query(models.Expense).filter(models.Expense.user_id == uid).all()
+                raise HTTPException(status_code=500, detail=f'Duplicate error but record not found. Searched globally for: {tx_id}. All for user: {[t.transaction_id for t in all_txs]}')
+        except Exception as db_error:
+            db.rollback()
+            print(f"DEBUG: Database error caught - Type: {type(db_error).__name__}, Message: {str(db_error)}", flush=True)
+            return JSONResponse(status_code=400, content={'status': 'error', 'message': str(db_error)})
 
     except Exception as e:
         import traceback

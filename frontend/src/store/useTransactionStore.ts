@@ -114,15 +114,21 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     if (!db) return { success: false, isDuplicate: false };
 
     try {
-      if (tx.receipt_hash) {
-        const existing = await db.getFromIndex('transactions', 'by-hash', tx.receipt_hash);
+      const txWithScanDate = { 
+        ...tx, 
+        scanned_at: tx.scanned_at || new Date().toISOString() 
+      };
+
+      if (txWithScanDate.receipt_hash) {
+        const existing = await db.getFromIndex('transactions', 'by-hash', txWithScanDate.receipt_hash);
         if (existing?.id) {
           // SUBSTIUIÇÃO DO MAIS ANTIGO: 
           // O 'put' com o ID existente sobrescreve os dados antigos com a nova extração
           await db.put('transactions', {
             ...existing,
-            ...tx,
+            ...txWithScanDate,
             id: existing.id,
+            scanned_at: existing.scanned_at || txWithScanDate.scanned_at, // Preserva a data de escaneamento original
             deleted_at: undefined, // Restaura se estava na lixeira
             is_synced: false // Força nova sincronização se houve mudança
           });
@@ -131,7 +137,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         }
       }
 
-      const id = await db.put('transactions', { ...tx, deleted_at: undefined });
+      const id = await db.put('transactions', { ...txWithScanDate, deleted_at: undefined });
       get().fetchTransactions();
       return { success: true, isDuplicate: false };
     } catch (error) {
@@ -329,6 +335,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
                 deleted_at: item.deleted_at || existing?.deleted_at || undefined,
               };
 
+              await txSet.store.delete(item.id);
               await txSet.store.put(merged);
             }
             await txSet.done;

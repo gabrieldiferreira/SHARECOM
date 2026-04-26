@@ -256,6 +256,32 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
                 fallback_data["masked_cpf"] = candidate_cpf
                 print(f"DEBUG: RegEx CPF/CNPJ encontrado: {fallback_data['masked_cpf']}", flush=True)
 
+        # 7. Smart Categorization (Heurística de Palavras-Chave)
+        categories_map = {
+            "Alimentação": ["RESTAURANTE", "IFOOD", "UBER EATS", "PADARIA", "LANCHONETE", "CAFE", "COFFEE", "MCDONALDS", "BURGER KING", "STARBUCKS"],
+            "Compras": ["MERCADO LIVRE", "AMAZON", "SHOPPE", "MAGAZINE LUIZA", "LOJA", "VESTUARIO", "ROUPA", "CALCADO"],
+            "Transporte": ["UBER", "99APP", "POSTO", "COMBUSTIVEL", "SHELL", "IPIRANGA", "PETROBRAS", "ESTACIONAMENTO", "PEDAGIO"],
+            "Casa": ["CONDOMINIO", "ALUGUEL", "LUZ", "ENEL", "CPFL", "AGUA", "SABESP", "INTERNET", "CLARO", "VIVO", "OI", "TIM"],
+            "Saúde": ["FARMACIA", "DROGASIL", "RAIA", "HOSPITAL", "CLINICA", "MEDICO", "DENTISTA", "EXAME"],
+            "Educação": ["ESCOLA", "FACULDADE", "CURSO", "LIVRARIA", "MENSALIDADE"],
+            "Lazer": ["CINEMA", "SHOW", "TEATRO", "VIAGEM", "HOTEL", "AIRBNB", "BAR", "PUB"],
+            "Serviços": ["ACADEMIA", "SMARTFIT", "ASSINATURA", "NETFLIX", "SPOTIFY", "YOUTUBE", "CLOUD", "ICLOUD", "GOOGLE"],
+        }
+        
+        found_category = False
+        text_to_search = (raw_text + " " + fallback_data["merchant_name"]).upper()
+        for cat, keywords in categories_map.items():
+            for kw in keywords:
+                if kw in text_to_search:
+                    fallback_data["smart_category"] = cat
+                    found_category = True
+                    break
+            if found_category: break
+
+        if re.search(r'RECEBIMENTO|RECEBIDO|DEPOSITO RECEBIDO', raw_text, re.IGNORECASE):
+            fallback_data["transaction_type"] = "Inflow"
+            fallback_data["smart_category"] = "Receita"
+
         return fallback_data, raw_text
 
     except Exception as e:

@@ -106,8 +106,12 @@ export default function ScannerPage() {
         setIdempotent(!!data.idempotent);
         setSavedId(data.database_id || null);
 
-        if (!data.idempotent) {
-          const newTx: TransactionEntity = {
+        // Always ensure the transaction exists locally in IndexedDB.
+        // For duplicates: the backend returns the existing record's ai_data + database_id.
+        // addTransaction uses put() with the same id, so it safely upserts without duplicating.
+        if (data.database_id) {
+          const txToSave: TransactionEntity = {
+            id: data.database_id,
             total_amount: extracted.total_amount,
             merchant_name: extracted.merchant_name,
             category: extracted.smart_category,
@@ -120,11 +124,11 @@ export default function ScannerPage() {
             transaction_id: extracted.transaction_id,
             masked_cpf: extracted.masked_cpf,
             needs_manual_review: extracted.needs_manual_review,
-            receipt_hash: data.filename,
-            is_synced: false,
+            receipt_hash: data.receipt_hash || `db_${data.database_id}`,
+            is_synced: true,
             note: data.note || undefined,
           };
-          await addTransaction(newTx);
+          await addTransaction(txToSave);
         }
 
         setStep("result");
