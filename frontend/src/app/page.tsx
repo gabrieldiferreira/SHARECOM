@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTransactionStore } from "../store/useTransactionStore";
-import { TransactionEntity } from "../lib/db";
+import { TransactionEntity, getDB } from "../lib/db";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
 import { useDashboardAgent, TemplateSentinel } from "../components/DashboardAgent";
@@ -237,19 +237,27 @@ function ExpenseTracker() {
     await fetchTransactions();
   }, [addTransaction, fetchTransactions, showToast]);
 
-  // Delete all mock/demo transactions (identified by receipt_hash starting with 'mock_')
+  // Delete all mock/demo transactions in a single bulk IndexedDB transaction
+  // (avoids the bug where looping permanentDelete triggers fetchTransactions/syncWithBackend
+  //  between each delete, which was causing re-insertions mid-loop)
   const deleteDemoData = useCallback(async () => {
     const demoTxs = transactions.filter(tx => tx.receipt_hash?.startsWith('mock_'));
     if (demoTxs.length === 0) {
       showToast('Nenhum dado de demonstração encontrado.', 'error');
       return;
     }
+    const idb = await getDB();
+    if (!idb) return;
+    // Single atomic write transaction — no intermediate fetchTransactions calls
+    const txSet = idb.transaction('transactions', 'readwrite');
     for (const tx of demoTxs) {
-      if (tx.id !== undefined) await permanentDelete(tx.id);
+      if (tx.id !== undefined) await txSet.store.delete(tx.id);
     }
-    showToast(`${demoTxs.length} transações de demonstração removidas!`, 'success');
+    await txSet.done;
+    // Refresh store state once after all deletes are done
     await fetchTransactions();
-  }, [transactions, permanentDelete, fetchTransactions, showToast]);
+    showToast(`${demoTxs.length} transações de demonstração removidas!`, 'success');
+  }, [transactions, fetchTransactions, showToast]);
 
   // Dismiss onboarding without generating demo (one-time, marks hasUsedDemo in Firestore)
   const dismissOnboarding = useCallback(async () => {
