@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTransactionStore } from "../store/useTransactionStore";
+import { useGoalStore } from "../store/useGoalStore";
 import { TransactionEntity, getDB } from "../lib/db";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -92,6 +93,8 @@ function ExpenseTracker() {
   } = useTransactionStore();
 
   const agent = useDashboardAgent(transactions);
+
+  const { goals, addGoal, deleteGoal } = useGoalStore();
 
   // i18n — locale-aware translations, currency & date formatting
   const { t, formatCurrency, formatDate: formatDateI18n, locale } = useI18n();
@@ -233,31 +236,94 @@ function ExpenseTracker() {
       setFireUser(prev => prev ? { ...prev, hasUsedDemo: true } : prev);
     }
 
+    // Generate demo goals (category='demo' marks them for deletion)
+    const demoGoals = [
+      {
+        name: '🏖️ Viagem de Férias',
+        target_amount: 8000,
+        current_amount: 2350,
+        deadline: new Date(new Date().setMonth(new Date().getMonth() + 8)).toISOString(),
+        category: 'demo',
+        status: 'active',
+        auto_round_up: 10,
+        auto_transfer_amount: 0,
+        auto_transfer_day: null,
+      },
+      {
+        name: '💻 MacBook Pro',
+        target_amount: 15000,
+        current_amount: 4800,
+        deadline: new Date(new Date().setMonth(new Date().getMonth() + 12)).toISOString(),
+        category: 'demo',
+        status: 'active',
+        auto_round_up: 0,
+        auto_transfer_amount: 500,
+        auto_transfer_day: 5,
+      },
+      {
+        name: '🏠 Reserva de Emergência',
+        target_amount: 20000,
+        current_amount: 12000,
+        deadline: null,
+        category: 'demo',
+        status: 'active',
+        auto_round_up: 0,
+        auto_transfer_amount: 1000,
+        auto_transfer_day: 1,
+      },
+      {
+        name: '🚗 Carro Novo',
+        target_amount: 45000,
+        current_amount: 5500,
+        deadline: new Date(new Date().setFullYear(new Date().getFullYear() + 2)).toISOString(),
+        category: 'demo',
+        status: 'active',
+        auto_round_up: 10,
+        auto_transfer_amount: 0,
+        auto_transfer_day: null,
+      },
+    ];
+    for (const goal of demoGoals) {
+      await addGoal(goal);
+    }
+
     showToast('100 transações de demonstração adicionadas!', 'success');
     await fetchTransactions();
-  }, [addTransaction, fetchTransactions, showToast]);
+  }, [addTransaction, addGoal, fetchTransactions, showToast]);
 
   // Delete all mock/demo transactions in a single bulk IndexedDB transaction
   // (avoids the bug where looping permanentDelete triggers fetchTransactions/syncWithBackend
   //  between each delete, which was causing re-insertions mid-loop)
   const deleteDemoData = useCallback(async () => {
     const demoTxs = transactions.filter(tx => tx.receipt_hash?.startsWith('mock_'));
-    if (demoTxs.length === 0) {
+    const demoGoalsList = goals.filter(g => g.category === 'demo');
+
+    if (demoTxs.length === 0 && demoGoalsList.length === 0) {
       showToast('Nenhum dado de demonstração encontrado.', 'error');
       return;
     }
-    const idb = await getDB();
-    if (!idb) return;
-    // Single atomic write transaction — no intermediate fetchTransactions calls
-    const txSet = idb.transaction('transactions', 'readwrite');
-    for (const tx of demoTxs) {
-      if (tx.id !== undefined) await txSet.store.delete(tx.id);
+
+    // Delete transactions in one atomic IndexedDB transaction
+    if (demoTxs.length > 0) {
+      const idb = await getDB();
+      if (idb) {
+        const txSet = idb.transaction('transactions', 'readwrite');
+        for (const tx of demoTxs) {
+          if (tx.id !== undefined) await txSet.store.delete(tx.id);
+        }
+        await txSet.done;
+        await fetchTransactions();
+      }
     }
-    await txSet.done;
-    // Refresh store state once after all deletes are done
-    await fetchTransactions();
-    showToast(`${demoTxs.length} transações de demonstração removidas!`, 'success');
-  }, [transactions, fetchTransactions, showToast]);
+
+    // Delete demo goals via API
+    for (const goal of demoGoalsList) {
+      await deleteGoal(goal.id);
+    }
+
+    const total = demoTxs.length + demoGoalsList.length;
+    showToast(`${total} itens de demonstração removidos!`, 'success');
+  }, [transactions, goals, fetchTransactions, deleteGoal, showToast]);
 
   // Dismiss onboarding without generating demo (one-time, marks hasUsedDemo in Firestore)
   const dismissOnboarding = useCallback(async () => {
