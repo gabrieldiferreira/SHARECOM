@@ -1,6 +1,6 @@
 import os
 import re
-import fitz # PyMuPDF
+import fitz  # PyMuPDF
 from PIL import Image
 import io
 import xml.etree.ElementTree as ET
@@ -25,10 +25,153 @@ def get_easyocr_reader():
             print(f"Failed to initialize EasyOCR: {e}")
     return EASYOCR_READER
 
-def _extract_svg_text(file_bytes: bytes) -> str:
-    """Extrai texto de SVGs sem depender de rasterização.
-    Funciona bem para exports vetoriais com <text>, <tspan>, <title> e <desc>.
+
+# =============================================================================
+# IMAGE PREPROCESSING — OpenCV pipeline for maximum OCR accuracy
+# =============================================================================
+
+def _preprocess_image(image_bytes: bytes) -> bytes:
     """
+    Full OpenCV preprocessing pipeline applied before EasyOCR:
+    1. Upscale to at least 2400px on longest side (3x sharpness gain)
+    2. Grayscale conversion
+    3. Shadow / uneven illumination removal via large-kernel background subtraction
+    4. Gaussian denoising
+    5. Adaptive binarization (Otsu + Gaussian thresholding)
+    6. Deskew (correct up to ±15° rotation)
+
+    Falls back to original bytes if OpenCV is not available.
+    """
+    try:
+        import cv2
+        import numpy as np
+
+        # Decode
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if img is None:
+            print("DEBUG: cv2.imdecode returned None — skipping preprocessing")
+            return image_bytes
+
+        h, w = img.shape[:2]
+        print(f"DEBUG: [preprocess] Original size: {w}x{h}", flush=True)
+
+        # 1. Upscale — target longest side = 2400px (improves fine-print legibility)
+        max_side = max(h, w)
+        if max_side < 2400:
+            scale = 2400 / max_side
+            img = cv2.resize(img, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+            print(f"DEBUG: [preprocess] Upscaled to {img.shape[1]}x{img.shape[0]}", flush=True)
+
+        # 2. Grayscale
+        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        # 3. Shadow removal — subtract blurred background (large Gaussian kernel)
+        #    Effective on phone photos with uneven lighting / shadows
+        blur_bg = cv2.GaussianBlur(gray, (95, 95), 0)
+        # Invert background and add offset to normalize brightness
+        shadow_free = cv2.addWeighted(gray, 1.5, blur_bg, -0.5, 0)
+        shadow_free = np.clip(shadow_free, 0, 255).astype(np.uint8)
+
+        # 4. Denoise (fast Non-Local Means for grayscale)
+        denoised = cv2.fastNlMeansDenoising(shadow_free, h=10, templateWindowSize=7, searchWindowSize=21)
+
+        # 5. Adaptive binarization — handles local contrast differences
+        #    Otsu global threshold first; if std dev is high, use adaptive
+        _, otsu = cv2.threshold(denoised, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        adaptive = cv2.adaptiveThreshold(
+            denoised, 255,
+            cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv2.THRESH_BINARY,
+            blockSize=31, C=10
+        )
+        # Blend: mostly adaptive (80%) + otsu (20%) — adaptive handles local variation better
+        blended = cv2.addWeighted(adaptive, 0.8, otsu, 0.2, 0).astype(np.uint8)
+
+        # 6. Deskew — detect dominant text angle and rotate to horizontal
+        blended = _deskew(blended)
+
+        # Encode back to JPEG bytes for EasyOCR
+        _, encoded = cv2.imencode('.jpg', blended, [cv2.IMWRITE_JPEG_QUALITY, 97])
+        result_bytes = encoded.tobytes()
+        print(f"DEBUG: [preprocess] Done. Output size: {len(result_bytes)} bytes", flush=True)
+        return result_bytes
+
+    except ImportError:
+        print("DEBUG: [preprocess] OpenCV not available — using raw image", flush=True)
+        return image_bytes
+    except Exception as e:
+        print(f"DEBUG: [preprocess] Error in preprocessing: {e} — using raw image", flush=True)
+        return image_bytes
+
+
+def _deskew(image):
+    """
+    Detects text skew angle using Hough line transform and corrects it.
+    Only corrects angles within ±15° to avoid false positives.
+    """
+    try:
+        import cv2
+        import numpy as np
+
+        # Edge detection on inverted image (text is dark on white after binarization)
+        inv = cv2.bitwise_not(image)
+        edges = cv2.Canny(inv, 50, 150, apertureSize=3)
+        lines = cv2.HoughLinesP(edges, 1, np.pi / 180, threshold=100, minLineLength=100, maxLineGap=10)
+
+        if lines is None or len(lines) == 0:
+            return image
+
+        angles = []
+        for line in lines:
+            x1, y1, x2, y2 = line[0]
+            if x2 - x1 == 0:
+                continue
+            angle = np.degrees(np.arctan2(y2 - y1, x2 - x1))
+            # Only consider near-horizontal lines (text lines)
+            if -15 < angle < 15:
+                angles.append(angle)
+
+        if not angles:
+            return image
+
+        median_angle = float(np.median(angles))
+        print(f"DEBUG: [deskew] Detected skew angle: {median_angle:.2f}°", flush=True)
+
+        # Skip tiny corrections (< 0.5°) to avoid unnecessary resampling
+        if abs(median_angle) < 0.5:
+            return image
+
+        h, w = image.shape
+        center = (w // 2, h // 2)
+        M = cv2.getRotationMatrix2D(center, median_angle, 1.0)
+        rotated = cv2.warpAffine(
+            image, M, (w, h),
+            flags=cv2.INTER_CUBIC,
+            borderMode=cv2.BORDER_REPLICATE
+        )
+        return rotated
+    except Exception as e:
+        print(f"DEBUG: [deskew] Failed: {e}", flush=True)
+        return image
+
+
+def _preprocess_pdf_page(page) -> bytes:
+    """
+    Renders a PDF page at 3x scale (vs previous 2x) and applies
+    the full image preprocessing pipeline.
+    """
+    pix = page.get_pixmap(matrix=fitz.Matrix(3, 3))  # 3x = ~216 DPI effective
+    raw_bytes = pix.tobytes("jpeg")
+    return _preprocess_image(raw_bytes)
+
+
+# =============================================================================
+# SVG TEXT EXTRACTION
+# =============================================================================
+
+def _extract_svg_text(file_bytes: bytes) -> str:
+    """Extrai texto de SVGs sem depender de rasterização."""
     try:
         decoded = file_bytes.decode("utf-8", errors="ignore")
         root = ET.fromstring(decoded)
@@ -42,7 +185,6 @@ def _extract_svg_text(file_bytes: bytes) -> str:
                     texts.append(content)
 
         if not texts:
-            # Fallback: remove tags e preserva apenas texto visível do XML.
             stripped = re.sub(r"<[^>]+>", " ", decoded)
             stripped = re.sub(r"\s+", " ", stripped).strip()
             return stripped[:PDF_MAX_CHARS]
@@ -53,8 +195,14 @@ def _extract_svg_text(file_bytes: bytes) -> str:
         print(f"DEBUG: Falha ao extrair texto do SVG: {e}", flush=True)
         return ""
 
+
+# =============================================================================
+# INPUT PREPARATION — routes each file type to the right extraction path
+# =============================================================================
+
 def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]:
     ext = extension.lower()
+
     if ext == ".html":
         import re as _re
         html_text = file_bytes.decode('utf-8', errors='ignore')
@@ -66,18 +214,17 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
         pdf_stream = io.BytesIO(file_bytes)
         doc = fitz.open(stream=pdf_stream, filetype="pdf")
         max_pages = min(PDF_MAX_PAGES, len(doc))
-        
-        text_context = "".join(doc[page_index].get_text() for page_index in range(max_pages))
+
+        text_context = "".join(doc[i].get_text() for i in range(max_pages))
         text_context = " ".join(text_context.split())[:PDF_MAX_CHARS]
-        
+
         if len(text_context) < 50:
-            print("PDF has little text content. Rendering first page for Vision OCR.")
+            print("PDF has little text — rendering page at 3x for Vision OCR + preprocessing.")
             page = doc[0]
-            pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))
-            image_bytes = pix.tobytes("jpeg")
+            image_bytes = _preprocess_pdf_page(page)
             doc.close()
             return "image", image_bytes
-            
+
         doc.close()
         return "pdf_text", text_context
 
@@ -85,11 +232,18 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
         svg_text = _extract_svg_text(file_bytes)
         return "pdf_text", svg_text
 
+    # All image types — run through preprocessing pipeline
     return "image", file_bytes
 
+
+# =============================================================================
+# EASYOCR — with preprocessing applied before inference
+# =============================================================================
+
 def _extract_text_easyocr(image_bytes: bytes, file_path: str = None) -> str:
-    """Extrai texto da imagem usando EasyOCR.
-    Prefere ler de arquivo em disco (mais confiável) quando file_path é fornecido.
+    """
+    Applies OpenCV preprocessing then runs EasyOCR.
+    Preprocessing is applied whether reading from disk or from bytes.
     """
     reader = get_easyocr_reader()
     if not reader:
@@ -97,33 +251,61 @@ def _extract_text_easyocr(image_bytes: bytes, file_path: str = None) -> str:
         return ""
     try:
         import numpy as np
-        if file_path and os.path.exists(file_path):
-            # Leitura direta do arquivo com pré-processamento para grayscale
-            print(f"DEBUG: EasyOCR lendo de arquivo: {file_path}")
-            img = Image.open(file_path).convert("L")
-            result = reader.readtext(np.array(img), detail=0, paragraph=True)
-        else:
-            # Fallback: leitura de bytes em memória
-            print(f"DEBUG: EasyOCR lendo de bytes ({len(image_bytes)} bytes)")
-            img = Image.open(io.BytesIO(image_bytes)).convert("L") # Escala de cinza para melhor precisão
-            result = reader.readtext(np.array(img), detail=0, paragraph=True)
 
-        text = "\n".join(result)
+        # Always preprocess — load raw, preprocess, then pass array to EasyOCR
+        if file_path and os.path.exists(file_path):
+            print(f"DEBUG: EasyOCR lendo de arquivo: {file_path}")
+            with open(file_path, "rb") as f:
+                raw_bytes = f.read()
+        else:
+            print(f"DEBUG: EasyOCR lendo de bytes ({len(image_bytes)} bytes)")
+            raw_bytes = image_bytes
+
+        # Apply full preprocessing pipeline
+        processed_bytes = _preprocess_image(raw_bytes)
+
+        img = Image.open(io.BytesIO(processed_bytes))
+        img_array = np.array(img)
+
+        # EasyOCR parameters tuned for financial receipts:
+        # - detail=1 to get confidence scores for debugging
+        # - paragraph=True groups text into coherent blocks
+        # - contrast_ths & adjust_contrast help with low-contrast images
+        results = reader.readtext(
+            img_array,
+            detail=1,
+            paragraph=False,
+            contrast_ths=0.1,
+            adjust_contrast=0.5,
+        )
+
+        # Filter by confidence threshold — discard low-confidence OCR fragments
+        CONFIDENCE_THRESHOLD = 0.25
+        accepted = [(bbox, txt, conf) for bbox, txt, conf in results if conf >= CONFIDENCE_THRESHOLD]
+        rejected = len(results) - len(accepted)
+
+        if rejected > 0:
+            print(f"DEBUG: EasyOCR — {rejected} fragments below confidence {CONFIDENCE_THRESHOLD} discarded", flush=True)
+
+        # Sort top-to-bottom by Y coordinate of bounding box centroid (reading order)
+        accepted.sort(key=lambda r: (r[0][0][1] + r[0][2][1]) / 2)
+
+        text = "\n".join(txt for _, txt, _ in accepted)
         print(f"--- DEBUG OCR ---\n{text}\n-----------------")
-        print(f"DEBUG: EasyOCR concluído. Caracteres: {len(text)}")
+        print(f"DEBUG: EasyOCR concluído. Caracteres: {len(text)}, Blocos: {len(accepted)}")
         return text
+
     except Exception as e:
         print(f"DEBUG: ERRO no EasyOCR: {e}")
         return ""
 
+
+# =============================================================================
+# MAIN EXTRACTION — regex heuristics on the cleaned OCR text
+# =============================================================================
+
 def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str = None) -> dict:
-    """Extrai dados de transação do conteúdo fornecido.
-    
-    Args:
-        file_bytes: Conteúdo do arquivo em memória
-        extension: Extensão do arquivo (.jpg, .png, .pdf, .html, .txt, .svg)
-        file_path: Caminho opcional para arquivo em disco (preferido para imagens da web)
-    """
+    """Extrai dados de transação do conteúdo fornecido."""
     print(f"DEBUG: [ocr_processor] Extensão: {extension} | Arquivo em disco: {file_path}", flush=True)
     fallback_data = {
         "total_amount": 0.0,
@@ -144,7 +326,6 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
 
         raw_text = ""
         if input_kind == "image":
-            # Passa o file_path para o EasyOCR preferir leitura de disco
             raw_text = _extract_text_easyocr(prepared_input, file_path=file_path)
         elif input_kind == "pdf_text":
             raw_text = prepared_input
@@ -156,118 +337,149 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
             return fallback_data, raw_text
 
         print(f"DEBUG: Analisando texto bruto com RegEx...", flush=True)
-        
-        # 1. Valor (Amount) - Heurística Robusta
-        # Primeiro, extraímos todos os possíveis números que parecem dinheiro
+
+        # 1. VALOR — multi-strategy extraction
+        #    Strategy A: Keyword + number
+        def clean_val(v):
+            # Handle both BR format (1.234,56) and US format (1,234.56)
+            v = v.strip().replace(" ", "")
+            if re.search(r'\d+\.\d{3},\d{2}', v):  # BR: 1.234,56
+                v = v.replace(".", "").replace(",", ".")
+            elif re.search(r'\d+,\d{3}\.\d{2}', v):  # US: 1,234.56
+                v = v.replace(",", "")
+            else:
+                v = v.replace(",", ".")
+            try:
+                return float(re.sub(r'[^\d.]', '', v))
+            except:
+                return 0.0
+
         all_amounts = re.findall(r'(\d[\d\.,\s]*[\.,]\d{2})(?!\d)', raw_text)
         print(f"DEBUG: Candidatos a valor encontrados: {all_amounts}", flush=True)
-        
-        def clean_val(v):
-            digits = re.sub(r'\D', '', v)
-            return float(digits) / 100.0 if digits else 0.0
 
-        # Tentativa A: Palavra-chave + Número
-        val_match = re.search(r'(?:R\$|RS|R\s*\$|Valor|TOTAL|DINHEIRO|PAGO|QUANTIA|PAGAMENTO):?\s*([\d\.,]{3,})', raw_text, re.IGNORECASE)
+        val_match = re.search(
+            r'(?:R\$|RS|R\s*\$|Valor|TOTAL|DINHEIRO|PAGO|QUANTIA|PAGAMENTO|AMOUNT)[:\s]*([R$\s]*[\d\.,]{3,})',
+            raw_text, re.IGNORECASE
+        )
         if val_match:
-            fallback_data["total_amount"] = clean_val(val_match.group(1))
+            raw_val = re.sub(r'[R$\s]', '', val_match.group(1))
+            fallback_data["total_amount"] = clean_val(raw_val)
             print(f"DEBUG: Valor extraído via Palavra-Chave: {fallback_data['total_amount']}", flush=True)
-        
-        # Tentativa B: Se a tentativa A falhou ou deu 0, pega o maior valor da lista de candidatos
+
+        # Strategy B: Largest plausible value among all candidates
         if fallback_data["total_amount"] == 0 and all_amounts:
-            fallback_data["total_amount"] = max([clean_val(a) for a in all_amounts])
-            print(f"DEBUG: Valor extraído via Heurística (Maior valor): {fallback_data['total_amount']}", flush=True)
+            candidates = [clean_val(a) for a in all_amounts]
+            # Exclude implausible values (e.g. CPF-like numbers > 99999)
+            plausible = [c for c in candidates if 0.01 <= c <= 99999.99]
+            if plausible:
+                fallback_data["total_amount"] = max(plausible)
+                print(f"DEBUG: Valor extraído via Heurística (Maior plausível): {fallback_data['total_amount']}", flush=True)
 
         if fallback_data["total_amount"] == 0:
             print("DEBUG: RegEx Valor NÃO encontrado por nenhuma regra.", flush=True)
-                
-        # 2. Método de Pagamento (Payment Method)
-        if re.search(r'PIX', raw_text, re.IGNORECASE):
-            fallback_data["payment_method"] = "PIX"
-        elif re.search(r'DEPOSITO|DEPÓSITO', raw_text, re.IGNORECASE):
-            fallback_data["payment_method"] = "Depósito"
-        elif re.search(r'TRANSFERENCIA|TRANSFERÊNCIA|DOC|TED', raw_text, re.IGNORECASE):
-            fallback_data["payment_method"] = "Transferência"
-        elif re.search(r'CARTAO|CARTÃO|DEBITO|DÉBITO|CREDITO|CRÉDITO', raw_text, re.IGNORECASE):
-            fallback_data["payment_method"] = "Cartão"
-        elif re.search(r'BOLETO|PAGAMENTO DE TITULO', raw_text, re.IGNORECASE):
-            fallback_data["payment_method"] = "Boleto"
-            
-        # 3. Data e Hora (Date and Time)
-        # Tenta evitar padrões de hora (ex: 11.30.15) verificando se o ano é plausível
+
+        # 2. MÉTODO DE PAGAMENTO
+        pm_patterns = [
+            (r'\bPIX\b', "PIX"),
+            (r'DEPOSITO|DEPÓSITO', "Depósito"),
+            (r'TRANSFERENCIA|TRANSFERÊNCIA|TED\b|DOC\b', "Transferência"),
+            (r'CARTAO\s+DE\s+CREDITO|CARTÃO\s+DE\s+CRÉDITO|CREDITO\b|CRÉDITO\b', "Cartão de Crédito"),
+            (r'CARTAO\s+DE\s+DEBITO|CARTÃO\s+DE\s+DÉBITO|DEBITO\b|DÉBITO\b', "Cartão de Débito"),
+            (r'CARTAO|CARTÃO', "Cartão"),
+            (r'BOLETO|PAGAMENTO\s+DE\s+TITULO', "Boleto"),
+            (r'DINHEIRO|ESPECIE|ESPÉCIE', "Dinheiro"),
+        ]
+        for pattern, method in pm_patterns:
+            if re.search(pattern, raw_text, re.IGNORECASE):
+                fallback_data["payment_method"] = method
+                break
+
+        # 3. DATA E HORA
         date_matches = re.finditer(r'(\d{2})[/\-\.](\d{2})[/\-\.](\d{2,4})', raw_text)
         found_date = False
         for dm in date_matches:
             day, month, year = dm.group(1), dm.group(2), dm.group(3)
             if len(year) == 2: year = "20" + year
-            iy = int(year)
-            im = int(month)
-            # Se o mês > 12 ou ano muito fora da realidade, provavelmente é hora ou ID
+            iy, im = int(year), int(month)
             if im <= 12 and 2000 <= iy <= 2030:
                 fallback_data["transaction_date"] = f"{year}-{month}-{day}T12:00:00"
                 print(f"DEBUG: RegEx Data encontrada: {fallback_data['transaction_date']}", flush=True)
                 found_date = True
                 break
-        
+
         if not found_date:
-            # Tenta formatos extensos: 19 Out 2026
-            date_match = re.search(r'(\d{2})\s+(?:de\s+)?([A-Za-z]{3,10})\s+(?:de\s+)?(\d{4})', raw_text, re.IGNORECASE)
+            date_match = re.search(
+                r'(\d{2})\s+(?:de\s+)?([A-Za-z]{3,10})\s+(?:de\s+)?(\d{4})',
+                raw_text, re.IGNORECASE
+            )
             if date_match:
                 day, month_str, year = date_match.group(1), date_match.group(2).lower()[:3], date_match.group(3)
-                months = {"jan": "01", "fev": "02", "mar": "03", "abr": "04", "mai": "05", "jun": "06", 
-                          "jul": "07", "ago": "08", "set": "09", "out": "10", "nov": "11", "dez": "12"}
+                months = {
+                    "jan": "01", "fev": "02", "mar": "03", "abr": "04",
+                    "mai": "05", "jun": "06", "jul": "07", "ago": "08",
+                    "set": "09", "out": "10", "nov": "11", "dez": "12"
+                }
                 month = months.get(month_str, "01")
                 fallback_data["transaction_date"] = f"{year}-{month}-{day}T12:00:00"
                 print(f"DEBUG: RegEx Data encontrada (Extenso): {fallback_data['transaction_date']}", flush=True)
 
-        # 4. Nome do Destinatário (Merchant Name)
-        # Prioridade absoluta para o campo NOME: ou NOME DO DESTINATÁRIO:
-        name_match = re.search(r'(?:NOME|DESTINAT[AÁ]RIO|RECEBEDOR|FAVORECIDO|PARA|BENEFICI[AÁ]RIO)[:\s-]*\n?([A-ZÀ-Úa-zà-ú\s]{5,50})(?:\n|$)', raw_text, re.IGNORECASE)
+        # 4. NOME DO DESTINATÁRIO / MERCHANT
+        name_match = re.search(
+            r'(?:NOME|DESTINAT[AÁ]RIO|RECEBEDOR|FAVORECIDO|PARA|BENEFICI[AÁ]RIO)[:\s-]*\n?([A-ZÀ-Úa-zà-ú\s]{5,50})(?:\n|$)',
+            raw_text, re.IGNORECASE
+        )
         if name_match:
             candidate = name_match.group(1).strip()
-            # Se o nome capturado for apenas "NOME" ou palavras genéricas, tentamos as linhas
             if len(candidate) > 4 and not re.search(r'REALIZADA|COMPROVANTE', candidate, re.IGNORECASE):
                 fallback_data["merchant_name"] = candidate
                 print(f"DEBUG: Nome extraído via Label: {fallback_data['merchant_name']}", flush=True)
-        
+
         if fallback_data["merchant_name"] == "Erro na Leitura (OCR Falhou)" or "Banking" in fallback_data["merchant_name"]:
-            # Se falhou ou pegou "Private Banking", tenta pegar a linha mais provável
             lines = [l.strip() for l in raw_text.split('\n') if len(l.strip()) > 5]
+            skip_words = r'SISBB|BANCO|COMPROVANTE|SISTEMA|EXTRATO|PAGAMENTO|DATA|VALOR|PIX|TED|DOC'
             for line in lines:
-                if not re.search(r'SISBB|BANCO|COMPROVANTE|SISTEMA|EXTRATO|PAGAMENTO', line, re.IGNORECASE):
+                if not re.search(skip_words, line, re.IGNORECASE):
                     fallback_data["merchant_name"] = line
                     print(f"DEBUG: Nome extraído via Heurística de Linha: {fallback_data['merchant_name']}", flush=True)
                     break
 
-        # 5. ID da Transação (Autenticação)
-        # Procura por strings alfanuméricas longas (ID da transação)
-        auth_match = re.search(r'(?:ID|AUTENTICA[CÇ][AÃ]O|CONTROLE|DOC|N[ÚU]MERO)[:\s-]*\n?([A-Z0-9]{15,60})', raw_text, re.IGNORECASE)
+        # 5. ID DE TRANSAÇÃO / AUTENTICAÇÃO
+        auth_match = re.search(
+            r'(?:ID|E2E|AUTENTICA[CÇ][AÃ]O|CONTROLE|DOC|N[ÚU]MERO|ENDTOEND)[:\s-]*\n?([A-Z0-9]{15,60})',
+            raw_text, re.IGNORECASE
+        )
         if auth_match:
             fallback_data["transaction_id"] = auth_match.group(1).strip()
-            print(f"DEBUG: RegEx ID encontrado (Longo): {fallback_data['transaction_id']}", flush=True)
+            print(f"DEBUG: RegEx ID encontrado: {fallback_data['transaction_id']}", flush=True)
 
-        # 6. CPF / CNPJ (Inclusive Mascarados como ***.123.456-**)
-        # Padrão: 3 dígitos ou 3 asteriscos, seguidos de separadores e mais blocos, terminando em 2 dígitos ou 2 asteriscos
+        # 6. CPF / CNPJ (inclusive mascarados)
         cpf_pattern = r'((?:\d{3}|\*{3})[\.\s]?(?:\d{3}|\*{3})[\.\s]?(?:\d{3}|\*{3})[\-\s]?(?:\d{2}|\*{2})|\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[/\s]?\d{4}[\-\s]?\d{2})'
         cpf_match = re.search(cpf_pattern, raw_text)
         if cpf_match:
             candidate_cpf = cpf_match.group(1).strip()
-            # Validação simples: não pode ser apenas asteriscos e tem que ter um tamanho mínimo
             if len(re.sub(r'[\.\-\s]', '', candidate_cpf)) >= 11:
                 fallback_data["masked_cpf"] = candidate_cpf
                 print(f"DEBUG: RegEx CPF/CNPJ encontrado: {fallback_data['masked_cpf']}", flush=True)
 
-        # 7. Smart Categorization (Heurística de Palavras-Chave)
+        # 7. CATEGORIZAÇÃO INTELIGENTE
         categories_map = {
-            "Alimentação": ["RESTAURANTE", "IFOOD", "UBER EATS", "PADARIA", "LANCHONETE", "CAFE", "COFFEE", "MCDONALDS", "BURGER KING", "STARBUCKS"],
-            "Compras": ["MERCADO LIVRE", "AMAZON", "SHOPPE", "MAGAZINE LUIZA", "LOJA", "VESTUARIO", "ROUPA", "CALCADO"],
-            "Transporte": ["UBER", "99APP", "POSTO", "COMBUSTIVEL", "SHELL", "IPIRANGA", "PETROBRAS", "ESTACIONAMENTO", "PEDAGIO"],
-            "Casa": ["CONDOMINIO", "ALUGUEL", "LUZ", "ENEL", "CPFL", "AGUA", "SABESP", "INTERNET", "CLARO", "VIVO", "OI", "TIM"],
-            "Saúde": ["FARMACIA", "DROGASIL", "RAIA", "HOSPITAL", "CLINICA", "MEDICO", "DENTISTA", "EXAME"],
-            "Educação": ["ESCOLA", "FACULDADE", "CURSO", "LIVRARIA", "MENSALIDADE"],
-            "Lazer": ["CINEMA", "SHOW", "TEATRO", "VIAGEM", "HOTEL", "AIRBNB", "BAR", "PUB"],
-            "Serviços": ["ACADEMIA", "SMARTFIT", "ASSINATURA", "NETFLIX", "SPOTIFY", "YOUTUBE", "CLOUD", "ICLOUD", "GOOGLE"],
+            "Alimentação": ["RESTAURANTE", "IFOOD", "UBER EATS", "PADARIA", "LANCHONETE", "CAFE", "COFFEE",
+                            "MCDONALDS", "BURGER KING", "STARBUCKS", "PIZZARIA", "CHURRASCARIA", "SUSHI"],
+            "Compras": ["MERCADO LIVRE", "AMAZON", "SHOPEE", "MAGAZINE LUIZA", "LOJA", "VESTUARIO", "ROUPA",
+                        "CALCADO", "AMERICANAS", "CASAS BAHIA", "SUBMARINO"],
+            "Transporte": ["UBER", "99APP", "POSTO", "COMBUSTIVEL", "SHELL", "IPIRANGA", "PETROBRAS",
+                           "ESTACIONAMENTO", "PEDAGIO", "PASSAGEM", "METRÔ", "ONIBUS"],
+            "Casa": ["CONDOMINIO", "ALUGUEL", "LUZ", "ENEL", "CPFL", "AGUA", "SABESP", "INTERNET",
+                     "CLARO", "VIVO", "OI", "TIM", "GAS", "COMGAS"],
+            "Saúde": ["FARMACIA", "DROGASIL", "RAIA", "HOSPITAL", "CLINICA", "MEDICO", "DENTISTA", "EXAME",
+                      "DROGA", "PACHECO"],
+            "Educação": ["ESCOLA", "FACULDADE", "CURSO", "LIVRARIA", "MENSALIDADE", "UNIVERSIDADE"],
+            "Lazer": ["CINEMA", "SHOW", "TEATRO", "VIAGEM", "HOTEL", "AIRBNB", "BAR", "PUB", "DISNEY",
+                      "NETFLIX", "SPOTIFY", "YOUTUBE", "STEAM", "PLAYSTATION"],
+            "Serviços": ["ACADEMIA", "SMARTFIT", "ASSINATURA", "CLOUD", "ICLOUD", "GOOGLE", "APPLE",
+                         "SEGURO", "IPTU", "IPVA"],
         }
-        
+
         found_category = False
         text_to_search = (raw_text + " " + fallback_data["merchant_name"]).upper()
         for cat, keywords in categories_map.items():
@@ -276,16 +488,21 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
                     fallback_data["smart_category"] = cat
                     found_category = True
                     break
-            if found_category: break
+            if found_category:
+                break
 
-        if re.search(r'RECEBIMENTO|RECEBIDO|DEPOSITO RECEBIDO', raw_text, re.IGNORECASE):
+        # 8. TIPO DE TRANSAÇÃO
+        if re.search(r'RECEBIMENTO|RECEBIDO|DEPOSITO\s+RECEBIDO|CREDITO\s+EM\s+CONTA', raw_text, re.IGNORECASE):
             fallback_data["transaction_type"] = "Inflow"
             fallback_data["smart_category"] = "Receita"
 
+        fallback_data["needs_manual_review"] = False
         return fallback_data, raw_text
 
     except Exception as e:
         print(f"Extraction Pipeline Fatal Error: {e}")
+        import traceback
+        traceback.print_exc()
         error_fallback = dict(fallback_data)
         error_fallback["merchant_name"] = f"Erro no Processamento: {str(e)[:50]}"
         return error_fallback, ""

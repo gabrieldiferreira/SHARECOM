@@ -21,6 +21,7 @@ PyMuPDF
 Pillow
 pytesseract
 python-bidi==0.4.2
+opencv-python-headless
 
 # Utilities
 pydantic
