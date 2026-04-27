@@ -121,7 +121,7 @@ function ExpenseTracker() {
   const itemsPerPage = 6;
 
   // ── Firebase user profile ──
-  interface FirestoreUser { name: string; email: string; photoURL: string; locale: string; currency: string; createdAt: string; }
+  interface FirestoreUser { name: string; email: string; photoURL: string; locale: string; currency: string; createdAt: string; hasUsedDemo: boolean; }
   const [fireUser, setFireUser]       = useState<FirestoreUser | null>(null);
   const [fireLoading, setFireLoading] = useState(true);
   const [isEditingProfile, setIsEditingProfile] = useState(false);
@@ -225,10 +225,40 @@ function ExpenseTracker() {
     for (const tx of mockTransactions) {
       await addTransaction(tx);
     }
-    
+
+    // Mark demo as used in Firestore (one-time per account)
+    const currentUser = auth?.currentUser;
+    if (currentUser && db) {
+      await updateDoc(doc(db, 'users', currentUser.uid), { hasUsedDemo: true });
+      setFireUser(prev => prev ? { ...prev, hasUsedDemo: true } : prev);
+    }
+
     showToast('100 transações de demonstração adicionadas!', 'success');
     await fetchTransactions();
   }, [addTransaction, fetchTransactions, showToast]);
+
+  // Delete all mock/demo transactions (identified by receipt_hash starting with 'mock_')
+  const deleteDemoData = useCallback(async () => {
+    const demoTxs = transactions.filter(tx => tx.receipt_hash?.startsWith('mock_'));
+    if (demoTxs.length === 0) {
+      showToast('Nenhum dado de demonstração encontrado.', 'error');
+      return;
+    }
+    for (const tx of demoTxs) {
+      if (tx.id !== undefined) await permanentDelete(tx.id);
+    }
+    showToast(`${demoTxs.length} transações de demonstração removidas!`, 'success');
+    await fetchTransactions();
+  }, [transactions, permanentDelete, fetchTransactions, showToast]);
+
+  // Dismiss onboarding without generating demo (one-time, marks hasUsedDemo in Firestore)
+  const dismissOnboarding = useCallback(async () => {
+    const currentUser = auth?.currentUser;
+    if (currentUser && db) {
+      await updateDoc(doc(db, 'users', currentUser.uid), { hasUsedDemo: true });
+      setFireUser(prev => prev ? { ...prev, hasUsedDemo: true } : prev);
+    }
+  }, []);
 
   useEffect(() => {
     setMounted(true);
@@ -276,12 +306,13 @@ function ExpenseTracker() {
         const snap = await getDoc(doc(db, 'users', currentUser.uid));
         const data = snap.data() ?? {};
         const merged: FirestoreUser = {
-          name:      data.name      || currentUser.displayName || '',
-          email:     data.email     || currentUser.email       || '',
-          photoURL:  data.photoURL  || currentUser.photoURL   || '',
-          locale:    data.locale    || 'pt-BR',
-          currency:  data.currency  || 'BRL',
-          createdAt: data.createdAt || '',
+          name:        data.name      || currentUser.displayName || '',
+          email:       data.email     || currentUser.email       || '',
+          photoURL:    data.photoURL  || currentUser.photoURL   || '',
+          locale:      data.locale    || 'pt-BR',
+          currency:    data.currency  || 'BRL',
+          createdAt:   data.createdAt || '',
+          hasUsedDemo: data.hasUsedDemo === true,
         };
         setFireUser(merged);
         setProfileForm({ name: merged.name, locale: merged.locale, currency: merged.currency });
@@ -1183,13 +1214,13 @@ function ExpenseTracker() {
 
 
                 
-                {/* Mock data button (only show if no transactions) */}
-                {transactions.length === 0 && (
+                {/* Delete demo button — visible while demo data exists, regardless of onboarding state */}
+                {transactions.some(tx => tx.receipt_hash?.startsWith('mock_')) && (
                   <button
-                    onClick={generateMockData}
-                    className="ml-2 px-3 py-1.5 rounded-lg bg-purple-500/20 border border-purple-500/30 text-purple-400 text-xs font-semibold hover:bg-purple-500/30 transition-colors whitespace-nowrap"
+                    onClick={deleteDemoData}
+                    className="ml-2 px-3 py-1.5 rounded-lg bg-red-500/20 border border-red-500/30 text-red-400 text-xs font-semibold hover:bg-red-500/30 transition-colors whitespace-nowrap"
                   >
-                    🎲 Gerar Dados Demo
+                    🗑️ Apagar Dados Demo
                   </button>
                 )}
 
@@ -1201,6 +1232,65 @@ function ExpenseTracker() {
                   </span>
                 </div>
               </div>
+
+              {/* ONBOARDING BANNER — first access only, one-time per account */}
+              <AnimatePresence>
+                {!fireLoading && fireUser && !fireUser.hasUsedDemo && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -12, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -12, scale: 0.98 }}
+                    transition={{ duration: 0.35, ease: 'easeOut' }}
+                    className="relative overflow-hidden rounded-2xl border border-purple-500/30 bg-gradient-to-br from-purple-900/40 via-purple-800/20 to-pink-900/20 p-4 sm:p-5 shadow-lg"
+                  >
+                    {/* Decorative blobs */}
+                    <div className="pointer-events-none absolute -top-10 -right-10 h-32 w-32 rounded-full bg-purple-500/20 blur-2xl" />
+                    <div className="pointer-events-none absolute -bottom-8 -left-8 h-24 w-24 rounded-full bg-pink-500/15 blur-2xl" />
+
+                    {/* Dismiss button */}
+                    <button
+                      onClick={dismissOnboarding}
+                      className="absolute right-3 top-3 rounded-full p-1 text-text-tertiary hover:text-text-secondary transition-colors"
+                      aria-label="Fechar"
+                    >
+                      <X size={16} />
+                    </button>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+                      {/* Icon */}
+                      <div className="flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-xl bg-purple-500/20 text-2xl border border-purple-500/30">
+                        🎲
+                      </div>
+
+                      {/* Text */}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-text-primary">
+                          Bem-vindo ao UNiDoc, {fireUser.name.split(' ')[0] || 'usuário'}! 👋
+                        </p>
+                        <p className="mt-0.5 text-xs text-text-secondary leading-relaxed">
+                          Gere dados de demonstração para explorar todas as funcionalidades antes de adicionar seus próprios recibos. Isso pode ser feito apenas <span className="font-semibold text-purple-400">uma vez</span>.
+                        </p>
+                      </div>
+
+                      {/* Actions */}
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={dismissOnboarding}
+                          className="px-3 py-1.5 rounded-lg text-xs font-semibold text-text-secondary hover:text-text-primary border border-border hover:border-border-hover transition-colors"
+                        >
+                          Pular
+                        </button>
+                        <button
+                          onClick={generateMockData}
+                          className="px-4 py-1.5 rounded-lg text-xs font-semibold bg-purple-500/80 hover:bg-purple-500 text-white transition-colors shadow-sm"
+                        >
+                          Gerar Demo
+                        </button>
+                      </div>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               {/* (1) HERO BALANCE CARD - Responsive */}
               <div className="relative overflow-hidden rounded-2xl sm:rounded-[20px] p-4 sm:p-6 lg:p-8 text-white shadow-glass-lg bg-brand-bg border-thin border-glass-border">
