@@ -86,10 +86,21 @@ export default function ScannerPage() {
       if (response.ok) {
         const data = await response.json();
         const ai = data.ai_data || {};
+        const rawAmount = typeof ai.total_amount === "string"
+          ? parseFloat(ai.total_amount.replace(/[^\d.,]/g, "").replace(",", "."))
+          : Number(ai.total_amount) || 0;
+        const parsedAmount = Number.isFinite(rawAmount) ? rawAmount : 0;
+        const merchantName = String(ai.merchant_name || "").trim();
+        const ocrFailed = merchantName.includes("OCR Falhou") || merchantName.toLowerCase().startsWith("erro");
+        if (parsedAmount <= 0 && ocrFailed) {
+          setErrorMsg("Não foi possível ler o comprovante. Envie uma imagem mais nítida ou cadastre manualmente.");
+          setStep("error");
+          return;
+        }
 
         const extracted: ExtractedData = {
-          total_amount: ai.total_amount || 0,
-          merchant_name: ai.merchant_name || "Desconhecido",
+          total_amount: parsedAmount,
+          merchant_name: merchantName || "Desconhecido",
           smart_category: ai.smart_category || "Outros",
           transaction_date: ai.transaction_date || new Date().toISOString(),
           transaction_type: ai.transaction_type || "Outflow",

@@ -551,13 +551,6 @@ function ExpenseTracker() {
           return;
         }
 
-        // Parse date safely
-        let parsedDate = new Date().toISOString();
-        if (ai.transaction_date) {
-           const d = new Date(ai.transaction_date);
-           if (!isNaN(d.getTime())) parsedDate = d.toISOString();
-        }
-
         // Parse amount safely
         let parsedAmount = 0;
         if (typeof ai.total_amount === 'string') {
@@ -566,10 +559,26 @@ function ExpenseTracker() {
            parsedAmount = ai.total_amount;
         }
 
+        const merchantName = String(ai.merchant_name || '').trim();
+        const ocrFailed = merchantName.includes("OCR Falhou") || merchantName.toLowerCase().startsWith("erro");
+        if ((isNaN(parsedAmount) || parsedAmount <= 0) && ocrFailed) {
+          showToast("Não foi possível ler o comprovante. Envie uma imagem mais nítida ou cadastre manualmente.", "error");
+          setIsUploading(false);
+          return;
+        }
+        parsedAmount = Number.isFinite(parsedAmount) ? parsedAmount : 0;
+
+        // Parse date safely
+        let parsedDate = new Date().toISOString();
+        if (ai.transaction_date) {
+           const d = new Date(ai.transaction_date);
+           if (!isNaN(d.getTime())) parsedDate = d.toISOString();
+        }
+
         const newTx: TransactionEntity = {
           id: data.database_id, 
           total_amount: isNaN(parsedAmount) ? 0 : parsedAmount,
-          merchant_name: ai.merchant_name || 'Desconhecido',
+          merchant_name: merchantName || 'Desconhecido',
           category: ai.smart_category || 'Outros',
           currency: 'BRL',
           transaction_date: parsedDate,
@@ -1339,7 +1348,7 @@ function ExpenseTracker() {
                       {/* Text */}
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-text-primary">
-                          Bem-vindo ao UNiDoc, {fireUser.name.split(' ')[0] || 'usuário'}! 👋
+                          Bem-vindo ao SHARECOM, {fireUser.name.split(' ')[0] || 'usuário'}! 👋
                         </p>
                         <p className="mt-0.5 text-xs text-text-secondary leading-relaxed">
                           Gere dados de demonstração para explorar todas as funcionalidades antes de adicionar seus próprios recibos. Isso pode ser feito apenas <span className="font-semibold text-purple-400">uma vez</span>.

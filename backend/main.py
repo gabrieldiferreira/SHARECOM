@@ -449,16 +449,38 @@ async def process_ata(
         finally:
             if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
 
+        is_receipt = extracted_data.get("is_financial_receipt", True)
+        extracted_amount = extracted_data.get("total_amount") if extracted_data.get("total_amount") is not None else 0.0
+        try:
+            extracted_amount = float(extracted_amount)
+        except (TypeError, ValueError):
+            extracted_amount = 0.0
+
+        merchant_name = str(extracted_data.get("merchant_name") or "").strip()
+        extraction_failed = (
+            is_receipt
+            and extracted_amount <= 0
+            and (
+                not merchant_name
+                or "OCR Falhou" in merchant_name
+                or merchant_name.lower().startswith("erro")
+            )
+        )
+        if extraction_failed:
+            raise HTTPException(
+                status_code=422,
+                detail="Não foi possível ler o comprovante. Envie uma imagem mais nítida ou cadastre a transação manualmente."
+            )
+
         date_val = extracted_data.get("transaction_date")
         date_obj = schemas.datetime.now()
         if date_val:
             try: date_obj = schemas.datetime.fromisoformat(date_val.replace(" ", "T"))
             except: pass
 
-        is_receipt = extracted_data.get("is_financial_receipt", True)
         category = extracted_data.get("smart_category") or ("Informativo" if not is_receipt else "Outros")
-        amount = extracted_data.get("total_amount") if is_receipt and extracted_data.get("total_amount") is not None else 0.0
-        merchant = extracted_data.get("merchant_name") or ("Link" if not is_receipt else "Desconhecido")
+        amount = extracted_amount if is_receipt else 0.0
+        merchant = merchant_name or ("Link" if not is_receipt else "Desconhecido")
 
         tx_id = extracted_data.get("transaction_id")
         if tx_id and str(tx_id).strip():

@@ -182,10 +182,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         const ai = data.ai_data || {};
+        const rawAmount = typeof ai.total_amount === "string"
+          ? parseFloat(ai.total_amount.replace(/[^\d.,]/g, "").replace(",", "."))
+          : Number(ai.total_amount) || 0;
+        const parsedAmount = Number.isFinite(rawAmount) ? rawAmount : 0;
+        const merchantName = String(ai.merchant_name || "").trim();
+
+        if (merchantName.includes("Check API Key")) {
+          alert("O backend está rodando, mas a GEMINI_API_KEY está ausente ou inválida. Por favor, configure o arquivo backend/.env");
+          return;
+        }
+        if (merchantName.includes("Limite Gemini atingido")) {
+          alert("Limite de uso da API Gemini atingido. Aguarde o reset da cota ou troque para um plano com mais capacidade.");
+          return;
+        }
+        const ocrFailed = merchantName.includes("OCR Falhou") || merchantName.toLowerCase().startsWith("erro");
+        if (parsedAmount <= 0 && ocrFailed) {
+          alert("Não foi possível ler o comprovante. Envie uma imagem mais nítida ou cadastre manualmente.");
+          return;
+        }
 
         const newTx: TransactionEntity = {
-          total_amount: ai.total_amount || 0,
-          merchant_name: ai.merchant_name || 'Desconhecido',
+          total_amount: parsedAmount,
+          merchant_name: merchantName || 'Desconhecido',
           category: ai.smart_category || 'Outros',
           currency: 'BRL',
           transaction_date: ai.transaction_date || new Date().toISOString(),
@@ -200,15 +219,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           is_synced: false,
           note: data.note || undefined
         };
-
-        if (ai.merchant_name && ai.merchant_name.includes("Check API Key")) {
-          alert("O backend está rodando, mas a GEMINI_API_KEY está ausente ou inválida. Por favor, configure o arquivo backend/.env");
-          return;
-        }
-        if (ai.merchant_name && ai.merchant_name.includes("Limite Gemini atingido")) {
-          alert("Limite de uso da API Gemini atingido. Aguarde o reset da cota ou troque para um plano com mais capacidade.");
-          return;
-        }
 
         console.log("SHARECOM: Salvando localmente...");
         await addTransaction(newTx);
