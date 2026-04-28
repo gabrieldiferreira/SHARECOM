@@ -1,0 +1,8 @@
+venv/
+.next/
+__pycache__/
+*.pyc
+uploads/
+*.db
+*.log
+nohup.out

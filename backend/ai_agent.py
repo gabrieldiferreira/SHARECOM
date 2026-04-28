@@ -1,7 +1,6 @@
 import os
 import re
 import fitz # PyMuPDF
-from PIL import Image
 import io
 from dotenv import load_dotenv
 
@@ -10,19 +9,6 @@ load_dotenv(override=True)
 
 PDF_MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "2"))
 PDF_MAX_CHARS = int(os.environ.get("PDF_MAX_CHARS", "4000"))
-
-EASYOCR_READER = None
-def get_easyocr_reader():
-    global EASYOCR_READER
-    if EASYOCR_READER is None:
-        try:
-            import warnings
-            warnings.filterwarnings("ignore", category=UserWarning, module="torch.utils.data.dataloader")
-            import easyocr
-            EASYOCR_READER = easyocr.Reader(['pt', 'en'], gpu=False)
-        except Exception as e:
-            print(f"Failed to initialize EasyOCR: {e}")
-    return EASYOCR_READER
 
 def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]:
     ext = extension.lower()
@@ -48,20 +34,12 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
     return "image", file_bytes
 
 def _extract_text_easyocr(image_bytes: bytes) -> str:
-    print("Iniciando extração via EasyOCR local...")
-    reader = get_easyocr_reader()
-    if not reader:
-        return ""
+    print("Iniciando extração via RapidOCR local...")
     try:
-        import numpy as np
-        # Melhora o contraste da imagem antes de ler
-        img = Image.open(io.BytesIO(image_bytes)).convert("L") # Escala de cinza
-        result = reader.readtext(np.array(img), detail=0, paragraph=True)
-        text = "\n".join(result)
-        print(f"--- DEBUG OCR ---\n{text}\n-----------------")
-        return text
+        from ocr_processor import _extract_text_rapidocr
+        return _extract_text_rapidocr(image_bytes)
     except Exception as e:
-        print(f"EasyOCR Failed: {e}")
+        print(f"RapidOCR Failed: {e}")
         return ""
 
 def extract_transaction_data(file_bytes: bytes, extension: str) -> dict:

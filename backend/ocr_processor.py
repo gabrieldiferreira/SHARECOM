@@ -1,7 +1,6 @@
 import os
 import re
 import fitz  # PyMuPDF
-from PIL import Image
 import io
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
@@ -11,19 +10,19 @@ load_dotenv(override=True)
 
 PDF_MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "2"))
 PDF_MAX_CHARS = int(os.environ.get("PDF_MAX_CHARS", "4000"))
+OCR_CONFIDENCE_THRESHOLD = float(os.environ.get("OCR_CONFIDENCE_THRESHOLD", "0.45"))
 
-EASYOCR_READER = None
-def get_easyocr_reader():
-    global EASYOCR_READER
-    if EASYOCR_READER is None:
+RAPIDOCR_ENGINE = None
+def get_rapidocr_engine():
+    global RAPIDOCR_ENGINE
+    if RAPIDOCR_ENGINE is None:
         try:
-            import warnings
-            warnings.filterwarnings("ignore", category=UserWarning, module="torch.utils.data.dataloader")
-            import easyocr
-            EASYOCR_READER = easyocr.Reader(['pt', 'en'], gpu=False)
+            from rapidocr import RapidOCR
+            print("DEBUG: Inicializando RapidOCR ONNX...", flush=True)
+            RAPIDOCR_ENGINE = RapidOCR()
         except Exception as e:
-            print(f"Failed to initialize EasyOCR: {e}")
-    return EASYOCR_READER
+            print(f"Failed to initialize RapidOCR: {e}", flush=True)
+    return RAPIDOCR_ENGINE
 
 
 # =============================================================================
@@ -32,7 +31,7 @@ def get_easyocr_reader():
 
 def _preprocess_image(image_bytes: bytes) -> bytes:
     """
-    Full OpenCV preprocessing pipeline applied before EasyOCR:
+    Full OpenCV preprocessing pipeline applied as a fallback before RapidOCR:
     1. Upscale to at least 2400px on longest side (3x sharpness gain)
     2. Grayscale conversion
     3. Shadow / uneven illumination removal via large-kernel background subtraction
@@ -91,7 +90,7 @@ def _preprocess_image(image_bytes: bytes) -> bytes:
         # 6. Deskew — detect dominant text angle and rotate to horizontal
         blended = _deskew(blended)
 
-        # Encode back to JPEG bytes for EasyOCR
+        # Encode back to JPEG bytes for RapidOCR
         _, encoded = cv2.imencode('.jpg', blended, [cv2.IMWRITE_JPEG_QUALITY, 97])
         result_bytes = encoded.tobytes()
         print(f"DEBUG: [preprocess] Done. Output size: {len(result_bytes)} bytes", flush=True)
@@ -232,72 +231,131 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
         svg_text = _extract_svg_text(file_bytes)
         return "pdf_text", svg_text
 
-    # All image types — run through preprocessing pipeline
+    # All image types — OCR will try raw first, then preprocessed fallback.
     return "image", file_bytes
 
 
 # =============================================================================
-# EASYOCR — with preprocessing applied before inference
+# RAPIDOCR — PaddleOCR ONNX runtime with optional preprocessing fallback
 # =============================================================================
 
-def _extract_text_easyocr(image_bytes: bytes, file_path: str = None) -> str:
-    """
-    Applies OpenCV preprocessing then runs EasyOCR.
-    Preprocessing is applied whether reading from disk or from bytes.
-    """
-    reader = get_easyocr_reader()
-    if not reader:
-        print("DEBUG: ERRO - Falha ao obter o reader do EasyOCR.")
-        return ""
+def _decode_image_for_ocr(image_bytes: bytes):
     try:
+        import cv2
         import numpy as np
 
-        # Always preprocess — load raw, preprocess, then pass array to EasyOCR
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+    except Exception as e:
+        print(f"DEBUG: Falha ao decodificar imagem para OCR: {e}", flush=True)
+        return None
+
+
+def _rapidocr_to_lines(result) -> tuple[list[tuple[float, float, str, float]], float]:
+    txts_raw = getattr(result, "txts", None)
+    scores_raw = getattr(result, "scores", None)
+    boxes_raw = getattr(result, "boxes", None)
+
+    txts = list(txts_raw) if txts_raw is not None else []
+    scores = list(scores_raw) if scores_raw is not None else []
+    boxes = list(boxes_raw) if boxes_raw is not None else []
+
+    lines: list[tuple[float, float, str, float]] = []
+    accepted_scores: list[float] = []
+
+    for idx, text in enumerate(txts):
+        text = str(text).strip()
+        if not text:
+            continue
+
+        score = float(scores[idx]) if idx < len(scores) and scores[idx] is not None else 1.0
+        if score < OCR_CONFIDENCE_THRESHOLD:
+            continue
+
+        box = boxes[idx] if idx < len(boxes) else None
+        try:
+            xs = [float(point[0]) for point in box]
+            ys = [float(point[1]) for point in box]
+            y_pos = sum(ys) / len(ys)
+            x_pos = sum(xs) / len(xs)
+        except Exception:
+            y_pos = float(idx)
+            x_pos = 0.0
+
+        lines.append((y_pos, x_pos, text, score))
+        accepted_scores.append(score)
+
+    avg_score = sum(accepted_scores) / len(accepted_scores) if accepted_scores else 0.0
+    return lines, avg_score
+
+
+def _run_rapidocr(engine, image_input, label: str) -> tuple[str, float, int]:
+    try:
+        result = engine(image_input)
+        lines, avg_score = _rapidocr_to_lines(result)
+        lines.sort(key=lambda item: (round(item[0] / 12) * 12, item[1]))
+        text = "\n".join(line[2] for line in lines)
+        print(
+            f"DEBUG: RapidOCR {label} concluído. Caracteres: {len(text)}, "
+            f"Blocos: {len(lines)}, Confiança média: {avg_score:.2f}",
+            flush=True
+        )
+        return text, avg_score, len(lines)
+    except Exception as e:
+        print(f"DEBUG: ERRO no RapidOCR {label}: {e}", flush=True)
+        return "", 0.0, 0
+
+
+def _extract_text_rapidocr(image_bytes: bytes, file_path: str = None) -> str:
+    """
+    Runs RapidOCR/PaddleOCR ONNX. It tries the original image first because
+    PaddleOCR generally handles natural document photos better than binarized
+    images, then falls back to the existing preprocessing pipeline when needed.
+    """
+    engine = get_rapidocr_engine()
+    if not engine:
+        print("DEBUG: ERRO - Falha ao obter o engine do RapidOCR.")
+        return ""
+
+    try:
         if file_path and os.path.exists(file_path):
-            print(f"DEBUG: EasyOCR lendo de arquivo: {file_path}")
+            print(f"DEBUG: RapidOCR lendo de arquivo: {file_path}", flush=True)
             with open(file_path, "rb") as f:
                 raw_bytes = f.read()
         else:
-            print(f"DEBUG: EasyOCR lendo de bytes ({len(image_bytes)} bytes)")
+            print(f"DEBUG: RapidOCR lendo de bytes ({len(image_bytes)} bytes)", flush=True)
             raw_bytes = image_bytes
 
-        # Apply full preprocessing pipeline
+        raw_img = _decode_image_for_ocr(raw_bytes)
+        raw_text, raw_score, raw_blocks = _run_rapidocr(engine, raw_img if raw_img is not None else raw_bytes, "raw")
+
+        if len(raw_text.strip()) >= 20 and raw_blocks >= 3:
+            print(f"--- DEBUG OCR (RapidOCR raw) ---\n{raw_text}\n-----------------", flush=True)
+            return raw_text
+
         processed_bytes = _preprocess_image(raw_bytes)
-
-        img = Image.open(io.BytesIO(processed_bytes))
-        img_array = np.array(img)
-
-        # EasyOCR parameters tuned for financial receipts:
-        # - detail=1 to get confidence scores for debugging
-        # - paragraph=True groups text into coherent blocks
-        # - contrast_ths & adjust_contrast help with low-contrast images
-        results = reader.readtext(
-            img_array,
-            detail=1,
-            paragraph=False,
-            contrast_ths=0.1,
-            adjust_contrast=0.5,
+        processed_img = _decode_image_for_ocr(processed_bytes)
+        processed_text, processed_score, processed_blocks = _run_rapidocr(
+            engine,
+            processed_img if processed_img is not None else processed_bytes,
+            "preprocessado"
         )
 
-        # Filter by confidence threshold — discard low-confidence OCR fragments
-        CONFIDENCE_THRESHOLD = 0.25
-        accepted = [(bbox, txt, conf) for bbox, txt, conf in results if conf >= CONFIDENCE_THRESHOLD]
-        rejected = len(results) - len(accepted)
+        if (processed_blocks, processed_score, len(processed_text)) > (raw_blocks, raw_score, len(raw_text)):
+            print(f"--- DEBUG OCR (RapidOCR preprocessado) ---\n{processed_text}\n-----------------", flush=True)
+            return processed_text
 
-        if rejected > 0:
-            print(f"DEBUG: EasyOCR — {rejected} fragments below confidence {CONFIDENCE_THRESHOLD} discarded", flush=True)
-
-        # Sort top-to-bottom by Y coordinate of bounding box centroid (reading order)
-        accepted.sort(key=lambda r: (r[0][0][1] + r[0][2][1]) / 2)
-
-        text = "\n".join(txt for _, txt, _ in accepted)
-        print(f"--- DEBUG OCR ---\n{text}\n-----------------")
-        print(f"DEBUG: EasyOCR concluído. Caracteres: {len(text)}, Blocos: {len(accepted)}")
-        return text
+        print(f"--- DEBUG OCR (RapidOCR raw fallback) ---\n{raw_text}\n-----------------", flush=True)
+        return raw_text
 
     except Exception as e:
-        print(f"DEBUG: ERRO no EasyOCR: {e}")
+        print(f"DEBUG: ERRO no RapidOCR: {e}", flush=True)
         return ""
+
+
+def _extract_text_easyocr(image_bytes: bytes, file_path: str = None) -> str:
+    """Backward-compatible alias for legacy tests/scripts."""
+    return _extract_text_rapidocr(image_bytes, file_path=file_path)
 
 
 # =============================================================================
@@ -326,7 +384,7 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
 
         raw_text = ""
         if input_kind == "image":
-            raw_text = _extract_text_easyocr(prepared_input, file_path=file_path)
+            raw_text = _extract_text_rapidocr(prepared_input, file_path=file_path)
         elif input_kind == "pdf_text":
             raw_text = prepared_input
 

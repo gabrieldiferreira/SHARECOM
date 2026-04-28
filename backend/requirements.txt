@@ -13,14 +13,11 @@ firebase-admin
 PyJWT
 cryptography
 
-# OCR & Processing (Suas bibliotecas originais)
-easyocr
-torch
-torchvision
+# OCR & Processing
+rapidocr
+onnxruntime
 PyMuPDF
 Pillow
-pytesseract
-python-bidi==0.4.2
 opencv-python-headless
 
 # Utilities
