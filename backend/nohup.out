@@ -8,3 +8,13 @@ INFO:     Shutting down
 INFO:     Waiting for application shutdown.
 INFO:     Application shutdown complete.
 INFO:     Finished server process [548538]
+INFO:     Started server process [58573]
+INFO:     Waiting for application startup.
+MIGRAÇÃO: Removendo índice global incorreto: ix_expenses_transaction_id
+MIGRAÇÃO: Índice simples ix_expenses_transaction_id garantido.
+MIGRAÇÃO: Verificação concluída com sucesso.
+CACHE WARM-UP | Desabilitado para garantir isolamento por UID.
+INFO:     Application startup complete.
+ERROR:    [Errno 98] error while attempting to bind on address ('0.0.0.0', 8000): address already in use
+INFO:     Waiting for application shutdown.
+INFO:     Application shutdown complete.
