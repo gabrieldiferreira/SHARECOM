@@ -466,6 +466,25 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
                 break
 
         if not found_date:
+            compact_month_match = re.search(
+                r'\b(\d{1,2})(JAN|FEV|MAR|ABR|MAI|JUN|JUL|AGO|SET|OUT|NOV|DEZ)(\d{4})\b',
+                raw_text, re.IGNORECASE
+            )
+            if compact_month_match:
+                day = compact_month_match.group(1).zfill(2)
+                month_str = compact_month_match.group(2).lower()
+                year = compact_month_match.group(3)
+                months = {
+                    "jan": "01", "fev": "02", "mar": "03", "abr": "04",
+                    "mai": "05", "jun": "06", "jul": "07", "ago": "08",
+                    "set": "09", "out": "10", "nov": "11", "dez": "12"
+                }
+                month = months[month_str]
+                fallback_data["transaction_date"] = f"{year}-{month}-{day}T12:00:00"
+                print(f"DEBUG: RegEx Data encontrada (Compacta): {fallback_data['transaction_date']}", flush=True)
+                found_date = True
+
+        if not found_date:
             date_match = re.search(
                 r'(\d{2})\s+(?:de\s+)?([A-Za-z]{3,10})\s+(?:de\s+)?(\d{4})',
                 raw_text, re.IGNORECASE
@@ -477,9 +496,10 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
                     "mai": "05", "jun": "06", "jul": "07", "ago": "08",
                     "set": "09", "out": "10", "nov": "11", "dez": "12"
                 }
-                month = months.get(month_str, "01")
-                fallback_data["transaction_date"] = f"{year}-{month}-{day}T12:00:00"
-                print(f"DEBUG: RegEx Data encontrada (Extenso): {fallback_data['transaction_date']}", flush=True)
+                month = months.get(month_str)
+                if month:
+                    fallback_data["transaction_date"] = f"{year}-{month}-{day}T12:00:00"
+                    print(f"DEBUG: RegEx Data encontrada (Extenso): {fallback_data['transaction_date']}", flush=True)
 
         # 4. NOME DO DESTINATÁRIO / MERCHANT
         name_match = re.search(
@@ -502,13 +522,17 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
                     break
 
         # 5. ID DE TRANSAÇÃO / AUTENTICAÇÃO
-        auth_match = re.search(
-            r'(?:ID|E2E|AUTENTICA[CÇ][AÃ]O|CONTROLE|DOC|N[ÚU]MERO|ENDTOEND)[:\s-]*\n?([A-Z0-9]{15,60})',
-            raw_text, re.IGNORECASE
-        )
-        if auth_match:
-            fallback_data["transaction_id"] = auth_match.group(1).strip()
-            print(f"DEBUG: RegEx ID encontrado: {fallback_data['transaction_id']}", flush=True)
+        auth_patterns = [
+            r'(?:ID\s*da\s*transa[cç][aã]o|ID\s*datransacao|IDdatransacao|E2E|ENDTOEND)[:\s-]*\n?\s*([A-Za-z0-9]{15,80})',
+            r'(?:AUTENTICA[CÇ][AÃ]O|AUTENTICACAO|CONTROLE)[:\s-]*\n?\s*([A-Za-z0-9]{20,80})',
+            r'(?:DOCUMENTO|DOC)[:\s-]*\n?\s*([0-9]{5,30})',
+        ]
+        for pattern in auth_patterns:
+            auth_match = re.search(pattern, raw_text, re.IGNORECASE)
+            if auth_match:
+                fallback_data["transaction_id"] = auth_match.group(1).strip()
+                print(f"DEBUG: RegEx ID encontrado: {fallback_data['transaction_id']}", flush=True)
+                break
 
         # 6. CPF / CNPJ (inclusive mascarados)
         cpf_pattern = r'((?:\d{3}|\*{3})[\.\s]?(?:\d{3}|\*{3})[\.\s]?(?:\d{3}|\*{3})[\-\s]?(?:\d{2}|\*{2})|\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[/\s]?\d{4}[\-\s]?\d{2})'
