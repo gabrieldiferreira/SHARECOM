@@ -1,7 +1,7 @@
 import { create } from 'zustand';
-import { TransactionEntity, getDB } from '../lib/db';
+import { TransactionEntity, getDB, TRANSACTION_CACHE_OWNER_KEY } from '../lib/db';
 import { getApiUrl } from '../lib/api';
-import { authenticatedFetch } from '../lib/auth';
+import { authenticatedFetch, getCurrentFirebaseUser } from '../lib/auth';
 
 interface TransactionState {
   transactions: TransactionEntity[];
@@ -21,7 +21,82 @@ interface TransactionState {
   emptyTrash: () => Promise<void>;
   clearAllData: () => Promise<void>;
   syncWithBackend: () => Promise<void>;
+  resetLocalState: () => void;
   setPendingNote: (note: string) => void;
+}
+
+const emptyTransactionData = {
+  transactions: [],
+  trashTransactions: [],
+  totalInflow: 0,
+  totalOutflow: 0,
+  balance: 0,
+};
+
+type TransactionDB = NonNullable<Awaited<ReturnType<typeof getDB>>>;
+
+let loadedOwnerUid: string | null = null;
+
+async function getCurrentOwnerUid() {
+  const user = await getCurrentFirebaseUser();
+  return user?.uid ?? null;
+}
+
+function getStoredOwnerUid() {
+  if (typeof window === 'undefined') return null;
+
+  try {
+    return window.localStorage.getItem(TRANSACTION_CACHE_OWNER_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function setStoredOwnerUid(ownerUid: string) {
+  if (typeof window === 'undefined') return;
+
+  try {
+    window.localStorage.setItem(TRANSACTION_CACHE_OWNER_KEY, ownerUid);
+  } catch {}
+}
+
+async function deleteLocalTransactionIds(db: TransactionDB, ids: number[]) {
+  if (ids.length === 0) return;
+
+  const txSet = db.transaction('transactions', 'readwrite');
+  for (const id of ids) {
+    await txSet.store.delete(id);
+  }
+  await txSet.done;
+}
+
+async function ensureOwnerCache(db: TransactionDB, ownerUid: string) {
+  const storedOwnerUid = getStoredOwnerUid();
+  if (storedOwnerUid && storedOwnerUid !== ownerUid) {
+    await db.clear('transactions');
+    setStoredOwnerUid(ownerUid);
+    return;
+  }
+
+  setStoredOwnerUid(ownerUid);
+
+  const allTransactions = await db.getAll('transactions');
+  const staleIds = allTransactions
+    .filter((tx) => tx.id !== undefined && tx.owner_uid !== ownerUid)
+    .map((tx) => tx.id as number);
+
+  await deleteLocalTransactionIds(db, staleIds);
+}
+
+async function getTransactionsForOwner(db: TransactionDB, ownerUid: string) {
+  const txs = await db.getAllFromIndex('transactions', 'by-owner', ownerUid);
+
+  return txs.sort((a, b) => {
+    const dateA = new Date(a.transaction_date).getTime();
+    const dateB = new Date(b.transaction_date).getTime();
+    if (Number.isNaN(dateA) || Number.isNaN(dateB)) return 0;
+    return dateB - dateA;
+  });
 }
 
 export const useTransactionStore = create<TransactionState>((set, get) => ({
@@ -37,6 +112,17 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     console.log('📦 fetchTransactions called');
     set({ isLoading: true });
     try {
+      const ownerUid = await getCurrentOwnerUid();
+      if (!ownerUid) {
+        loadedOwnerUid = null;
+        set({ ...emptyTransactionData, isLoading: false });
+        return;
+      }
+
+      if (loadedOwnerUid !== ownerUid) {
+        set({ ...emptyTransactionData, isLoading: true });
+      }
+
       const db = await getDB();
       if (!db) {
         console.log('❌ No IndexedDB available');
@@ -44,10 +130,12 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         return;
       }
 
+      await ensureOwnerCache(db, ownerUid);
+
       console.log('📊 Getting transactions from IndexedDB...');
-      const txs = await db.getAllFromIndex('transactions', 'by-date');
+      const txs = await getTransactionsForOwner(db, ownerUid);
       console.log(`📊 Found ${txs.length} transactions`);
-      const sorted = txs.reverse();
+      const sorted = txs;
       
       // Purge logic: Remove items older than 30 days in trash
       const now = new Date();
@@ -102,25 +190,32 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         totalOutflow: outflow,
         balance: inflow - outflow
       });
+      loadedOwnerUid = ownerUid;
     } catch (error) {
       console.error("Failed to fetch local transactions:", error);
-      set({ isLoading: false });
+      set({ ...emptyTransactionData, isLoading: false });
       throw error;
     }
   },
 
   addTransaction: async (tx: TransactionEntity): Promise<{ success: boolean, isDuplicate: boolean }> => {
+    const ownerUid = await getCurrentOwnerUid();
+    if (!ownerUid) return { success: false, isDuplicate: false };
+
     const db = await getDB();
     if (!db) return { success: false, isDuplicate: false };
 
     try {
+      await ensureOwnerCache(db, ownerUid);
+
       const txWithScanDate = { 
         ...tx, 
+        owner_uid: ownerUid,
         scanned_at: tx.scanned_at || new Date().toISOString() 
       };
 
       if (txWithScanDate.receipt_hash) {
-        const existing = await db.getFromIndex('transactions', 'by-hash', txWithScanDate.receipt_hash);
+        const existing = await db.getFromIndex('transactions', 'by-owner-hash', [ownerUid, txWithScanDate.receipt_hash]);
         if (existing?.id) {
           // SUBSTIUIÇÃO DO MAIS ANTIGO: 
           // O 'put' com o ID existente sobrescreve os dados antigos com a nova extração
@@ -128,6 +223,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
             ...existing,
             ...txWithScanDate,
             id: existing.id,
+            owner_uid: ownerUid,
             scanned_at: existing.scanned_at || txWithScanDate.scanned_at, // Preserva a data de escaneamento original
             deleted_at: undefined, // Restaura se estava na lixeira
             is_synced: false // Força nova sincronização se houve mudança
@@ -150,16 +246,21 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   moveToTrash: async (id: number) => {
+    const ownerUid = await getCurrentOwnerUid();
+    if (!ownerUid) return;
+
     const db = await getDB();
     if (!db) return;
+
+    await ensureOwnerCache(db, ownerUid);
     
     const tx = await db.get('transactions', id);
-    if (tx) {
+    if (tx && tx.owner_uid === ownerUid) {
       const deletedAt = new Date().toISOString();
       
       // ECOSSISTEMA INTERLIGADO: Se tiver transaction_id, deleta todas as notas com esse mesmo ID
       if (tx.transaction_id) {
-        const allTxs = await db.getAll('transactions');
+        const allTxs = await getTransactionsForOwner(db, ownerUid);
         const linkedTxs = allTxs.filter(t => t.transaction_id === tx.transaction_id && t.id);
         
         const txSet = db.transaction('transactions', 'readwrite');
@@ -186,14 +287,19 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   restoreFromTrash: async (id: number) => {
+    const ownerUid = await getCurrentOwnerUid();
+    if (!ownerUid) return;
+
     const db = await getDB();
     if (!db) return;
+
+    await ensureOwnerCache(db, ownerUid);
     
     const tx = await db.get('transactions', id);
-    if (tx) {
+    if (tx && tx.owner_uid === ownerUid) {
       // Sincronismo de ID na restauração também
       if (tx.transaction_id) {
-        const allTxs = await db.getAll('transactions');
+        const allTxs = await getTransactionsForOwner(db, ownerUid);
         const linkedTxs = allTxs.filter(t => t.transaction_id === tx.transaction_id && t.id);
           
         const txSet = db.transaction('transactions', 'readwrite');
@@ -219,12 +325,17 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   permanentDelete: async (id: number) => {
+    const ownerUid = await getCurrentOwnerUid();
+    if (!ownerUid) return;
+
     const db = await getDB();
     if (!db) return;
+
+    await ensureOwnerCache(db, ownerUid);
     
     const tx = await db.get('transactions', id);
-    if (tx && tx.transaction_id) {
-       const allTxs = await db.getAll('transactions');
+    if (tx && tx.owner_uid === ownerUid && tx.transaction_id) {
+       const allTxs = await getTransactionsForOwner(db, ownerUid);
        const linkedIds = allTxs
          .filter(t => t.transaction_id === tx.transaction_id && t.id)
          .map(t => t.id as number);
@@ -233,7 +344,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
           try { await authenticatedFetch(getApiUrl(`/expenses/${lId}?permanent=true`), { method: 'DELETE' }); } catch (e) {}
           await db.delete('transactions', lId);
        }
-    } else {
+    } else if (tx && tx.owner_uid === ownerUid) {
        try { await authenticatedFetch(getApiUrl(`/expenses/${id}?permanent=true`), { method: 'DELETE' }); } catch (e) {}
        await db.delete('transactions', id);
     }
@@ -242,6 +353,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   emptyTrash: async () => {
+    const ownerUid = await getCurrentOwnerUid();
+    if (!ownerUid) return;
+
     // 1. Chama o endpoint otimizado no backend primeiro
     try {
       await authenticatedFetch(getApiUrl("/expenses/clear-all?only_trash=true"), {
@@ -255,7 +369,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     const db = await getDB();
     if (!db) return;
 
-    const txs = await db.getAll('transactions');
+    await ensureOwnerCache(db, ownerUid);
+
+    const txs = await getTransactionsForOwner(db, ownerUid);
     const idsToDelete = txs
       .filter(tx => tx.deleted_at && tx.id)
       .map(tx => tx.id as number);
@@ -272,13 +388,26 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   },
 
   clearAllData: async () => {
+    const ownerUid = await getCurrentOwnerUid();
+    if (!ownerUid) {
+      loadedOwnerUid = null;
+      set({ ...emptyTransactionData, isLoading: false });
+      return;
+    }
+
     try {
       await authenticatedFetch(getApiUrl("/expenses/clear-all"), { method: 'POST' });
     } catch (e) {}
 
     const db = await getDB();
     if (db) {
-      await db.clear('transactions');
+      await ensureOwnerCache(db, ownerUid);
+      const txs = await getTransactionsForOwner(db, ownerUid);
+      const idsToDelete = txs
+        .filter(tx => tx.id !== undefined)
+        .map(tx => tx.id as number);
+
+      await deleteLocalTransactionIds(db, idsToDelete);
       get().fetchTransactions();
     }
   },
@@ -286,18 +415,57 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   syncWithBackend: async () => {
     console.log('🔄 syncWithBackend called');
     try {
+      const ownerUid = await getCurrentOwnerUid();
+      if (!ownerUid) {
+        loadedOwnerUid = null;
+        set({ ...emptyTransactionData, isLoading: false });
+        return;
+      }
+
       const res = await authenticatedFetch(getApiUrl(`/expenses?include_deleted=true&t=${Date.now()}`), { cache: "no-store" });
       console.log('🌐 Backend response status:', res.status);
       if (res.ok) {
         const remoteData = await res.json();
         console.log(`📥 Received ${remoteData.length} transactions from backend`);
+        const currentUser = await getCurrentFirebaseUser(1000);
+        if (currentUser?.uid !== ownerUid) {
+          console.warn("⚠️ Sync descartado: usuário mudou durante a sincronização.");
+          return;
+        }
+
         const db = await getDB();
         if (db) {
           try {
+            await ensureOwnerCache(db, ownerUid);
+
             const txSet = db.transaction('transactions', 'readwrite');
+            const remoteIds = new Set<number>();
+
             for (const item of remoteData) {
+              const remoteId = Number(item.id);
+              if (Number.isFinite(remoteId)) {
+                remoteIds.add(remoteId);
+              }
+            }
+
+            const existingLocal = await txSet.store.index('by-owner').getAll(ownerUid);
+            for (const localTx of existingLocal) {
+              if (
+                localTx.id !== undefined &&
+                localTx.is_synced !== false &&
+                !remoteIds.has(localTx.id)
+              ) {
+                await txSet.store.delete(localTx.id);
+              }
+            }
+
+            for (const item of remoteData) {
+              const remoteId = Number(item.id);
+              if (!Number.isFinite(remoteId)) continue;
+
               const merged: TransactionEntity = {
-                id: item.id,
+                id: remoteId,
+                owner_uid: ownerUid,
                 total_amount: Number(item.amount) || 0,
                 currency: 'BRL',
                 transaction_date: item.date,
@@ -315,7 +483,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
                 deleted_at: item.deleted_at || undefined,
               };
 
-              await txSet.store.delete(item.id);
+              await txSet.store.delete(remoteId);
               await txSet.store.put(merged);
             }
             await txSet.done;
@@ -331,5 +499,10 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
     }
   },
   
+  resetLocalState: () => {
+    loadedOwnerUid = null;
+    set({ ...emptyTransactionData, isLoading: false });
+  },
+
   setPendingNote: (note: string) => set({ pendingNote: note })
 }));

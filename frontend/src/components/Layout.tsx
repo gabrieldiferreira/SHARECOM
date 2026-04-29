@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
 import { useTransactionStore } from "../store/useTransactionStore";
-import { TransactionEntity } from "../lib/db";
+import { TransactionEntity, clearLocalTransactionCache } from "../lib/db";
 import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 
@@ -271,6 +271,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         }
 
         const newTx: TransactionEntity = {
+          id: data.database_id,
           total_amount: parsedAmount,
           merchant_name: merchantName || 'Desconhecido',
           category: ai.smart_category || 'Outros',
@@ -283,8 +284,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           transaction_id: ai.transaction_id || undefined,
           masked_cpf: ai.masked_cpf || undefined,
           needs_manual_review: !!ai.needs_manual_review,
-          receipt_hash: data.filename || undefined,
-          is_synced: false,
+          receipt_hash: data.receipt_hash || undefined,
+          is_synced: true,
           note: data.note || undefined
         };
 
@@ -367,6 +368,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
 
     try {
+      await clearLocalTransactionCache();
       await signOut(auth);
       // Forçar redirecionamento manual após logout
       window.location.href = "/login";

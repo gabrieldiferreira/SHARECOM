@@ -495,21 +495,56 @@ function ExpenseTracker() {
 
   const handleManualAdd = async () => {
      if (!manualTx.merchant_name || !manualTx.total_amount) return;
-     const newTx: TransactionEntity = {
-        total_amount: parseFloat(manualTx.total_amount),
-        merchant_name: manualTx.merchant_name,
-        category: manualTx.category,
-        currency: 'BRL',
-        transaction_date: new Date().toISOString(),
-        transaction_type: manualTx.transaction_type,
-        payment_method: manualTx.payment_method,
-        is_synced: false,
-        note: manualTx.note || undefined
-     };
-     await addTransaction(newTx);
-     haptics.success();
-     setShowManualModal(false);
-     setManualTx({ merchant_name: "", total_amount: "", category: "Outros", transaction_type: "Outflow", payment_method: "Dinheiro", note: "" });
+     const amount = parseFloat(manualTx.total_amount);
+     const transactionDate = new Date().toISOString();
+
+     try {
+       const response = await authenticatedFetch(getApiUrl("/expenses"), {
+         method: "POST",
+         headers: { "Content-Type": "application/json" },
+         body: JSON.stringify({
+           amount,
+           merchant: manualTx.merchant_name,
+           category: manualTx.category,
+           transaction_type: manualTx.transaction_type,
+           payment_method: manualTx.payment_method,
+           note: manualTx.note || undefined,
+           date: transactionDate,
+         }),
+       });
+
+       if (!response.ok) {
+         throw new Error(await response.text());
+       }
+
+       const saved = await response.json();
+       const newTx: TransactionEntity = {
+          id: Number(saved.id) || undefined,
+          total_amount: Number(saved.amount) || amount,
+          merchant_name: saved.merchant || manualTx.merchant_name,
+          category: saved.category || manualTx.category,
+          currency: 'BRL',
+          transaction_date: saved.date || transactionDate,
+          transaction_type: saved.transaction_type || manualTx.transaction_type,
+          payment_method: saved.payment_method || manualTx.payment_method,
+          description: saved.description || undefined,
+          receipt_hash: saved.receipt || undefined,
+          is_synced: true,
+          note: saved.note || manualTx.note || undefined
+       };
+       const result = await addTransaction(newTx);
+       if (!result.success) {
+         await syncWithBackend();
+       }
+
+       haptics.success();
+       setShowManualModal(false);
+       setManualTx({ merchant_name: "", total_amount: "", category: "Outros", transaction_type: "Outflow", payment_method: "Dinheiro", note: "" });
+     } catch (error) {
+       console.error("Erro ao cadastrar transação manual:", error);
+       haptics.error();
+       showToast("Não foi possível salvar a transação no Firebase.", "error");
+     }
   };
 
   const handleFileSelection = (e: React.ChangeEvent<HTMLInputElement>) => {

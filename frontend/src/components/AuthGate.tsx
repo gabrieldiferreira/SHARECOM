@@ -4,6 +4,8 @@ import { useEffect, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { onAuthStateChanged, User, getRedirectResult } from "firebase/auth";
 import { auth, hasFirebaseConfig } from "@/lib/firebase";
+import { clearLocalTransactionCache, TRANSACTION_CACHE_OWNER_KEY } from "@/lib/db";
+import { useTransactionStore } from "@/store/useTransactionStore";
 
 const PUBLIC_ROUTES = new Set(["/login", "/auth/bridge", "/reset-password"]);
 const AUTH_ALLOWED_PUBLIC_ROUTES = new Set(["/reset-password"]);
@@ -14,6 +16,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   const [isInitializing, setIsInitializing] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const initialized = useRef(false);
+  const lastUserId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!hasFirebaseConfig || !auth) {
@@ -42,8 +45,25 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
       // 2. Escuta mudanças de estado (Restaurar sessão via Cookie/IndexedDB)
       if (!auth) return;
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         console.log("AuthGate: onAuthStateChanged ->", currentUser ? currentUser.email : "null");
+        const nextUserId = currentUser?.uid ?? null;
+        let cachedOwnerId: string | null = null;
+
+        try {
+          cachedOwnerId = window.localStorage.getItem(TRANSACTION_CACHE_OWNER_KEY);
+        } catch {}
+
+        if (
+          !nextUserId ||
+          (lastUserId.current && lastUserId.current !== nextUserId) ||
+          (cachedOwnerId && cachedOwnerId !== nextUserId)
+        ) {
+          await clearLocalTransactionCache();
+          useTransactionStore.getState().resetLocalState();
+        }
+
+        lastUserId.current = nextUserId;
         setUser(currentUser);
 
         // Pequeno delay para garantir que o estado do Next.js se estabilize
