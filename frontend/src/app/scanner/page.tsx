@@ -44,6 +44,31 @@ interface DuplicateWarning {
   };
 }
 
+const parseAmount = (value: unknown): number => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  let normalized = value.trim().replace(/[^\d,.-]/g, "");
+  const lastComma = normalized.lastIndexOf(",");
+  const lastDot = normalized.lastIndexOf(".");
+
+  if (lastComma >= 0 && lastDot >= 0) {
+    normalized = lastComma > lastDot
+      ? normalized.replace(/\./g, "").replace(",", ".")
+      : normalized.replace(/,/g, "");
+  } else if (lastComma >= 0) {
+    normalized = normalized.replace(",", ".");
+  }
+
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
 export default function ScannerPage() {
   const { addTransaction } = useTransactionStore();
   const [step, setStep] = useState<ScanStep>("capture");
@@ -118,10 +143,7 @@ export default function ScannerPage() {
         }
 
         const ai = data.ai_data || {};
-        const rawAmount = typeof ai.total_amount === "string"
-          ? parseFloat(ai.total_amount.replace(/[^\d.,]/g, "").replace(",", "."))
-          : Number(ai.total_amount) || 0;
-        const parsedAmount = Number.isFinite(rawAmount) ? rawAmount : 0;
+        const parsedAmount = parseAmount(ai.total_amount);
         const merchantName = String(ai.merchant_name || "").trim();
         const ocrFailed = merchantName.includes("OCR Falhou") || merchantName.toLowerCase().startsWith("erro");
         if (parsedAmount <= 0 && ocrFailed) {
@@ -389,6 +411,7 @@ export default function ScannerPage() {
                 alt="Comprovante"
                 width={500}
                 height={500}
+                unoptimized
                 className="w-full h-auto max-h-[50vh] object-contain"
               />
             ) : (
@@ -452,7 +475,9 @@ export default function ScannerPage() {
               <div className="bg-black/20 rounded-xl p-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="text-white/50 text-sm">Valor</span>
-                  <span className="text-[#10B981] font-medium">R$ {(duplicateWarning.existing.total_amount || duplicateWarning.existing.amount || 0).toFixed(2)}</span>
+                  <span className="text-[#10B981] font-medium">
+                    {formatCurrency(parseAmount(duplicateWarning.existing.total_amount ?? duplicateWarning.existing.amount))}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-white/50 text-sm">Estabelecimento</span>
