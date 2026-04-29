@@ -3,9 +3,19 @@ import { Auth, getAuth, GoogleAuthProvider, setPersistence, browserLocalPersiste
 import { Firestore, enableIndexedDbPersistence, getFirestore } from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
+const normalizeAuthDomain = (authDomain?: string) => {
+  const domain = authDomain?.trim() || "auth.sharecom.com.br";
+
+  if (/^https?:\/\//i.test(domain)) {
+    return new URL(domain).host;
+  }
+
+  return domain.replace(/\/+$/, "");
+};
+
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "AIzaSyAYIuIphaTzqV56gwbWOHYShf5p-cyxYCk",
-  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "unidoc-493609.firebaseapp.com",
+  authDomain: normalizeAuthDomain(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
   projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "unidoc-493609",
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "unidoc-493609.firebasestorage.app",
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "894636866610",
