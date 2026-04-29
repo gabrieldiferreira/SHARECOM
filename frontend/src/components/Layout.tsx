@@ -41,6 +41,29 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const portalScrollRef = useRef<HTMLDivElement>(null);
 
+  const [isExiting, setIsExiting] = useState(false);
+
+  useEffect(() => {
+    if (uploadSuccess && lastAdded) {
+      const exitTimer = setTimeout(() => setIsExiting(true), 3700);
+      const removeTimer = setTimeout(() => {
+        setUploadSuccess(false);
+        setIsExiting(false);
+        setLastAdded(null);
+      }, 4000);
+      return () => { clearTimeout(exitTimer); clearTimeout(removeTimer); };
+    }
+  }, [uploadSuccess, lastAdded]);
+
+  useEffect(() => {
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (uploadSuccess && lastAdded) {
+      meta?.setAttribute('content', uploadType === 'Inflow' ? '#10B981' : '#EF4444');
+    } else {
+      meta?.setAttribute('content', '#0A0A0F');
+    }
+  }, [uploadSuccess, lastAdded, uploadType]);
+
   // Timer para invalidar links antigos (60 segundos)
   useEffect(() => {
     if (showModal && pastedAt && !selectedFile) {
@@ -239,10 +262,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         console.log("SHARECOM: Sincronização finalizada.");
         setLastAdded({ amount: newTx.total_amount, merchant: newTx.merchant_name });
         setUploadSuccess(true);
-        setTimeout(() => {
-          setUploadSuccess(false);
-          setLastAdded(null);
-        }, 4000);
       } else {
         if (response.status === 401) {
           alert("Sua sessão expirou. Faça login novamente para continuar.");
@@ -314,23 +333,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     <div className="flex h-screen flex-col md:flex-row" style={{ backgroundColor: 'var(--bg-primary)', color: 'var(--text-primary)' }}>
 
       {/* ── Global Loading Bar ── fixed to the true viewport top ── */}
-      <div
-        className={`fixed left-0 right-0 z-[500] transition-opacity duration-300 pointer-events-none ${
-          isUploading ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{ top: 'env(safe-area-inset-top, 0px)' }}
-      >
-        <div
-          className="h-[3px] transition-all ease-out"
-          style={{
-            background: uploadType === 'Outflow' ? 'linear-gradient(90deg, #EF4444, #F87171)' : 'linear-gradient(90deg, #10B981, #34D399)',
-            boxShadow: uploadType === 'Outflow' ? '0 0 8px rgba(239,68,68,0.6)' : '0 0 8px rgba(16,185,129,0.6)',
-            width: uploadSuccess ? '100%' : (isUploading ? '90%' : '0%'),
-            transitionDuration: isUploading ? '15s' : '0.5s',
-            borderRadius: '0 2px 2px 0',
-          }}
-        />
-      </div>
+      {isUploading && (
+        <div className='fixed top-0 left-0 right-0 z-[500]' style={{paddingTop: 'env(safe-area-inset-top)'}}>
+          <div className='h-1 bg-[#8B5CF6]/30'>
+            <div className='h-full bg-[#8B5CF6] animate-loading-bar rounded-full' />
+          </div>
+        </div>
+      )}
 
       {/* Mobile Header */}
       <div className="md:hidden sticky top-0 z-50 mobile-header-shell">
@@ -709,18 +718,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Global Success Notification Toast */}
         {uploadSuccess && lastAdded && (
-          <div className="fixed left-4 right-4 z-[300] scan-notification scan-card-top">
-            <div className={`rounded-2xl p-4 backdrop-blur-xl border transition-all duration-300 ${uploadType === 'Inflow' ? 'bg-green-500/15 border-green-500/30' : 'bg-red-500/15 border-red-500/30'}`}>
-              <div className='flex items-center gap-3'>
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${uploadType === 'Inflow' ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
-                  {uploadType === 'Inflow' ? <ArrowDownLeft className='text-green-400' size={20} /> : <ArrowUpRight className='text-red-400' size={20} />}
-                </div>
-                <div className="flex-1 overflow-hidden">
-                  <p className='text-text-muted text-xs'>{uploadType === 'Inflow' ? 'Entrada recebida' : 'Saída registrada'}</p>
-                  <p className={`text-2xl font-bold truncate ${uploadType === 'Inflow' ? 'text-green-400' : 'text-red-400'}`}>
-                    {uploadType === 'Inflow' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lastAdded.amount)}
-                  </p>
-                  <p className='text-text-secondary text-sm truncate'>{lastAdded.merchant}</p>
+          <div className={`fixed top-0 left-0 right-0 z-[600] ${isExiting ? 'scan-card-exit' : 'scan-card'}`}>
+            <div 
+              className={`w-full transition-all duration-500 ease-out ${uploadType === 'Inflow' ? 'bg-[#10B981]' : 'bg-[#EF4444]'}`} 
+              style={{ paddingTop: 'env(safe-area-inset-top)', minHeight: 'env(safe-area-inset-top)' }}
+            >
+              <div className={`w-full px-6 pb-5 pt-3 ${uploadType === 'Inflow' ? 'bg-[#10B981]/90' : 'bg-[#EF4444]/90'} backdrop-blur-xl rounded-b-3xl shadow-2xl`}>
+                <div className='flex items-center justify-between'>
+                  <div>
+                    <p className='text-white/70 text-xs font-medium uppercase tracking-wider'>
+                      {uploadType === 'Inflow' ? 'Entrada recebida' : 'Saída registrada'}
+                    </p>
+                    <p className='text-white text-3xl font-bold mt-1'>
+                      {uploadType === 'Inflow' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lastAdded.amount)}
+                    </p>
+                    <p className='text-white/80 text-sm mt-1 truncate max-w-[200px]'>{lastAdded.merchant}</p>
+                  </div>
+                  <div className={`w-12 h-12 rounded-full flex items-center justify-center bg-white/20`}>
+                    {uploadType === 'Inflow' ? <ArrowDownLeft className='text-white' size={24} /> : <ArrowUpRight className='text-white' size={24} />}
+                  </div>
                 </div>
               </div>
             </div>
