@@ -34,7 +34,10 @@ const extractUrlFromText = (text: string) => {
     return new URL(trimmed).toString();
   } catch {
     const match = trimmed.match(/https?:\/\/[^\s]+/i);
-    return match?.[0] ?? "";
+    if (match) return match[0];
+
+    const schemelessMatch = trimmed.match(/(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)+(?:\/[^\s]*)?/i);
+    return schemelessMatch ? `https://${schemelessMatch[0]}` : "";
   }
 };
 
@@ -51,10 +54,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showScanMenu, setShowScanMenu] = useState(false);
   const [pastedContent, setPastedContent] = useState("");
   const [pastedAt, setPastedAt] = useState<number | null>(null);
+  const [showClipboardFallback, setShowClipboardFallback] = useState(false);
+  const [clipboardFallbackValue, setClipboardFallbackValue] = useState("");
+  const [clipboardError, setClipboardError] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const documentsInputRef = useRef<HTMLInputElement>(null);
+  const clipboardInputRef = useRef<HTMLTextAreaElement>(null);
   const portalScrollRef = useRef<HTMLDivElement>(null);
 
   const [isExiting, setIsExiting] = useState(false);
@@ -96,9 +103,39 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [showModal, pastedAt, selectedFile]);
 
+  useEffect(() => {
+    if (!showClipboardFallback) return;
+
+    const frame = requestAnimationFrame(() => {
+      clipboardInputRef.current?.focus();
+    });
+
+    return () => cancelAnimationFrame(frame);
+  }, [showClipboardFallback]);
+
+  const confirmClipboardUrl = (text: string) => {
+    const url = extractUrlFromText(text);
+    if (!url) {
+      setClipboardFallbackValue(text);
+      setClipboardError("Cole um link válido.");
+      setShowClipboardFallback(true);
+      return false;
+    }
+
+    setPastedContent(url);
+    setSelectedFile(null);
+    setPastedAt(Date.now());
+    setPendingNote("");
+    setClipboardFallbackValue("");
+    setClipboardError("");
+    setShowClipboardFallback(false);
+    setShowModal(true);
+    return true;
+  };
 
   const handlePasteLink = async () => {
     setShowScanMenu(false);
+    setClipboardError("");
 
     try {
       if (navigator.clipboard?.read) {
@@ -125,21 +162,28 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
     try {
       const text = await navigator.clipboard.readText();
-      const url = extractUrlFromText(text);
-      if (!url) {
-        // setToast({ message: "Clipboard vazio ou formato não suportado", type: 'error' });
+      if (!text.trim()) {
+        setShowClipboardFallback(true);
         return;
       }
 
-      setPastedContent(url);
-      setSelectedFile(null); // Limpa arquivo se houver
-      setPastedAt(Date.now());
-      setPendingNote("");
-      setShowModal(true);
+      confirmClipboardUrl(text);
     } catch (err) {
-      // setToast({ message: "Permita o acesso à área de transferência", type: 'error' });
       console.error("Erro ao ler clipboard:", err);
+      setClipboardError("Não foi possível ler automaticamente. Cole o link abaixo.");
+      setShowClipboardFallback(true);
     }
+  };
+
+  const handleClipboardFallbackPaste = (event: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const text = event.clipboardData.getData("text");
+    if (text && confirmClipboardUrl(text)) {
+      event.preventDefault();
+    }
+  };
+
+  const handleClipboardFallbackSubmit = () => {
+    confirmClipboardUrl(clipboardFallbackValue);
   };
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const isAuthPage = pathname === "/login" || pathname === "/reset-password";
@@ -613,6 +657,76 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </div>
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClipboardFallback && (
+        <div className="fixed inset-0 z-[260] flex items-end sm:items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            onClick={() => {
+              setShowClipboardFallback(false);
+              setClipboardError("");
+            }}
+          />
+          <div
+            className="w-full max-w-sm relative z-10 overflow-hidden rounded-2xl shadow-2xl"
+            style={{
+              backgroundColor: 'rgba(15, 23, 42, 0.92)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}
+          >
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center bg-emerald-500/10 text-emerald-500">
+                    <Link2 size={17} />
+                  </div>
+                  <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Colar Link</h3>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowClipboardFallback(false);
+                    setClipboardError("");
+                  }}
+                  className="w-7 h-7 rounded-full flex items-center justify-center transition-colors hover:bg-black/10"
+                  style={{ color: 'var(--text-tertiary)' }}
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <textarea
+                ref={clipboardInputRef}
+                value={clipboardFallbackValue}
+                onChange={(event) => {
+                  setClipboardFallbackValue(event.target.value);
+                  setClipboardError("");
+                }}
+                onPaste={handleClipboardFallbackPaste}
+                placeholder="https://..."
+                className="w-full rounded-xl p-3 text-sm focus:outline-none transition-colors h-24 resize-none"
+                style={{
+                  backgroundColor: 'rgba(255,255,255,0.06)',
+                  border: '0.5px solid var(--ds-border)',
+                  color: 'var(--text-primary)',
+                }}
+              />
+
+              {clipboardError && (
+                <p className="text-xs text-red-400">{clipboardError}</p>
+              )}
+
+              <button
+                onClick={handleClipboardFallbackSubmit}
+                className="w-full px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 bg-emerald-600"
+              >
+                Usar Link
+              </button>
             </div>
           </div>
         </div>
