@@ -720,10 +720,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         {uploadSuccess && lastAdded && (
           <div className={`fixed top-0 left-0 right-0 z-[600] ${isExiting ? 'scan-card-exit' : 'scan-card'}`}>
             <div 
-              className={`w-full transition-all duration-500 ease-out ${uploadType === 'Inflow' ? 'bg-[#10B981]' : 'bg-[#EF4444]'}`} 
+              className={`w-full transition-all duration-500 ease-out ${uploadType === 'Inflow' ? 'bg-[#10B981]' : 'bg-[#EF4444]'} rounded-b-[24px] shadow-2xl`} 
               style={{ paddingTop: 'env(safe-area-inset-top)', minHeight: 'env(safe-area-inset-top)' }}
             >
-              <div className={`w-full px-6 pb-5 pt-3 ${uploadType === 'Inflow' ? 'bg-[#10B981]/90' : 'bg-[#EF4444]/90'} backdrop-blur-xl rounded-b-3xl shadow-2xl`}>
+              <div className={`w-full px-6 pb-5 pt-3 ${uploadType === 'Inflow' ? 'bg-[#10B981]/90' : 'bg-[#EF4444]/90'} backdrop-blur-xl rounded-b-[24px]`}>
                 <div className='flex items-center justify-between'>
                   <div>
                     <p className='text-white/70 text-xs font-medium uppercase tracking-wider'>
