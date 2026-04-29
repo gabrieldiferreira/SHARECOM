@@ -6,7 +6,6 @@ from starlette.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy.orm import Session
 from typing import List
 import os
 import uuid
@@ -14,6 +13,7 @@ import hashlib
 import re
 import time
 from auth import verify_firebase_token
+import random
 
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
@@ -31,14 +31,9 @@ if not firebase_admin._apps:
 fs = firestore.client()
 bucket = storage.bucket()
 
-from database import engine, get_db, Base, DATABASE_URL
 from export_routes import router as export_router
-import models
 import schemas
-from sqlalchemy.exc import IntegrityError
 
-# Create tables
-Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="SHARECOM API",
@@ -65,73 +60,7 @@ app.add_middleware(
     expose_headers=["*"]
 )
 
-# Migração Automática: Garante que colunas novas existam (Útil para Render/Postgres)
-@app.on_event("startup")
-async def apply_migrations():
-    from sqlalchemy import text, inspect
-    columns_to_ensure = [
-        ("transaction_type", "TEXT DEFAULT 'Outflow'"),
-        ("payment_method", "TEXT"),
-        ("destination_institution", "TEXT"),
-        ("transaction_id", "TEXT"),
-        ("masked_cpf", "TEXT"),
-        ("note", "TEXT"),
-        ("deleted_at", "TIMESTAMP"),
-        ("user_id", "TEXT")
-    ]
-
-    try:
-        inspector = inspect(engine)
-        existing_columns = [c["name"] for c in inspector.get_columns("expenses")]
-        existing_indexes = [idx['name'] for idx in inspector.get_indexes("expenses")]
-
-        with engine.begin() as conn:
-            for col_name, col_def in columns_to_ensure:
-                if col_name not in existing_columns:
-                    print(f"MIGRAÇÃO: Adicionando coluna {col_name}...")
-                    conn.execute(text(f"ALTER TABLE expenses ADD COLUMN {col_name} {col_def}"))
-            
-            if "sqlite" in DATABASE_URL:
-                # Step 1: Drop the global unique index on transaction_id if it exists.
-                # This was incorrectly preventing different users from having the same transaction_id.
-                for idx_name in existing_indexes:
-                    if "transaction_id" in idx_name and "user" not in idx_name:
-                        try:
-                            print(f"MIGRAÇÃO: Removendo índice global incorreto: {idx_name}")
-                            conn.execute(text(f"DROP INDEX IF EXISTS {idx_name}"))
-                        except Exception as drop_err:
-                            print(f"MIGRAÇÃO: Não foi possível remover {idx_name}: {drop_err}")
-
-                # Step 2: Recreate as non-unique plain index (for query performance only)
-                try:
-                    conn.execute(text("CREATE INDEX IF NOT EXISTS ix_expenses_transaction_id ON expenses(transaction_id)"))
-                    print("MIGRAÇÃO: Índice simples ix_expenses_transaction_id garantido.")
-                except Exception as e:
-                    print(f"MIGRAÇÃO: Índice simples já existe: {e}")
-
-                # Step 3: Create per-user composite unique index (the correct behavior)
-                if "uq_user_transaction_id" not in existing_indexes:
-                    try:
-                        conn.execute(text(
-                            "CREATE UNIQUE INDEX IF NOT EXISTS uq_user_transaction_id "
-                            "ON expenses(user_id, transaction_id) "
-                            "WHERE transaction_id IS NOT NULL"
-                        ))
-                        print("MIGRAÇÃO: Índice único composto (user_id, transaction_id) criado com sucesso.")
-                    except Exception as idx_err:
-                        print(f"MIGRAÇÃO: Índice composto já existe ou erro: {idx_err}")
-            else:
-                # PostgreSQL
-                if "uq_user_transaction_id" not in existing_indexes:
-                    try:
-                        print("MIGRAÇÃO: Adicionando unique constraint (user_id, transaction_id)...")
-                        conn.execute(text("ALTER TABLE expenses ADD CONSTRAINT uq_user_transaction_id UNIQUE(user_id, transaction_id)"))
-                    except Exception as constraint_error:
-                        print(f"MIGRAÇÃO: Unique constraint já existe ou erro: {constraint_error}")
-        
-        print("MIGRAÇÃO: Verificação concluída com sucesso.")
-    except Exception as e:
-        print(f"MIGRAÇÃO: Erro crítico durante migração: {e}")
+# Migração Automática foi removida (agora usando Firestore)
 
 # =============================================================================
 # CACHE EM MEMÓRIA — LRU + TTL + STATS + WARM-UP
@@ -197,7 +126,6 @@ def cache_invalidate_all(): _cache.invalidate_all()
 
 
 def archive_receipt(
-    db: Session,
     uid: str,
     receipt_hash: str,
     filename: str,
@@ -207,31 +135,34 @@ def archive_receipt(
     raw_text: str | None = None,
     error: str | None = None,
 ):
-    archive = db.query(models.ReceiptArchive).filter(
-        models.ReceiptArchive.user_id == uid,
-        models.ReceiptArchive.receipt_hash == receipt_hash,
-    ).first()
+    doc_ref = fs.collection("receipt_archives").document(f"{uid}_{receipt_hash}")
+    doc = doc_ref.get()
+    
+    if doc.exists:
+        data = doc.to_dict()
+        doc_ref.update({
+            "filename": data.get("filename") or filename,
+            "extension": data.get("extension") or extension,
+            "status": status,
+            "raw_text": raw_text if raw_text is not None else data.get("raw_text"),
+            "error": error,
+            "updated_at": firestore.SERVER_TIMESTAMP
+        })
+        return doc_ref.get().to_dict()
 
-    if archive:
-        archive.filename = archive.filename or filename
-        archive.extension = archive.extension or extension
-        archive.status = status
-        archive.raw_text = raw_text if raw_text is not None else archive.raw_text
-        archive.error = error
-        return archive
-
-    archive = models.ReceiptArchive(
-        user_id=uid,
-        receipt_hash=receipt_hash,
-        filename=filename,
-        extension=extension,
-        content=content,
-        status=status,
-        raw_text=raw_text,
-        error=error,
-    )
-    db.add(archive)
-    return archive
+    archive_data = {
+        "user_id": uid,
+        "receipt_hash": receipt_hash,
+        "filename": filename,
+        "extension": extension,
+        "status": status,
+        "raw_text": raw_text,
+        "error": error,
+        "created_at": firestore.SERVER_TIMESTAMP,
+        "updated_at": firestore.SERVER_TIMESTAMP
+    }
+    doc_ref.set(archive_data)
+    return archive_data
 
 
 # =============================================================================
@@ -376,7 +307,6 @@ async def add_security_headers(request, call_next):
 def read_expenses(
     skip: int = 0,
     limit: int = 100,
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
     include_deleted: bool = False
 ):
@@ -387,62 +317,73 @@ def read_expenses(
     if cached is not None:
         return cached
 
-    query = db.query(models.Expense).filter(models.Expense.user_id == uid)
+    expenses_ref = fs.collection("expenses")
+    query = expenses_ref.where("user_id", "==", uid)
     if not include_deleted:
-        query = query.filter(models.Expense.deleted_at == None)
+        query = query.where("deleted_at", "==", None)
+    
+    # We load all to memory, sort, and slice because composite index might not exist
+    docs = query.stream()
+    expenses = []
+    for doc in docs:
+        d = doc.to_dict()
+        if "id" not in d: d["id"] = int(doc.id)
+        if "date" in d and hasattr(d["date"], "isoformat"):
+            d["date"] = d["date"].isoformat()
+        if "deleted_at" in d and hasattr(d["deleted_at"], "isoformat"):
+            d["deleted_at"] = d["deleted_at"].isoformat()
+        expenses.append(d)
+        
+    expenses.sort(key=lambda x: x.get("date", ""), reverse=True)
+    expenses = expenses[skip:skip+limit]
 
-    expenses = query.order_by(models.Expense.date.desc()).offset(skip).limit(limit).all()
     cache_set(cache_key, expenses)
     return expenses
 
 @app.post("/expenses", response_model=schemas.Expense)
 def create_expense(
     expense: schemas.ExpenseCreate,
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
 ):
     uid = user.get("uid", "anonymous")
-    db_expense = models.Expense(**expense.model_dump())
-    db_expense.user_id = uid
-    db.add(db_expense)
-    db.commit()
-    db.refresh(db_expense)
+    import random
+    from datetime import datetime
+    new_id = random.randint(100000000, 999999999)
+    expense_data = expense.model_dump()
+    expense_data["id"] = new_id
+    expense_data["user_id"] = uid
+    if not expense_data.get("date"):
+        expense_data["date"] = datetime.utcnow()
+    fs.collection("expenses").document(str(new_id)).set(expense_data)
     cache_invalidate_all()
-    return db_expense
+    return expense_data
 
 @app.patch("/expenses/{expense_id}", response_model=schemas.Expense)
 def update_expense(
     expense_id: int,
     updates: dict,
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
 ):
     uid = user.get("uid", "anonymous")
-    db_expense = db.query(models.Expense).filter(
-        models.Expense.id == expense_id,
-        models.Expense.user_id == uid
-    ).first()
-    if not db_expense:
+    doc_ref = fs.collection("expenses").document(str(expense_id))
+    doc = doc_ref.get()
+    if not doc.exists or doc.to_dict().get("user_id") != uid:
         raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
     
+    from datetime import datetime as dt
     for key, value in updates.items():
-        if hasattr(db_expense, key):
-            if key == 'deleted_at' and value:
-                from datetime import datetime as dt
-                try:
-                    if isinstance(value, str):
-                        setattr(db_expense, key, dt.fromisoformat(value.replace('Z', '')))
-                    else:
-                        setattr(db_expense, key, value)
-                except:
-                    setattr(db_expense, key, dt.utcnow())
-            else:
-                setattr(db_expense, key, value)
-    
-    db.commit()
-    db.refresh(db_expense)
+        if key == 'deleted_at' and value:
+            try:
+                if isinstance(value, str):
+                    updates[key] = dt.fromisoformat(value.replace('Z', ''))
+            except:
+                updates[key] = dt.utcnow()
+                
+    doc_ref.update(updates)
     cache_invalidate_all()
-    return db_expense
+    updated_doc = doc_ref.get().to_dict()
+    if "id" not in updated_doc: updated_doc["id"] = expense_id
+    return updated_doc
 
 @app.post("/process-ata")
 @app.post("/receipts")
@@ -452,7 +393,6 @@ async def process_ata(
     note: str = Form(None),
     transaction_type: str = Form(None),
     force: bool = Form(False),
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
 ):
     uid = user.get("uid", "anonymous")
@@ -555,8 +495,8 @@ async def process_ata(
         else:
             raise HTTPException(status_code=400, detail="Nenhum dado enviado.")
 
-        archive_receipt(db, uid, sha256_hash, filename, ext, content, status="received")
-        db.commit()
+        archive_receipt(uid, sha256_hash, filename, ext, content, status="received")
+        
 
         # Check for idempotency (per user) using receipt hash against FIREBASE
         cache_result = await check_receipt_cache(sha256_hash)
@@ -651,7 +591,7 @@ async def process_ata(
                 raw_text=raw_text,
                 error=ai_error or "OCR não extraiu valor confiável.",
             )
-            db.commit()
+            
             extracted_data = {
                 **extracted_data,
                 "total_amount": 0.0,
@@ -677,7 +617,7 @@ async def process_ata(
                 status="processed",
                 raw_text=raw_text,
             )
-            db.commit()
+            
 
         date_val = extracted_data.get("transaction_date")
         date_obj = schemas.datetime.now()
@@ -696,97 +636,58 @@ async def process_ata(
             tx_id = re.sub(r'[^A-Z0-9]', '', str(tx_id).upper())
             tx_id = tx_id.replace('O', '0').replace('I', '1').replace('S', '5')
             # Check if THIS user already has this transaction_id (idempotency)
-            existing = db.query(models.Expense).filter(
-                models.Expense.transaction_id == tx_id,
-                models.Expense.user_id == uid
-            ).first()
-            if existing:
-                if existing.deleted_at:
-                    existing.deleted_at = None
-                    db.commit()
+            docs = fs.collection("expenses").where("user_id", "==", uid).where("transaction_id", "==", tx_id).limit(1).get()
+            if docs:
+                existing = docs[0].to_dict()
+                if existing.get("deleted_at"):
+                    fs.collection("expenses").document(docs[0].id).update({"deleted_at": None})
                     cache_invalidate_all()
-                return {"idempotent": True, "receipt_hash": existing.receipt, "database_id": existing.id}
+                return {"idempotent": True, "receipt_hash": existing.get("receipt"), "database_id": existing.get("id")}
         else:
             tx_id = None
 
         # IDEMPOTENCY CHECK: Verify transaction doesn't already exist before db.add()
         if tx_id:
-            existing_by_tx_id = db.query(models.Expense).filter(
-                models.Expense.transaction_id == tx_id,
-                models.Expense.user_id == uid
-            ).first()
-            if existing_by_tx_id:
+            docs = fs.collection("expenses").where("user_id", "==", uid).where("transaction_id", "==", tx_id).limit(1).get()
+            if docs:
+                existing_by_tx_id = docs[0].to_dict()
                 print(f"DEBUG: Duplicate transaction_id detected during pre-insert check: {tx_id} for user {uid}", flush=True)
                 return {
                     "status": "duplicate",
                     "message": "Transaction already exists",
-                    "expense_id": existing_by_tx_id.id,
-                    "amount": existing_by_tx_id.amount,
+                    "expense_id": existing_by_tx_id.get("id"),
+                    "amount": existing_by_tx_id.get("amount"),
                     "idempotent": True
                 }
         
-        db_expense = models.Expense(
-            user_id=uid,
-            date=date_obj, amount=amount, category=category, merchant=merchant,
-            description=extracted_data.get("description") or "Processado",
-            receipt=sha256_hash, transaction_type=transaction_type or extracted_data.get("transaction_type", "Outflow"),
-            payment_method=extracted_data.get("payment_method", "Desconhecido"),
-            destination_institution=extracted_data.get("destination_institution"),
-            transaction_id=tx_id, note=note
-        )
-        
         try:
-            db.add(db_expense)
-            db.commit()
-            db.refresh(db_expense)
+            import random
+            from datetime import datetime
+            new_id = random.randint(100000000, 999999999)
+            db_expense = {
+                "id": new_id,
+                "user_id": uid,
+                "date": date_obj if isinstance(date_obj, str) else date_obj.isoformat() if hasattr(date_obj, 'isoformat') else datetime.utcnow().isoformat(),
+                "amount": amount,
+                "category": category,
+                "merchant": merchant,
+                "description": extracted_data.get("description") or "Processado",
+                "receipt": sha256_hash,
+                "transaction_type": transaction_type or extracted_data.get("transaction_type", "Outflow"),
+                "payment_method": extracted_data.get("payment_method", "Desconhecido"),
+                "destination_institution": extracted_data.get("destination_institution"),
+                "transaction_id": tx_id,
+                "note": note,
+                "deleted_at": None
+            }
+            fs.collection("expenses").document(str(new_id)).set(db_expense)
             cache_invalidate_all()
-            print(f"DEBUG: New expense created successfully - ID: {db_expense.id}, TX_ID: {tx_id}", flush=True)
+            print(f"DEBUG: New expense created successfully - ID: {new_id}, TX_ID: {tx_id}", flush=True)
             status = "pending_review" if extracted_data.get("needs_manual_review") else "processed"
-            return {"idempotent": False, "receipt_hash": sha256_hash, "ai_data": extracted_data, "database_id": db_expense.id, "status": status}
-        except IntegrityError as e:
-            print('DEBUG: IntegrityError, checking for existing BEFORE rollback', flush=True)
-            try:
-                # Query globally because SQLite unique constraint on transaction_id might be global
-                existing = db.query(models.Expense).filter(models.Expense.transaction_id == tx_id).first()
-                print(f'DEBUG: Found existing (before rollback): {existing}', flush=True)
-            except Exception as query_err:
-                print(f'DEBUG: Query before rollback failed (PendingRollbackError?): {query_err}', flush=True)
-                db.rollback()
-                existing = db.query(models.Expense).filter(models.Expense.transaction_id == tx_id).first()
-                print(f'DEBUG: Found existing (after rollback fallback): {existing}', flush=True)
-            else:
-                db.rollback()
-
-            if existing:
-                cache_invalidate_all()
-                return JSONResponse(
-                    status_code=200, 
-                    content={
-                        "idempotent": True,
-                        "database_id": existing.id,
-                        "receipt_hash": existing.receipt,
-                        "ai_data": {
-                            "total_amount": float(existing.amount) if existing.amount else 0.0,
-                            "merchant_name": existing.merchant,
-                            "transaction_date": str(existing.date),
-                            "transaction_type": existing.transaction_type,
-                            "smart_category": existing.category,
-                            "payment_method": existing.payment_method,
-                            "destination_institution": existing.destination_institution,
-                            "transaction_id": existing.transaction_id,
-                            "masked_cpf": existing.masked_cpf,
-                            "description": existing.description,
-                        },
-                        "status": "duplicate"
-                    }
-                )
-            else:
-                all_txs = db.query(models.Expense).filter(models.Expense.user_id == uid).all()
-                raise HTTPException(status_code=500, detail=f'Duplicate error but record not found. Searched globally for: {tx_id}. All for user: {[t.transaction_id for t in all_txs]}')
-        except Exception as db_error:
-            db.rollback()
-            print(f"DEBUG: Database error caught - Type: {type(db_error).__name__}, Message: {str(db_error)}", flush=True)
-            return JSONResponse(status_code=400, content={'status': 'error', 'message': str(db_error)})
+            return {"idempotent": False, "receipt_hash": sha256_hash, "ai_data": extracted_data, "database_id": new_id, "status": status}
+        except Exception as fb_error:
+            print(f"DEBUG: Firestore error caught - Type: {type(fb_error).__name__}, Message: {str(fb_error)}", flush=True)
+            return JSONResponse(status_code=400, content={'status': 'error', 'message': str(fb_error)})
 
     except Exception as e:
         import traceback
@@ -798,112 +699,127 @@ async def process_ata(
 def delete_expense(
     expense_id: int,
     permanent: bool = False,
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
 ):
     uid = user.get("uid", "anonymous")
-    db_expense = db.query(models.Expense).filter(
-        models.Expense.id == expense_id,
-        models.Expense.user_id == uid
-    ).first()
-    if not db_expense: raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
+    doc_ref = fs.collection("expenses").document(str(expense_id))
+    doc = doc_ref.get()
+    if not doc.exists or doc.to_dict().get("user_id") != uid:
+        raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
+    
     if permanent:
-        db.delete(db_expense)
+        doc_ref.delete()
         status = "deleted"
     else:
-        db_expense.deleted_at = schemas.datetime.utcnow()
+        from datetime import datetime
+        doc_ref.update({"deleted_at": datetime.utcnow().isoformat()})
         status = "soft_deleted"
-    db.commit()
+        
     cache_invalidate_all()
     return {"status": status}
 
 @app.patch("/expenses/{expense_id}/restore")
-def restore_expense(expense_id: int, db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token)):
+def restore_expense(expense_id: int, user: dict = Depends(verify_firebase_token)):
     uid = user.get("uid", "anonymous")
-    db_expense = db.query(models.Expense).filter(
-        models.Expense.id == expense_id,
-        models.Expense.user_id == uid
-    ).first()
-    if not db_expense: raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
-    db_expense.deleted_at = None
-    db.commit()
+    doc_ref = fs.collection("expenses").document(str(expense_id))
+    doc = doc_ref.get()
+    if not doc.exists or doc.to_dict().get("user_id") != uid:
+        raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
+        
+    doc_ref.update({"deleted_at": None})
     cache_invalidate_all()
     return {"status": "restored"}
 
 @app.post("/expenses/clear-all")
-def clear_all_expenses(db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token), only_trash: bool = False):
+def clear_all_expenses(user: dict = Depends(verify_firebase_token), only_trash: bool = False):
     uid = user.get("uid", "anonymous")
-    query = db.query(models.Expense).filter(models.Expense.user_id == uid)
-    if only_trash: query = query.filter(models.Expense.deleted_at != None)
-    num_deleted = query.delete(synchronize_session=False)
-    db.commit()
+    docs = fs.collection("expenses").where("user_id", "==", uid).stream()
+    batch = fs.batch()
+    count = 0
+    for doc in docs:
+        d = doc.to_dict()
+        if only_trash and not d.get("deleted_at"):
+            continue
+        batch.delete(doc.reference)
+        count += 1
+    if count > 0:
+        batch.commit()
     cache_invalidate_all()
-    return {"message": f"{num_deleted} removidos"}
+    return {"message": f"{count} removidos"}
     
 # =============================================================================
 # GOALS ENDPOINTS
 # =============================================================================
 @app.get("/goals", response_model=List[schemas.Goal])
 def read_goals(
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token)
 ):
     uid = user.get("uid", "anonymous")
-    return db.query(models.Goal).filter(models.Goal.user_id == uid).order_by(models.Goal.created_at.desc()).all()
+    docs = fs.collection("goals").where("user_id", "==", uid).stream()
+    goals = []
+    for doc in docs:
+        d = doc.to_dict()
+        if "id" not in d: d["id"] = int(doc.id)
+        goals.append(d)
+    goals.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+    return goals
 
 @app.post("/goals", response_model=schemas.Goal)
 def create_goal(
     goal: schemas.GoalCreate,
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token)
 ):
     uid = user.get("uid", "anonymous")
-    db_goal = models.Goal(**goal.model_dump(), user_id=uid)
-    db.add(db_goal)
-    db.commit()
-    db.refresh(db_goal)
-    return db_goal
+    import random
+    from datetime import datetime
+    new_id = random.randint(100000000, 999999999)
+    goal_data = goal.model_dump()
+    goal_data["id"] = new_id
+    goal_data["user_id"] = uid
+    if not goal_data.get("created_at"):
+        goal_data["created_at"] = datetime.utcnow().isoformat()
+    fs.collection("goals").document(str(new_id)).set(goal_data)
+    return goal_data
 
 @app.patch("/goals/{goal_id}", response_model=schemas.Goal)
 def update_goal(
     goal_id: int,
     updates: dict,
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token)
 ):
     uid = user.get("uid", "anonymous")
-    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id, models.Goal.user_id == uid).first()
-    if not db_goal:
+    doc_ref = fs.collection("goals").document(str(goal_id))
+    doc = doc_ref.get()
+    if not doc.exists or doc.to_dict().get("user_id") != uid:
         raise HTTPException(status_code=404, detail="Meta não encontrada")
     
-    for key, value in updates.items():
-        if hasattr(db_goal, key):
-            setattr(db_goal, key, value)
-            
-    db.commit()
-    db.refresh(db_goal)
-    return db_goal
+    doc_ref.update(updates)
+    updated_doc = doc_ref.get().to_dict()
+    if "id" not in updated_doc: updated_doc["id"] = goal_id
+    return updated_doc
 
 @app.delete("/goals/{goal_id}")
 def delete_goal(
     goal_id: int,
-    db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token)
 ):
     uid = user.get("uid", "anonymous")
-    db_goal = db.query(models.Goal).filter(models.Goal.id == goal_id, models.Goal.user_id == uid).first()
-    if not db_goal:
+    doc_ref = fs.collection("goals").document(str(goal_id))
+    doc = doc_ref.get()
+    if not doc.exists or doc.to_dict().get("user_id") != uid:
         raise HTTPException(status_code=404, detail="Meta não encontrada")
     
-    db.delete(db_goal)
-    db.commit()
+    doc_ref.delete()
     return {"message": "Deletado"}
 
 
 @app.get("/patterns")
-def get_patterns(db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token)):
+def get_patterns(user: dict = Depends(verify_firebase_token)):
     uid = user.get("uid", "anonymous")
-    return db.query(models.PatternLog).filter(models.PatternLog.user_id == uid).order_by(models.PatternLog.timestamp.desc()).all()
+    docs = fs.collection("patterns").where("user_id", "==", uid).stream()
+    patterns = [d.to_dict() for d in docs]
+    patterns.sort(key=lambda x: x.get("timestamp", ""), reverse=True)
+    return patterns
 
 import psutil
 import os
@@ -917,9 +833,8 @@ def get_memory_usage_mb():
 
 def check_database_connection():
     try:
-        from sqlalchemy import text
-        with engine.connect() as conn:
-            conn.execute(text("SELECT 1"))
+        # Check Firestore connection
+        fs.collection("health").document("check").get()
         return True, None
     except Exception as e:
         return False, str(e)
