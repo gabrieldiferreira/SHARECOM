@@ -12,7 +12,6 @@ import { useTransactionStore } from "../store/useTransactionStore";
 import { TransactionEntity } from "../lib/db";
 import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
-import { motion, AnimatePresence } from "framer-motion";
 
 import { useI18n } from "../i18n/client";
 
@@ -411,7 +410,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
 
             <div className="flex items-center gap-2">
-              <Link href="/settings" className="p-1.5 rounded-md hover:bg-black/5" style={{ color: 'var(--text-secondary)' }}>
+              <Link href="/settings" prefetch={false} className="p-1.5 rounded-md hover:bg-black/5" style={{ color: 'var(--text-secondary)' }}>
                 <Settings size={18} />
               </Link>
               <button onClick={handleLogout} className="p-1.5 rounded-md hover:bg-black/5" style={{ color: 'var(--text-secondary)' }}>
@@ -463,6 +462,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href || "#"}
+                prefetch={false}
                 className="flex items-center space-x-3 px-3 py-2.5 rounded-lg transition-all duration-200"
                 style={{
                   backgroundColor: isActive ? '#3B82F6' : 'transparent',
@@ -500,6 +500,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
           <Link
             href="/settings"
+            prefetch={false}
             className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-md text-sm font-medium transition-all hover:bg-black/5"
             style={{ color: 'var(--text-secondary)', border: '0.5px solid var(--ds-border)', borderRadius: '6px' }}
           >
@@ -813,22 +814,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
 
         <div className="flex-1 overflow-y-auto scroll-container pb-28 md:pb-0">
-          <div className="max-w-7xl mx-auto w-full grid grid-cols-1 grid-rows-1">
-            <AnimatePresence mode="popLayout">
-              <motion.div
-                key={pathname}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                exit={{ opacity: 0 }}
-                transition={{ 
-                  duration: 0.25, 
-                  ease: "easeInOut" 
-                }}
-                className="col-start-1 row-start-1 w-full"
-              >
-                {children}
-              </motion.div>
-            </AnimatePresence>
+          <div className="max-w-7xl mx-auto w-full">
+            {children}
           </div>
         </div>
 
@@ -899,6 +886,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 >
                   <Link
                     href={item.href || "#"}
+                    prefetch={false}
                     className="flex flex-col items-center justify-center w-full h-full active:opacity-60 transition-opacity touch-manipulation"
                     style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
                   >
