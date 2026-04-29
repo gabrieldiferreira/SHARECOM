@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import { cookies, headers } from "next/headers";
 import "./globals.css";
 import Layout from "@/components/Layout";
+import AuthGate from "@/components/AuthGate";
 import ErrorSentinel from "@/components/ErrorSentinel";
 import InstallPrompt from "@/components/InstallPrompt";
 import { I18nProvider } from "@/i18n/client";
@@ -112,7 +113,9 @@ export default async function RootLayout({
           <ToastProvider>
             <I18nProvider initialLocale={locale} initialMessages={messages}>
               <ErrorSentinel>
-                <Layout>{children}</Layout>
+                <AuthGate>
+                  <Layout>{children}</Layout>
+                </AuthGate>
                 <InstallPrompt />
                 <DevTools />
               </ErrorSentinel>

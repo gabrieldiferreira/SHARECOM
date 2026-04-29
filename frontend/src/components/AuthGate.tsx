@@ -2,13 +2,12 @@
 
 import { useEffect, useState, useRef } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { onAuthStateChanged, User, getRedirectResult } from "firebase/auth";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { auth, hasFirebaseConfig } from "@/lib/firebase";
 import { clearLocalTransactionCache, TRANSACTION_CACHE_OWNER_KEY } from "@/lib/db";
 import { useTransactionStore } from "@/store/useTransactionStore";
 
 const PUBLIC_ROUTES = new Set(["/login", "/auth/bridge", "/reset-password"]);
-const AUTH_ALLOWED_PUBLIC_ROUTES = new Set(["/reset-password"]);
 
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -31,19 +30,6 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     const initAuth = async () => {
       console.log("AuthGate: Iniciando verificação de sessão...");
 
-      try {
-        if (!auth) return;
-        // 1. Processa qualquer resultado de redirecionamento pendente (Google Login Mobile)
-        const result = await getRedirectResult(auth);
-        if (result) {
-          console.log("AuthGate: Resultado de redirecionamento capturado para", result.user.email);
-          setUser(result.user);
-        }
-      } catch (error) {
-        console.error("AuthGate: Erro no Redirect Result:", error);
-      }
-
-      // 2. Escuta mudanças de estado (Restaurar sessão via Cookie/IndexedDB)
       if (!auth) return;
       const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
         console.log("AuthGate: onAuthStateChanged ->", currentUser ? currentUser.email : "null");
@@ -89,16 +75,12 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
     const normalizedPath = pathname.replace(/\/$/, "") || "/";
     const isPublic = PUBLIC_ROUTES.has(normalizedPath);
-    const allowWhenAuthenticated = AUTH_ALLOWED_PUBLIC_ROUTES.has(normalizedPath);
 
     console.log(`AuthGate: [CHECK] User: ${!!user} | Path: ${normalizedPath} | Public: ${isPublic}`);
 
     if (!user && !isPublic) {
       console.log("AuthGate: Acesso negado. Redirecionando para /login");
       router.replace("/login");
-    } else if (user && isPublic && !allowWhenAuthenticated) {
-      console.log("AuthGate: Usuário já logado. Redirecionando para /");
-      router.replace("/");
     }
   }, [isInitializing, pathname, router, user]);
 
@@ -121,11 +103,9 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   const normalizedPath = pathname.replace(/\/$/, "") || "/";
   const isPublic = PUBLIC_ROUTES.has(normalizedPath);
-  const allowWhenAuthenticated = AUTH_ALLOWED_PUBLIC_ROUTES.has(normalizedPath);
 
   // Evita o "flicker" de mostrar a página errada por 1 frame
   if (!user && !isPublic) return null;
-  if (user && isPublic && !allowWhenAuthenticated) return null;
 
   return <>{children}</>;
 }

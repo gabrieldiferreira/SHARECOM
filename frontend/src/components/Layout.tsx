@@ -153,7 +153,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
   const [user, setUser] = useState<FirebaseUser | null>(null);
-  const isAuthPage = pathname === "/login" || pathname === "/reset-password";
+  const isAuthPage = pathname === "/login" || pathname === "/reset-password" || pathname === "/auth/bridge";
 
   React.useEffect(() => {
     if (!auth) return;
