@@ -34,12 +34,12 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
     return "image", file_bytes
 
 def _extract_text_easyocr(image_bytes: bytes) -> str:
-    print("Iniciando extração via RapidOCR local...")
+    print("Iniciando extração via OCR local...")
     try:
-        from ocr_processor import _extract_text_rapidocr
-        return _extract_text_rapidocr(image_bytes)
+        from ocr_processor import _extract_text_ocr
+        return _extract_text_ocr(image_bytes)
     except Exception as e:
-        print(f"RapidOCR Failed: {e}")
+        print(f"OCR local failed: {e}")
         return ""
 
 def extract_transaction_data(file_bytes: bytes, extension: str) -> dict:

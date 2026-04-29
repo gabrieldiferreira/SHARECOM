@@ -14,10 +14,10 @@ PyJWT
 cryptography
 
 # OCR & Processing
-rapidocr
-onnxruntime
 PyMuPDF
 Pillow
+pytesseract
+google-generativeai
 opencv-python-headless
 
 # Utilities

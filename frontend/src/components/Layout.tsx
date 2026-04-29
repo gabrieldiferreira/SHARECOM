@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 
 import NextImage from "next/image";
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp, Target } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp, Target, type LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -15,6 +15,13 @@ import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth
 import { motion, AnimatePresence } from "framer-motion";
 
 import { useI18n } from "../i18n/client";
+
+type NavItem = {
+  name: string;
+  href?: string;
+  icon: LucideIcon;
+  onClick?: () => void;
+};
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
@@ -181,6 +188,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.status === "duplicate_warning") {
+          alert("Este comprovante já foi escaneado anteriormente. Use o scanner para adicionar mesmo assim.");
+          return;
+        }
+
         const ai = data.ai_data || {};
         const rawAmount = typeof ai.total_amount === "string"
           ? parseFloat(ai.total_amount.replace(/[^\d.,]/g, "").replace(",", "."))
@@ -214,7 +226,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           destination_institution: ai.destination_institution || undefined,
           transaction_id: ai.transaction_id || undefined,
           masked_cpf: ai.masked_cpf || undefined,
-          needs_manual_review: false,
+          needs_manual_review: !!ai.needs_manual_review,
           receipt_hash: data.filename || undefined,
           is_synced: false,
           note: data.note || undefined
@@ -263,14 +275,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const desktopNavItems = [
+  const desktopNavItems: NavItem[] = [
     { name: t('nav.home'), href: "/", icon: LayoutDashboard },
     { name: "Histórico", href: "/timeline", icon: History },
     { name: t('nav.analytics'), href: "/reports", icon: PieChart },
     { name: t('nav.goals'), href: "/goals", icon: Target },
   ];
 
-  const mobileNavItems = [
+  const mobileNavItems: NavItem[] = [
     { name: t('nav.home'), href: "/", icon: LayoutDashboard },
     { name: "Histórico", href: "/timeline", icon: History },
     { name: t('nav.analytics'), href: "/reports", icon: PieChart },

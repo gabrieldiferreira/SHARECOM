@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Float, DateTime, UniqueConstraint, LargeBinary, Text
 from database import Base
 import datetime
 
@@ -39,6 +39,24 @@ class PatternLog(Base):
     extracted_json = Column(String)
     hash = Column(String, unique=True)
 
+class ReceiptArchive(Base):
+    __tablename__ = "receipt_archives"
+    __table_args__ = (
+        UniqueConstraint('user_id', 'receipt_hash', name='uq_user_receipt_hash'),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(String, index=True)
+    receipt_hash = Column(String, index=True, nullable=False)
+    filename = Column(String)
+    extension = Column(String)
+    content = Column(LargeBinary, nullable=False)
+    raw_text = Column(Text, nullable=True)
+    status = Column(String, default="received") # received, processed, pending_review, duplicate, error
+    error = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
+
 class Goal(Base):
     __tablename__ = "goals"
     user_id = Column(String, index=True)
@@ -56,4 +74,3 @@ class Goal(Base):
     auto_transfer_day = Column(Integer, nullable=True) # Day of month
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
-

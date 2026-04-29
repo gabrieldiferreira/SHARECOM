@@ -26,6 +26,17 @@ interface ExtractedData {
   needs_manual_review?: boolean;
 }
 
+interface DuplicateWarning {
+  message: string;
+  receipt_hash: string;
+  existing: {
+    id: number;
+    amount: number;
+    merchant: string;
+    date: string | null;
+  };
+}
+
 export default function ScannerPage() {
   const { addTransaction } = useTransactionStore();
   const [step, setStep] = useState<ScanStep>("capture");
@@ -39,6 +50,7 @@ export default function ScannerPage() {
   const [idempotent, setIdempotent] = useState(false);
   const [savedId, setSavedId] = useState<number | null>(null);
   const [flashEnabled, setFlashEnabled] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarning | null>(null);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -54,6 +66,7 @@ export default function ScannerPage() {
     setErrorMsg("");
     setIdempotent(false);
     setSavedId(null);
+    setDuplicateWarning(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   }, []);
@@ -67,12 +80,16 @@ export default function ScannerPage() {
     setStep("preview");
   };
 
-  const processReceipt = async () => {
+  const processReceipt = async (force = false) => {
     if (!selectedFile) return;
 
     setStep("processing");
+    setDuplicateWarning(null);
     const formData = new FormData();
     formData.append("received_file", selectedFile, selectedFile.name);
+    if (force) {
+      formData.append("force", "true");
+    }
     if (note.trim()) {
       formData.append("note", note.trim());
     }
@@ -85,6 +102,12 @@ export default function ScannerPage() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.status === "duplicate_warning") {
+          setDuplicateWarning(data);
+          setStep("preview");
+          return;
+        }
+
         const ai = data.ai_data || {};
         const rawAmount = typeof ai.total_amount === "string"
           ? parseFloat(ai.total_amount.replace(/[^\d.,]/g, "").replace(",", "."))
@@ -167,6 +190,10 @@ export default function ScannerPage() {
       }
       setStep("error");
     }
+  };
+
+  const handleForceSubmit = () => {
+    void processReceipt(true);
   };
 
   const formatCurrency = (value: number) => {
@@ -361,7 +388,7 @@ export default function ScannerPage() {
             Refazer
           </button>
           <button
-            onClick={processReceipt}
+            onClick={() => processReceipt()}
             className="flex-1 flex items-center justify-center gap-2 py-3 text-sm font-medium text-white transition-colors"
             style={{ backgroundColor: "#3B82F6", borderRadius: "6px" }}
           >
@@ -369,6 +396,62 @@ export default function ScannerPage() {
             Processar
           </button>
         </div>
+
+        {duplicateWarning && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+            <div
+              className="w-full max-w-sm space-y-4 p-5"
+              style={{ backgroundColor: "var(--bg-primary)", border: "0.5px solid var(--ds-border)", borderRadius: "8px" }}
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
+                  <AlertTriangle className="text-amber-400" size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Comprovante já escaneado</h3>
+                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
+                    Este arquivo já foi registrado anteriormente.
+                  </p>
+                </div>
+              </div>
+
+              <div className="space-y-2 p-3" style={{ backgroundColor: "var(--bg-secondary)", borderRadius: "6px" }}>
+                <div className="flex justify-between gap-3 text-sm">
+                  <span style={{ color: "var(--text-secondary)" }}>Valor</span>
+                  <span className="font-medium text-emerald-500">{formatCurrency(duplicateWarning.existing.amount)}</span>
+                </div>
+                <div className="flex justify-between gap-3 text-sm">
+                  <span style={{ color: "var(--text-secondary)" }}>Estabelecimento</span>
+                  <span className="text-right truncate" style={{ color: "var(--text-primary)" }}>{duplicateWarning.existing.merchant || "Desconhecido"}</span>
+                </div>
+                <div className="flex justify-between gap-3 text-sm">
+                  <span style={{ color: "var(--text-secondary)" }}>Data</span>
+                  <span style={{ color: "var(--text-primary)" }}>
+                    {duplicateWarning.existing.date ? new Date(duplicateWarning.existing.date).toLocaleDateString("pt-BR") : "-"}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-center text-sm" style={{ color: "var(--text-secondary)" }}>Deseja adicionar mesmo assim?</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setDuplicateWarning(null)}
+                  className="flex-1 py-3 text-sm font-medium"
+                  style={{ border: "0.5px solid var(--ds-border)", borderRadius: "6px", color: "var(--text-primary)" }}
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleForceSubmit}
+                  className="flex-1 py-3 text-sm font-medium text-white"
+                  style={{ backgroundColor: "#3B82F6", borderRadius: "6px" }}
+                >
+                  Adicionar mesmo assim
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -391,7 +474,7 @@ export default function ScannerPage() {
           </div>
           {/* Progress hints */}
           <div className="flex flex-col gap-2 mt-2">
-            {["Lendo documento via EasyOCR", "Identificando valores com RegEx", "Classificando categoria"].map((text, i) => (
+            {["Lendo documento via Gemini Vision", "Fallback Tesseract se necessário", "Classificando categoria"].map((text, i) => (
               <div key={i} className="flex items-center gap-2" style={{ fontSize: "12px", color: "var(--text-tertiary)" }}>
                 <div className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: "#3B82F6", animationDelay: `${i * 0.3}s` }} />
                 {text}

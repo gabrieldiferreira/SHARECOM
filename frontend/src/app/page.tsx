@@ -538,6 +538,12 @@ function ExpenseTracker() {
 
       if (response.ok) {
         const data = await response.json();
+        if (data.status === "duplicate_warning") {
+          showToast("Este comprovante já foi escaneado anteriormente. Use o scanner para adicionar mesmo assim.", "info");
+          setIsUploading(false);
+          return;
+        }
+
         const ai = data.ai_data || {};
         
         if (ai.merchant_name && ai.merchant_name.includes("Check API Key")) {
@@ -588,7 +594,7 @@ function ExpenseTracker() {
           destination_institution: ai.destination_institution || undefined,
           transaction_id: ai.transaction_id || undefined,
           masked_cpf: ai.masked_cpf || undefined,
-          needs_manual_review: false,
+          needs_manual_review: !!ai.needs_manual_review,
           receipt_hash: data.filename || undefined,
           is_synced: true, // It is already synced as it comes from the backend
           note: data.note || undefined

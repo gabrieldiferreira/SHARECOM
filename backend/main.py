@@ -176,6 +176,44 @@ def cache_set(key: str, data): _cache.set(key, data)
 def cache_invalidate(key: str): _cache.invalidate_all()  # Simples: invalida tudo
 def cache_invalidate_all(): _cache.invalidate_all()
 
+
+def archive_receipt(
+    db: Session,
+    uid: str,
+    receipt_hash: str,
+    filename: str,
+    extension: str,
+    content: bytes,
+    status: str = "received",
+    raw_text: str | None = None,
+    error: str | None = None,
+):
+    archive = db.query(models.ReceiptArchive).filter(
+        models.ReceiptArchive.user_id == uid,
+        models.ReceiptArchive.receipt_hash == receipt_hash,
+    ).first()
+
+    if archive:
+        archive.filename = archive.filename or filename
+        archive.extension = archive.extension or extension
+        archive.status = status
+        archive.raw_text = raw_text if raw_text is not None else archive.raw_text
+        archive.error = error
+        return archive
+
+    archive = models.ReceiptArchive(
+        user_id=uid,
+        receipt_hash=receipt_hash,
+        filename=filename,
+        extension=extension,
+        content=content,
+        status=status,
+        raw_text=raw_text,
+        error=error,
+    )
+    db.add(archive)
+    return archive
+
 app.include_router(export_router)
 
 @app.on_event("startup")
@@ -300,6 +338,7 @@ async def process_ata(
     receipt_url: str = Form(None),
     note: str = Form(None),
     transaction_type: str = Form(None),
+    force: bool = Form(False),
     db: Session = Depends(get_db),
     user: dict = Depends(verify_firebase_token),
 ):
@@ -403,20 +442,33 @@ async def process_ata(
         else:
             raise HTTPException(status_code=400, detail="Nenhum dado enviado.")
 
+        archive_receipt(db, uid, sha256_hash, filename, ext, content, status="received")
+        db.commit()
+
         # Check for idempotency (per user) using receipt hash
         existing_expense = db.query(models.Expense).filter(
             models.Expense.receipt == sha256_hash,
             models.Expense.user_id == uid
         ).first()
-        if existing_expense:
+        if existing_expense and not force:
+            archive_receipt(db, uid, sha256_hash, filename, ext, content, status="duplicate")
+            db.commit()
             if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
-            print(f"DEBUG: Idempotency hit for receipt hash: {sha256_hash} - Returning duplicate", flush=True)
+            print(f"DEBUG: Idempotency hit for receipt hash: {sha256_hash} - Returning duplicate warning", flush=True)
             return JSONResponse(
                 status_code=200, 
                 content={
+                    "status": "duplicate_warning",
+                    "message": "Este comprovante já foi escaneado anteriormente.",
                     "idempotent": True,
                     "database_id": existing_expense.id,
                     "receipt_hash": sha256_hash,
+                    "existing": {
+                        "id": existing_expense.id,
+                        "amount": float(existing_expense.amount) if existing_expense.amount else 0.0,
+                        "merchant": existing_expense.merchant,
+                        "date": existing_expense.date.isoformat() if existing_expense.date else None,
+                    },
                     "ai_data": {
                         "total_amount": float(existing_expense.amount) if existing_expense.amount else 0.0,
                         "merchant_name": existing_expense.merchant,
@@ -428,8 +480,7 @@ async def process_ata(
                         "transaction_id": existing_expense.transaction_id,
                         "masked_cpf": existing_expense.masked_cpf,
                         "description": existing_expense.description,
-                    },
-                    "status": "duplicate"
+                    }
                 }
             )
 
@@ -440,10 +491,19 @@ async def process_ata(
         try:
             import ocr_processor
             ocr_fallback_data, raw_text = ocr_processor.extract_transaction_data(content, ext, file_path=tmp_file_path)
-            from ai_processor import analyze_receipt_with_ai
-            extracted_data, ai_error = await analyze_receipt_with_ai(content, ext, ocr_text=raw_text)
-            if extracted_data is None:
-                extracted_data = ocr_fallback_data
+            extracted_data = ocr_fallback_data
+
+            extracted_amount_candidate = extracted_data.get("total_amount") if extracted_data else 0
+            try:
+                extracted_amount_candidate = float(extracted_amount_candidate or 0)
+            except (TypeError, ValueError):
+                extracted_amount_candidate = 0
+
+            if extracted_amount_candidate <= 0:
+                from ai_processor import analyze_receipt_with_ai
+                extracted_data_ai, ai_error = await analyze_receipt_with_ai(content, ext, ocr_text=raw_text)
+                if extracted_data_ai is not None:
+                    extracted_data = extracted_data_ai
             if not extracted_data:
                 extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
         finally:
@@ -457,20 +517,52 @@ async def process_ata(
             extracted_amount = 0.0
 
         merchant_name = str(extracted_data.get("merchant_name") or "").strip()
-        extraction_failed = (
-            is_receipt
-            and extracted_amount <= 0
-            and (
-                not merchant_name
-                or "OCR Falhou" in merchant_name
-                or merchant_name.lower().startswith("erro")
-            )
+        extraction_failed = is_receipt and (
+            extracted_amount <= 0
+            or extracted_data.get("needs_manual_review")
+            or not merchant_name
+            or "OCR Falhou" in merchant_name
+            or merchant_name.lower().startswith("erro")
         )
         if extraction_failed:
-            raise HTTPException(
-                status_code=422,
-                detail="Não foi possível ler o comprovante. Envie uma imagem mais nítida ou cadastre a transação manualmente."
+            archive_receipt(
+                db,
+                uid,
+                sha256_hash,
+                filename,
+                ext,
+                content,
+                status="pending_review",
+                raw_text=raw_text,
+                error=ai_error or "OCR não extraiu valor confiável.",
             )
+            db.commit()
+            extracted_data = {
+                **extracted_data,
+                "total_amount": 0.0,
+                "merchant_name": "Comprovante salvo para revisão",
+                "smart_category": "Revisão manual",
+                "payment_method": extracted_data.get("payment_method") or "Desconhecido",
+                "transaction_type": transaction_type or extracted_data.get("transaction_type", "Outflow"),
+                "transaction_date": schemas.datetime.now().isoformat(),
+                "description": "Comprovante arquivado automaticamente. Revise e preencha os dados manualmente.",
+                "needs_manual_review": True,
+            }
+            is_receipt = True
+            extracted_amount = 0.0
+            merchant_name = extracted_data["merchant_name"]
+        else:
+            archive_receipt(
+                db,
+                uid,
+                sha256_hash,
+                filename,
+                ext,
+                content,
+                status="processed",
+                raw_text=raw_text,
+            )
+            db.commit()
 
         date_val = extracted_data.get("transaction_date")
         date_obj = schemas.datetime.now()
@@ -483,7 +575,9 @@ async def process_ata(
         merchant = merchant_name or ("Link" if not is_receipt else "Desconhecido")
 
         tx_id = extracted_data.get("transaction_id")
-        if tx_id and str(tx_id).strip():
+        if force:
+            tx_id = None
+        elif tx_id and str(tx_id).strip():
             tx_id = re.sub(r'[^A-Z0-9]', '', str(tx_id).upper())
             tx_id = tx_id.replace('O', '0').replace('I', '1').replace('S', '5')
             # Check if THIS user already has this transaction_id (idempotency)
@@ -532,7 +626,8 @@ async def process_ata(
             db.refresh(db_expense)
             cache_invalidate_all()
             print(f"DEBUG: New expense created successfully - ID: {db_expense.id}, TX_ID: {tx_id}", flush=True)
-            return {"idempotent": False, "receipt_hash": sha256_hash, "ai_data": extracted_data, "database_id": db_expense.id}
+            status = "pending_review" if extracted_data.get("needs_manual_review") else "processed"
+            return {"idempotent": False, "receipt_hash": sha256_hash, "ai_data": extracted_data, "database_id": db_expense.id, "status": status}
         except IntegrityError as e:
             print('DEBUG: IntegrityError, checking for existing BEFORE rollback', flush=True)
             try:

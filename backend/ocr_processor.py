@@ -2,6 +2,7 @@ import os
 import re
 import fitz  # PyMuPDF
 import io
+import json
 import xml.etree.ElementTree as ET
 from dotenv import load_dotenv
 
@@ -10,19 +11,26 @@ load_dotenv(override=True)
 
 PDF_MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "2"))
 PDF_MAX_CHARS = int(os.environ.get("PDF_MAX_CHARS", "4000"))
-OCR_CONFIDENCE_THRESHOLD = float(os.environ.get("OCR_CONFIDENCE_THRESHOLD", "0.45"))
+TESSERACT_CONFIG = os.environ.get("TESSERACT_CONFIG", "--oem 3 --psm 6")
+TESSERACT_LANG = os.environ.get("TESSERACT_LANG", "por+eng")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 
-RAPIDOCR_ENGINE = None
-def get_rapidocr_engine():
-    global RAPIDOCR_ENGINE
-    if RAPIDOCR_ENGINE is None:
-        try:
-            from rapidocr import RapidOCR
-            print("DEBUG: Inicializando RapidOCR ONNX...", flush=True)
-            RAPIDOCR_ENGINE = RapidOCR()
-        except Exception as e:
-            print(f"Failed to initialize RapidOCR: {e}", flush=True)
-    return RAPIDOCR_ENGINE
+GEMINI_EXTRACTION_PROMPT = """
+Você é um extrator de dados financeiros.
+Analise este comprovante bancário brasileiro e retorne APENAS um JSON válido sem markdown com:
+{
+  "amount": float positivo,
+  "merchant": string nome do destinatário, recebedor ou estabelecimento,
+  "date": string ISO 8601,
+  "transaction_type": "Inflow" se recebeu ou "Outflow" se pagou,
+  "payment_method": "Pix" | "TED" | "DOC" | "Cartão" | "Boleto" | "Transferência" | "Desconhecido",
+  "transaction_id": string ID da transação/autenticação se visível,
+  "category": "Alimentação" | "Transporte" | "Saúde" | "Educação" | "Lazer" | "Serviços" | "Transferência" | "Outros",
+  "raw_text": string com o texto relevante lido no comprovante
+}
+Use ponto decimal em amount. Não invente dados ausentes.
+Se não conseguir extrair amount válido, retorne {"error": true}.
+""".strip()
 
 
 # =============================================================================
@@ -31,7 +39,7 @@ def get_rapidocr_engine():
 
 def _preprocess_image(image_bytes: bytes) -> bytes:
     """
-    Full OpenCV preprocessing pipeline applied as a fallback before RapidOCR:
+    Full OpenCV preprocessing pipeline applied before a second Tesseract pass:
     1. Upscale to at least 2400px on longest side (3x sharpness gain)
     2. Grayscale conversion
     3. Shadow / uneven illumination removal via large-kernel background subtraction
@@ -90,7 +98,7 @@ def _preprocess_image(image_bytes: bytes) -> bytes:
         # 6. Deskew — detect dominant text angle and rotate to horizontal
         blended = _deskew(blended)
 
-        # Encode back to JPEG bytes for RapidOCR
+        # Encode back to JPEG bytes for OCR fallback
         _, encoded = cv2.imencode('.jpg', blended, [cv2.IMWRITE_JPEG_QUALITY, 97])
         result_bytes = encoded.tobytes()
         print(f"DEBUG: [preprocess] Done. Output size: {len(result_bytes)} bytes", flush=True)
@@ -236,126 +244,143 @@ def _prepare_input(file_bytes: bytes, extension: str) -> tuple[str, str | bytes]
 
 
 # =============================================================================
-# RAPIDOCR — PaddleOCR ONNX runtime with optional preprocessing fallback
+# GEMINI VISION + TESSERACT FALLBACK
 # =============================================================================
 
-def _decode_image_for_ocr(image_bytes: bytes):
-    try:
-        import cv2
-        import numpy as np
+def _extract_json_object(text: str) -> dict:
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = re.sub(r"^```(?:json)?", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"```$", "", cleaned).strip()
 
-        nparr = np.frombuffer(image_bytes, np.uint8)
-        return cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-    except Exception as e:
-        print(f"DEBUG: Falha ao decodificar imagem para OCR: {e}", flush=True)
+    try:
+        return json.loads(cleaned)
+    except Exception:
+        match = re.search(r"\{.*\}", cleaned, re.DOTALL)
+        if not match:
+            raise
+        return json.loads(match.group(0))
+
+
+def _normalize_gemini_date(value: str) -> str:
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
+        return f"{value}T12:00:00"
+    return value.replace("Z", "")
+
+
+def _map_gemini_result(payload: dict) -> dict | None:
+    if not payload or payload.get("error") is True:
         return None
 
-
-def _rapidocr_to_lines(result) -> tuple[list[tuple[float, float, str, float]], float]:
-    txts_raw = getattr(result, "txts", None)
-    scores_raw = getattr(result, "scores", None)
-    boxes_raw = getattr(result, "boxes", None)
-
-    txts = list(txts_raw) if txts_raw is not None else []
-    scores = list(scores_raw) if scores_raw is not None else []
-    boxes = list(boxes_raw) if boxes_raw is not None else []
-
-    lines: list[tuple[float, float, str, float]] = []
-    accepted_scores: list[float] = []
-
-    for idx, text in enumerate(txts):
-        text = str(text).strip()
-        if not text:
-            continue
-
-        score = float(scores[idx]) if idx < len(scores) and scores[idx] is not None else 1.0
-        if score < OCR_CONFIDENCE_THRESHOLD:
-            continue
-
-        box = boxes[idx] if idx < len(boxes) else None
-        try:
-            xs = [float(point[0]) for point in box]
-            ys = [float(point[1]) for point in box]
-            y_pos = sum(ys) / len(ys)
-            x_pos = sum(xs) / len(xs)
-        except Exception:
-            y_pos = float(idx)
-            x_pos = 0.0
-
-        lines.append((y_pos, x_pos, text, score))
-        accepted_scores.append(score)
-
-    avg_score = sum(accepted_scores) / len(accepted_scores) if accepted_scores else 0.0
-    return lines, avg_score
-
-
-def _run_rapidocr(engine, image_input, label: str) -> tuple[str, float, int]:
+    amount = payload.get("amount", payload.get("total_amount"))
+    if isinstance(amount, str):
+        amount = amount.replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
     try:
-        result = engine(image_input)
-        lines, avg_score = _rapidocr_to_lines(result)
-        lines.sort(key=lambda item: (round(item[0] / 12) * 12, item[1]))
-        text = "\n".join(line[2] for line in lines)
-        print(
-            f"DEBUG: RapidOCR {label} concluído. Caracteres: {len(text)}, "
-            f"Blocos: {len(lines)}, Confiança média: {avg_score:.2f}",
-            flush=True
-        )
-        return text, avg_score, len(lines)
-    except Exception as e:
-        print(f"DEBUG: ERRO no RapidOCR {label}: {e}", flush=True)
-        return "", 0.0, 0
+        amount = float(amount)
+    except (TypeError, ValueError):
+        return None
+
+    if amount <= 0:
+        return None
+
+    tx_type = payload.get("transaction_type") or "Outflow"
+    if str(tx_type).lower() in {"entrada", "recebido", "recebimento", "inflow"}:
+        tx_type = "Inflow"
+    else:
+        tx_type = "Outflow"
+
+    return {
+        "total_amount": amount,
+        "currency": "BRL",
+        "transaction_date": _normalize_gemini_date(payload.get("date") or payload.get("transaction_date")),
+        "transaction_type": tx_type,
+        "payment_method": payload.get("payment_method") or "Desconhecido",
+        "merchant_name": payload.get("merchant") or payload.get("merchant_name") or "Desconhecido",
+        "destination_institution": payload.get("destination_institution") or "",
+        "transaction_id": payload.get("transaction_id") or "",
+        "masked_cpf": payload.get("masked_cpf") or "",
+        "smart_category": payload.get("category") or payload.get("smart_category") or "Outros",
+        "description": payload.get("description") or "Extraído por Gemini Vision",
+        "needs_manual_review": False,
+    }
 
 
-def _extract_text_rapidocr(image_bytes: bytes, file_path: str = None) -> str:
-    """
-    Runs RapidOCR/PaddleOCR ONNX. It tries the original image first because
-    PaddleOCR generally handles natural document photos better than binarized
-    images, then falls back to the existing preprocessing pipeline when needed.
-    """
-    engine = get_rapidocr_engine()
-    if not engine:
-        print("DEBUG: ERRO - Falha ao obter o engine do RapidOCR.")
-        return ""
+def _extract_with_gemini(image_bytes: bytes, file_path: str = None) -> tuple[dict | None, str]:
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        print("DEBUG: GEMINI_API_KEY não configurada; usando Tesseract fallback.", flush=True)
+        return None, ""
 
     try:
+        import google.generativeai as genai
+        from PIL import Image
+
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel(GEMINI_MODEL)
+
         if file_path and os.path.exists(file_path):
-            print(f"DEBUG: RapidOCR lendo de arquivo: {file_path}", flush=True)
-            with open(file_path, "rb") as f:
-                raw_bytes = f.read()
+            image = Image.open(file_path)
         else:
-            print(f"DEBUG: RapidOCR lendo de bytes ({len(image_bytes)} bytes)", flush=True)
-            raw_bytes = image_bytes
+            image = Image.open(io.BytesIO(image_bytes))
 
-        raw_img = _decode_image_for_ocr(raw_bytes)
-        raw_text, raw_score, raw_blocks = _run_rapidocr(engine, raw_img if raw_img is not None else raw_bytes, "raw")
+        response = model.generate_content([GEMINI_EXTRACTION_PROMPT, image])
+        response_text = getattr(response, "text", "") or ""
+        print(f"DEBUG: Gemini Vision respondeu {len(response_text)} caracteres.", flush=True)
 
-        if len(raw_text.strip()) >= 20 and raw_blocks >= 3:
-            print(f"--- DEBUG OCR (RapidOCR raw) ---\n{raw_text}\n-----------------", flush=True)
-            return raw_text
-
-        processed_bytes = _preprocess_image(raw_bytes)
-        processed_img = _decode_image_for_ocr(processed_bytes)
-        processed_text, processed_score, processed_blocks = _run_rapidocr(
-            engine,
-            processed_img if processed_img is not None else processed_bytes,
-            "preprocessado"
-        )
-
-        if (processed_blocks, processed_score, len(processed_text)) > (raw_blocks, raw_score, len(raw_text)):
-            print(f"--- DEBUG OCR (RapidOCR preprocessado) ---\n{processed_text}\n-----------------", flush=True)
-            return processed_text
-
-        print(f"--- DEBUG OCR (RapidOCR raw fallback) ---\n{raw_text}\n-----------------", flush=True)
-        return raw_text
-
+        payload = _extract_json_object(response_text)
+        mapped = _map_gemini_result(payload)
+        raw_text = payload.get("raw_text") or response_text
+        if mapped:
+            print(f"DEBUG: Gemini extraiu valor={mapped['total_amount']} merchant={mapped['merchant_name']}", flush=True)
+        else:
+            print(f"DEBUG: Gemini não retornou valor válido: {payload}", flush=True)
+        return mapped, raw_text
     except Exception as e:
-        print(f"DEBUG: ERRO no RapidOCR: {e}", flush=True)
+        print(f"DEBUG: Gemini falhou: {e}; usando Tesseract fallback.", flush=True)
+        return None, ""
+
+
+def _extract_text_tesseract(image_bytes: bytes, file_path: str = None) -> str:
+    try:
+        from PIL import Image
+        import pytesseract
+
+        if file_path and os.path.exists(file_path):
+            print(f"DEBUG: Tesseract lendo de arquivo: {file_path}", flush=True)
+            image = Image.open(file_path)
+        else:
+            print(f"DEBUG: Tesseract lendo de bytes ({len(image_bytes)} bytes)", flush=True)
+            image = Image.open(io.BytesIO(image_bytes))
+
+        gray = image.convert("L")
+        text = pytesseract.image_to_string(gray, lang=TESSERACT_LANG, config=TESSERACT_CONFIG).strip()
+        print(f"DEBUG: Tesseract concluído. Caracteres: {len(text)}", flush=True)
+        if text:
+            print(f"--- DEBUG OCR (Tesseract) ---\n{text}\n-----------------", flush=True)
+        return text
+    except Exception as e:
+        print(f"DEBUG: ERRO no Tesseract: {e}", flush=True)
         return ""
+
+
+def _extract_text_ocr(image_bytes: bytes, file_path: str = None) -> str:
+    tesseract_text = _extract_text_tesseract(image_bytes, file_path=file_path)
+    if len(tesseract_text.strip()) >= 20 and re.search(r'\d+[,.]\d{2}', tesseract_text):
+        return tesseract_text
+
+    print("DEBUG: Tesseract não encontrou valor confiável.", flush=True)
+    processed_text = _extract_text_tesseract(_preprocess_image(image_bytes))
+    if len(processed_text.strip()) > len(tesseract_text.strip()):
+        return processed_text
+    return tesseract_text
 
 
 def _extract_text_easyocr(image_bytes: bytes, file_path: str = None) -> str:
     """Backward-compatible alias for legacy tests/scripts."""
-    return _extract_text_rapidocr(image_bytes, file_path=file_path)
+    return _extract_text_ocr(image_bytes, file_path=file_path)
 
 
 # =============================================================================
@@ -384,7 +409,11 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
 
         raw_text = ""
         if input_kind == "image":
-            raw_text = _extract_text_rapidocr(prepared_input, file_path=file_path)
+            gemini_data, gemini_text = _extract_with_gemini(prepared_input, file_path=file_path)
+            if gemini_data:
+                return gemini_data, gemini_text
+
+            raw_text = _extract_text_ocr(prepared_input, file_path=file_path)
         elif input_kind == "pdf_text":
             raw_text = prepared_input
 
@@ -400,15 +429,24 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
         #    Strategy A: Keyword + number
         def clean_val(v):
             # Handle both BR format (1.234,56) and US format (1,234.56)
-            v = v.strip().replace(" ", "")
-            if re.search(r'\d+\.\d{3},\d{2}', v):  # BR: 1.234,56
-                v = v.replace(".", "").replace(",", ".")
-            elif re.search(r'\d+,\d{3}\.\d{2}', v):  # US: 1,234.56
-                v = v.replace(",", "")
-            else:
+            v = re.sub(r'[^\d,.]', '', v.strip().replace(" ", ""))
+            if "," in v and "." in v:
+                if v.rfind(",") > v.rfind("."):  # BR: 1.234,56
+                    v = v.replace(".", "").replace(",", ".")
+                else:  # US: 1,234.56
+                    v = v.replace(",", "")
+            elif v.count(",") > 1:
+                parts = v.split(",")
+                v = "".join(parts[:-1]) + "." + parts[-1]
+            elif v.count(".") > 1:
+                parts = v.split(".")
+                v = "".join(parts[:-1]) + "." + parts[-1]
+            elif "," in v:
                 v = v.replace(",", ".")
+            else:
+                v = v
             try:
-                return float(re.sub(r'[^\d.]', '', v))
+                return float(v)
             except:
                 return 0.0
 
@@ -503,7 +541,7 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
 
         # 4. NOME DO DESTINATÁRIO / MERCHANT
         name_match = re.search(
-            r'(?:NOME|DESTINAT[AÁ]RIO|RECEBEDOR|FAVORECIDO|PARA|BENEFICI[AÁ]RIO)[:\s-]*\n?([A-ZÀ-Úa-zà-ú\s]{5,50})(?:\n|$)',
+            r'(?:NOME|CLIENTE|DESTINAT[AÁ]RIO|RECEBEDOR|FAVORECIDO|PARA|BENEFICI[AÁ]RIO)[:\s-]*\n?([A-ZÀ-Úa-zà-ú\s]{5,50})(?:\n|$)',
             raw_text, re.IGNORECASE
         )
         if name_match:
@@ -578,7 +616,7 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
             fallback_data["transaction_type"] = "Inflow"
             fallback_data["smart_category"] = "Receita"
 
-        fallback_data["needs_manual_review"] = False
+        fallback_data["needs_manual_review"] = fallback_data["total_amount"] <= 0
         return fallback_data, raw_text
 
     except Exception as e:
