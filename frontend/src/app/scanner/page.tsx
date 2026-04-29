@@ -32,11 +32,15 @@ interface ExtractedData {
 interface DuplicateWarning {
   message: string;
   receipt_hash: string;
+  times_scanned?: number;
+  can_continue?: boolean;
   existing: {
-    id: number;
-    amount: number;
-    merchant: string;
-    date: string | null;
+    total_amount?: number;
+    amount?: number;
+    merchant_name?: string;
+    merchant?: string;
+    transaction_date?: string;
+    date?: string | null;
   };
 }
 
@@ -204,7 +208,7 @@ export default function ScannerPage() {
 
   const handleConfirmScan = async () => {
     setIsEditing(false);
-    if (!receiptHash || !extractedData || !editData) return;
+    if (!receiptHash || !extractedData || !editData || !db) return;
 
     try {
       const hasCorrections = JSON.stringify(editData) !== JSON.stringify(extractedData);
@@ -434,54 +438,48 @@ export default function ScannerPage() {
 
         {duplicateWarning && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
-            <div
-              className="w-full max-w-sm space-y-4 p-5"
-              style={{ backgroundColor: "var(--bg-primary)", border: "0.5px solid var(--ds-border)", borderRadius: "8px" }}
-            >
+            <div className="bg-[#1C1C23] border border-white/10 rounded-2xl p-6 max-w-sm w-full space-y-4">
               <div className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center">
                   <AlertTriangle className="text-amber-400" size={20} />
                 </div>
                 <div>
-                  <h3 className="text-sm font-semibold" style={{ color: "var(--text-primary)" }}>Comprovante já escaneado</h3>
-                  <p className="text-xs" style={{ color: "var(--text-secondary)" }}>
-                    Este arquivo já foi registrado anteriormente.
-                  </p>
+                  <h3 className="text-white font-semibold">Comprovante já escaneado</h3>
+                  <p className="text-white/50 text-sm">Escaneado {duplicateWarning.times_scanned || 1}x anteriormente</p>
                 </div>
               </div>
-
-              <div className="space-y-2 p-3" style={{ backgroundColor: "var(--bg-secondary)", borderRadius: "6px" }}>
-                <div className="flex justify-between gap-3 text-sm">
-                  <span style={{ color: "var(--text-secondary)" }}>Valor</span>
-                  <span className="font-medium text-emerald-500">{formatCurrency(duplicateWarning.existing.amount)}</span>
+              <div className="bg-black/20 rounded-xl p-4 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-white/50 text-sm">Valor</span>
+                  <span className="text-[#10B981] font-medium">R$ {(duplicateWarning.existing.total_amount || duplicateWarning.existing.amount || 0).toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between gap-3 text-sm">
-                  <span style={{ color: "var(--text-secondary)" }}>Estabelecimento</span>
-                  <span className="text-right truncate" style={{ color: "var(--text-primary)" }}>{duplicateWarning.existing.merchant || "Desconhecido"}</span>
+                <div className="flex justify-between">
+                  <span className="text-white/50 text-sm">Estabelecimento</span>
+                  <span className="text-white text-sm">{duplicateWarning.existing.merchant_name || duplicateWarning.existing.merchant || "Desconhecido"}</span>
                 </div>
-                <div className="flex justify-between gap-3 text-sm">
-                  <span style={{ color: "var(--text-secondary)" }}>Data</span>
-                  <span style={{ color: "var(--text-primary)" }}>
-                    {duplicateWarning.existing.date ? new Date(duplicateWarning.existing.date).toLocaleDateString("pt-BR") : "-"}
+                <div className="flex justify-between">
+                  <span className="text-white/50 text-sm">Data</span>
+                  <span className="text-white text-sm">
+                    {new Date(duplicateWarning.existing.transaction_date || duplicateWarning.existing.date || Date.now()).toLocaleDateString('pt-BR')}
                   </span>
                 </div>
               </div>
-
-              <p className="text-center text-sm" style={{ color: "var(--text-secondary)" }}>Deseja adicionar mesmo assim?</p>
+              <div className="bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 rounded-xl p-3">
+                <p className="text-[#8B5CF6] text-xs text-center">🧠 Dados salvos no Firebase e serão usados para treinar o Nejix</p>
+              </div>
+              <p className="text-white/60 text-sm text-center">Deseja adicionar este comprovante mesmo assim?</p>
               <div className="flex gap-3">
-                <button
-                  onClick={() => setDuplicateWarning(null)}
-                  className="flex-1 py-3 text-sm font-medium"
-                  style={{ border: "0.5px solid var(--ds-border)", borderRadius: "6px", color: "var(--text-primary)" }}
+                <button 
+                  onClick={() => { setDuplicateWarning(null); resetAll(); }} 
+                  className="flex-1 py-3 rounded-xl border border-white/10 text-white hover:bg-white/5 transition-colors"
                 >
-                  Cancelar
+                  Não, cancelar
                 </button>
-                <button
-                  onClick={handleForceSubmit}
-                  className="flex-1 py-3 text-sm font-medium text-white"
-                  style={{ backgroundColor: "#3B82F6", borderRadius: "6px" }}
+                <button 
+                  onClick={handleForceSubmit} 
+                  className="flex-1 py-3 rounded-xl bg-[#8B5CF6] text-white font-medium hover:bg-[#8B5CF6]/90 transition-colors"
                 >
-                  Adicionar mesmo assim
+                  Sim, adicionar
                 </button>
               </div>
             </div>

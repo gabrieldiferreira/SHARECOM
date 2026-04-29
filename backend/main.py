@@ -558,42 +558,20 @@ async def process_ata(
         archive_receipt(db, uid, sha256_hash, filename, ext, content, status="received")
         db.commit()
 
-        # Check for idempotency (per user) using receipt hash
-        existing_expense = db.query(models.Expense).filter(
-            models.Expense.receipt == sha256_hash,
-            models.Expense.user_id == uid
-        ).first()
-        if existing_expense and not force:
-            archive_receipt(db, uid, sha256_hash, filename, ext, content, status="duplicate")
-            db.commit()
+        # Check for idempotency (per user) using receipt hash against FIREBASE
+        cache_result = await check_receipt_cache(sha256_hash)
+        if cache_result['hit'] and not force:
+            cached_data = cache_result['data']
             if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
-            print(f"DEBUG: Idempotency hit for receipt hash: {sha256_hash} - Returning duplicate warning", flush=True)
             return JSONResponse(
                 status_code=200, 
                 content={
                     "status": "duplicate_warning",
-                    "message": "Este comprovante já foi escaneado anteriormente.",
-                    "idempotent": True,
-                    "database_id": existing_expense.id,
+                    "message": f"Este comprovante já foi escaneado {cached_data.get('timesAccessed', 1)}x anteriormente. Os dados estão salvos no Firebase e serão usados para treinar o Nejix.",
+                    "existing": cached_data.get('geminiExtracted', {}),
+                    "times_scanned": cached_data.get('timesAccessed', 1),
                     "receipt_hash": sha256_hash,
-                    "existing": {
-                        "id": existing_expense.id,
-                        "amount": float(existing_expense.amount) if existing_expense.amount else 0.0,
-                        "merchant": existing_expense.merchant,
-                        "date": existing_expense.date.isoformat() if existing_expense.date else None,
-                    },
-                    "ai_data": {
-                        "total_amount": float(existing_expense.amount) if existing_expense.amount else 0.0,
-                        "merchant_name": existing_expense.merchant,
-                        "transaction_date": str(existing_expense.date),
-                        "transaction_type": existing_expense.transaction_type,
-                        "smart_category": existing_expense.category,
-                        "payment_method": existing_expense.payment_method,
-                        "destination_institution": existing_expense.destination_institution,
-                        "transaction_id": existing_expense.transaction_id,
-                        "masked_cpf": existing_expense.masked_cpf,
-                        "description": existing_expense.description,
-                    }
+                    "can_continue": True
                 }
             )
 
@@ -617,11 +595,16 @@ async def process_ata(
                 quality = assess_image_quality(content)
                 source = 'gemini'
                 
-                cache_result = await check_receipt_cache(sha256_hash)
                 if cache_result['hit']:
                     print('NEJIX HINT: Using Firebase cached Gemini data', flush=True)
                     extracted_data = cache_result['data'].get('geminiExtracted', {})
                     source = 'cache_enhanced'
+                    
+                    if force:
+                        print(f"FORCE SUBMIT: User chose to add duplicate receipt {sha256_hash[:8]}...")
+                        fs.collection('receipt_cache').document(sha256_hash).update({'timesAccessed': firestore.Increment(1)})
+                        fs.collection('nejix_training_data').document(sha256_hash).update({'timesSubmitted': firestore.Increment(1), 'lastSubmittedAt': firestore.SERVER_TIMESTAMP})
+                        source = 'cache_forced'
                 else:
                     from ai_processor import analyze_receipt_with_ai
                     extracted_data_ai, ai_error = await analyze_receipt_with_ai(content, ext, ocr_text=raw_text)

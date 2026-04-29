@@ -289,24 +289,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     { name: t('nav.goals'), href: "/goals", icon: Target },
   ];
 
-  const [activeNavIndex, setActiveNavIndex] = useState(0);
-  const [isNavAnimating, setIsNavAnimating] = useState(false);
-
-  const handleNextNav = () => {
-    if (isNavAnimating) return;
-    setIsNavAnimating(true);
-    const swipableCount = mobileNavItems.length - 1;
-    setActiveNavIndex((prev) => (prev + 1) % swipableCount);
-    setTimeout(() => setIsNavAnimating(false), 400); // Cooldown to ensure 1-by-1
-  };
-
-  const handlePrevNav = () => {
-    if (isNavAnimating) return;
-    setIsNavAnimating(true);
-    const swipableCount = mobileNavItems.length - 1;
-    setActiveNavIndex((prev) => (prev - 1 + swipableCount) % swipableCount);
-    setTimeout(() => setIsNavAnimating(false), 400); // Cooldown
-  };
 
   const handleLogout = async () => {
     if (!auth) {
@@ -822,64 +804,34 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <div className="absolute right-0 top-0 h-full bg-white" style={{ width: 'calc(50% - 48px)' }} />
           </div>
 
-          {/* Interaction & Icons Layer - 1-by-1 Swipe with Upwards Exit */}
-          <motion.div 
-            className="absolute inset-0 z-40 pointer-events-auto overflow-hidden"
-            onPanEnd={(_, info) => {
-              if (info.offset.x > 20) handlePrevNav();
-              else if (info.offset.x < -20) handleNextNav();
-            }}
-          >
-            <div className="flex items-center h-full w-full relative">
-              <AnimatePresence mode="popLayout" initial={false}>
-                {[0, 1, 2, 3].map((slotIndex) => {
-                  let item;
-                  if (slotIndex === 0) {
-                    item = mobileNavItems[0];
-                  } else {
-                    const swipableCount = mobileNavItems.length - 1;
-                    const swipableIndex = (activeNavIndex + slotIndex - 1) % swipableCount;
-                    item = mobileNavItems[swipableIndex + 1];
-                  }
-                  
-                  const Icon = item.icon;
-                  const isActive = item.href ? pathname === item.href : false;
+          {/* Interaction & Icons Layer - Static Fixed Nav */}
+          <div className="absolute inset-0 z-40 pointer-events-auto">
+            {mobileNavItems.map((item, index) => {
+              const Icon = item.icon;
+              const isActive = item.href ? pathname === item.href : false;
+              // Positions: 0%, 20%, [Gap 40-60 for Scan Button], 60%, 80%
+              const finalPos = index < 2 ? `${index * 20}%` : `${(index + 1) * 20}%`;
 
-                  // Positions: 0%, 20%, [Gap 40-60], 60%, 80%
-                  const finalPos = slotIndex < 2 ? `${slotIndex * 20}%` : `${(slotIndex + 1) * 20}%`;
-
-                  return (
-                    <motion.div
-                      key={`nav-item-${item.name}`} // Key linked to item to allow it to move across slots
-                      layout
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0, y: -40 }}
-                      transition={{ 
-                        type: "spring", 
-                        stiffness: 400, 
-                        damping: 35,
-                        layout: { duration: 0.3 }
-                      }}
-                      className="absolute top-0 bottom-0 flex flex-col items-center justify-center gap-1.5 py-2"
-                      style={{ left: finalPos, width: '20%' }}
-                    >
-                      <Link
-                        href={item.href || "#"}
-                        className="flex flex-col items-center justify-center w-full h-full active:opacity-60 transition-opacity touch-manipulation"
-                        style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
-                      >
-                        <Icon size={22} strokeWidth={1.5} />
-                        <span className="text-[10px] font-semibold text-center leading-tight truncate w-full px-1">
-                          {item.name}
-                        </span>
-                      </Link>
-                    </motion.div>
-                  );
-                })}
-              </AnimatePresence>
-            </div>
-          </motion.div>
+              return (
+                <div
+                  key={item.href || item.name}
+                  className="absolute top-0 bottom-0 flex flex-col items-center justify-center gap-1.5 py-2"
+                  style={{ left: finalPos, width: '20%' }}
+                >
+                  <Link
+                    href={item.href || "#"}
+                    className="flex flex-col items-center justify-center w-full h-full active:opacity-60 transition-opacity touch-manipulation"
+                    style={{ color: isActive ? '#3B82F6' : 'var(--text-tertiary)' }}
+                  >
+                    <Icon size={22} strokeWidth={1.5} />
+                    <span className="text-[10px] font-semibold text-center leading-tight truncate w-full px-1">
+                      {item.name}
+                    </span>
+                  </Link>
+                </div>
+              );
+            })}
+          </div>
         </nav>
       </main>
     </div>
