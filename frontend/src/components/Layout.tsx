@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 
 import NextImage from "next/image";
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp, Target, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp, ArrowDownLeft, ArrowUpRight, Target, type LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -709,23 +709,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden relative">
         {/* Global Success Notification Toast */}
         {uploadSuccess && lastAdded && (
-          <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[300] w-[90%] max-w-sm animate-in fade-in slide-in-from-top-4 duration-500">
-            <div className={`text-white p-4 rounded-2xl shadow-2xl flex items-center gap-4 border border-white/20 backdrop-blur-md bg-opacity-90 ${
-              uploadType === 'Outflow' ? 'bg-red-600' : 'bg-emerald-600'
-            }`}>
-              <div className="bg-white/20 p-2 rounded-full">
-                <CheckCircle2 size={24} />
-              </div>
-              <div className="flex-1 overflow-hidden">
-                <p className="text-[10px] font-bold uppercase tracking-wider opacity-80">
-                  {uploadType === 'Outflow' ? 'Gasto Adicionado' : 'Receita Adicionada'}
-                </p>
-                <p className="text-sm font-semibold truncate">{lastAdded.merchant}</p>
-              </div>
-              <div className="text-right whitespace-nowrap">
-                <p className="text-lg font-bold">
-                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lastAdded.amount)}
-                </p>
+          <div className="fixed left-4 right-4 z-[300] scan-notification scan-card-top">
+            <div className={`rounded-2xl p-4 backdrop-blur-xl border transition-all duration-300 ${uploadType === 'Inflow' ? 'bg-green-500/15 border-green-500/30' : 'bg-red-500/15 border-red-500/30'}`}>
+              <div className='flex items-center gap-3'>
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${uploadType === 'Inflow' ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                  {uploadType === 'Inflow' ? <ArrowDownLeft className='text-green-400' size={20} /> : <ArrowUpRight className='text-red-400' size={20} />}
+                </div>
+                <div className="flex-1 overflow-hidden">
+                  <p className='text-text-muted text-xs'>{uploadType === 'Inflow' ? 'Entrada recebida' : 'Saída registrada'}</p>
+                  <p className={`text-2xl font-bold truncate ${uploadType === 'Inflow' ? 'text-green-400' : 'text-red-400'}`}>
+                    {uploadType === 'Inflow' ? '+' : '-'} {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(lastAdded.amount)}
+                  </p>
+                  <p className='text-text-secondary text-sm truncate'>{lastAdded.merchant}</p>
+                </div>
               </div>
             </div>
           </div>
