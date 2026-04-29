@@ -15,6 +15,7 @@ class ExpenseBase(BaseModel):
     transaction_id: str | None = None
     masked_cpf: str | None = None
     note: str | None = None
+    scanned_at: datetime | None = None
     deleted_at: datetime | None = None
 
 class ExpenseCreate(ExpenseBase):
@@ -59,4 +60,3 @@ class Goal(GoalBase):
 
     class Config:
         from_attributes = True
-

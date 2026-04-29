@@ -328,13 +328,17 @@ def read_expenses(
     for doc in docs:
         d = doc.to_dict()
         if "id" not in d: d["id"] = int(doc.id)
+        if not d.get("scanned_at"):
+            d["scanned_at"] = doc.create_time.isoformat() if doc.create_time else d.get("date")
         if "date" in d and hasattr(d["date"], "isoformat"):
             d["date"] = d["date"].isoformat()
+        if "scanned_at" in d and hasattr(d["scanned_at"], "isoformat"):
+            d["scanned_at"] = d["scanned_at"].isoformat()
         if "deleted_at" in d and hasattr(d["deleted_at"], "isoformat"):
             d["deleted_at"] = d["deleted_at"].isoformat()
         expenses.append(d)
         
-    expenses.sort(key=lambda x: x.get("date", ""), reverse=True)
+    expenses.sort(key=lambda x: x.get("scanned_at") or x.get("date", ""), reverse=True)
     expenses = expenses[skip:skip+limit]
 
     cache_set(cache_key, expenses)
@@ -352,8 +356,11 @@ def create_expense(
     expense_data = expense.model_dump()
     expense_data["id"] = new_id
     expense_data["user_id"] = uid
+    now = datetime.utcnow()
     if not expense_data.get("date"):
-        expense_data["date"] = datetime.utcnow()
+        expense_data["date"] = now
+    if not expense_data.get("scanned_at"):
+        expense_data["scanned_at"] = now
     fs.collection("expenses").document(str(new_id)).set(expense_data)
     cache_invalidate_all()
     return expense_data
@@ -662,10 +669,12 @@ async def process_ata(
             import random
             from datetime import datetime
             new_id = random.randint(100000000, 999999999)
+            scanned_at = datetime.utcnow().isoformat()
             db_expense = {
                 "id": new_id,
                 "user_id": uid,
                 "date": date_obj if isinstance(date_obj, str) else date_obj.isoformat() if hasattr(date_obj, 'isoformat') else datetime.utcnow().isoformat(),
+                "scanned_at": scanned_at,
                 "amount": amount,
                 "category": category,
                 "merchant": merchant,
@@ -682,7 +691,7 @@ async def process_ata(
             cache_invalidate_all()
             print(f"DEBUG: New expense created successfully - ID: {new_id}, TX_ID: {tx_id}", flush=True)
             status = "pending_review" if extracted_data.get("needs_manual_review") else "processed"
-            return {"idempotent": False, "receipt_hash": sha256_hash, "ai_data": extracted_data, "database_id": new_id, "status": status}
+            return {"idempotent": False, "receipt_hash": sha256_hash, "ai_data": extracted_data, "database_id": new_id, "scanned_at": scanned_at, "status": status}
         except Exception as fb_error:
             print(f"DEBUG: Firestore error caught - Type: {type(fb_error).__name__}, Message: {str(fb_error)}", flush=True)
             return JSONResponse(status_code=400, content={'status': 'error', 'message': str(fb_error)})

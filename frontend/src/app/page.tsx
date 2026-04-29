@@ -497,6 +497,7 @@ function ExpenseTracker() {
      if (!manualTx.merchant_name || !manualTx.total_amount) return;
      const amount = parseFloat(manualTx.total_amount);
      const transactionDate = new Date().toISOString();
+     const scannedAt = new Date().toISOString();
 
      try {
        const response = await authenticatedFetch(getApiUrl("/expenses"), {
@@ -510,6 +511,7 @@ function ExpenseTracker() {
            payment_method: manualTx.payment_method,
            note: manualTx.note || undefined,
            date: transactionDate,
+           scanned_at: scannedAt,
          }),
        });
 
@@ -525,6 +527,7 @@ function ExpenseTracker() {
           category: saved.category || manualTx.category,
           currency: 'BRL',
           transaction_date: saved.date || transactionDate,
+          scanned_at: saved.scanned_at || scannedAt,
           transaction_type: saved.transaction_type || manualTx.transaction_type,
           payment_method: saved.payment_method || manualTx.payment_method,
           description: saved.description || undefined,
@@ -623,6 +626,7 @@ function ExpenseTracker() {
           category: ai.smart_category || 'Outros',
           currency: 'BRL',
           transaction_date: parsedDate,
+          scanned_at: data.scanned_at || new Date().toISOString(),
           transaction_type: ai.transaction_type || uploadType || 'Outflow',
           payment_method: ai.payment_method || 'Comprovante',
           description: ai.description || undefined,
@@ -630,7 +634,7 @@ function ExpenseTracker() {
           transaction_id: ai.transaction_id || undefined,
           masked_cpf: ai.masked_cpf || undefined,
           needs_manual_review: !!ai.needs_manual_review,
-          receipt_hash: data.filename || undefined,
+          receipt_hash: data.receipt_hash || data.filename || undefined,
           is_synced: true, // It is already synced as it comes from the backend
           note: data.note || undefined
         };

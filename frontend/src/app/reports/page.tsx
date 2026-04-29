@@ -111,11 +111,11 @@ export default function ReportsPage() {
     return transactions.filter(tx => {
       if (typeFilter !== "all" && tx.transaction_type !== typeFilter) return false;
       if (dateRange.start) {
-        const txDate = new Date(tx.transaction_date).toLocaleDateString("sv-SE");
+        const txDate = new Date(tx.scanned_at || tx.transaction_date).toLocaleDateString("sv-SE");
         if (txDate < dateRange.start) return false;
       }
       if (dateRange.end) {
-        const txDate = new Date(tx.transaction_date).toLocaleDateString("sv-SE");
+        const txDate = new Date(tx.scanned_at || tx.transaction_date).toLocaleDateString("sv-SE");
         if (txDate > dateRange.end) return false;
       }
       return true;
@@ -143,7 +143,7 @@ export default function ReportsPage() {
   const monthlyData = useMemo(() => {
     const map: Record<string, { inflow: number; outflow: number; count: number }> = {};
     filtered.forEach(tx => {
-      const d = new Date(tx.transaction_date);
+      const d = new Date(tx.scanned_at || tx.transaction_date);
       const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
       if (!map[key]) map[key] = { inflow: 0, outflow: 0, count: 0 };
       map[key].count++;
@@ -205,6 +205,7 @@ export default function ReportsPage() {
           transaction_type: tx.transaction_type,
           payment_method: tx.payment_method,
           transaction_date: tx.transaction_date,
+          scanned_at: tx.scanned_at || null,
           destination_institution: tx.destination_institution || null,
           note: tx.note || null,
         })),

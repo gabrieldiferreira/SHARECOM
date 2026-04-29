@@ -92,8 +92,8 @@ async function getTransactionsForOwner(db: TransactionDB, ownerUid: string) {
   const txs = await db.getAllFromIndex('transactions', 'by-owner', ownerUid);
 
   return txs.sort((a, b) => {
-    const dateA = new Date(a.transaction_date).getTime();
-    const dateB = new Date(b.transaction_date).getTime();
+    const dateA = new Date(a.scanned_at || a.transaction_date).getTime();
+    const dateB = new Date(b.scanned_at || b.transaction_date).getTime();
     if (Number.isNaN(dateA) || Number.isNaN(dateB)) return 0;
     return dateB - dateA;
   });
@@ -469,6 +469,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
                 total_amount: Number(item.amount) || 0,
                 currency: 'BRL',
                 transaction_date: item.date,
+                scanned_at: item.scanned_at || item.created_at || item.date,
                 transaction_type: item.transaction_type || 'Outflow',
                 payment_method: item.payment_method || 'Comprovante',
                 merchant_name: item.merchant || 'Desconhecido',

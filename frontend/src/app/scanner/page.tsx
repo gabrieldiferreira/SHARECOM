@@ -161,6 +161,7 @@ export default function ScannerPage() {
             category: extracted.smart_category,
             currency: "BRL",
             transaction_date: extracted.transaction_date,
+            scanned_at: data.scanned_at || new Date().toISOString(),
             transaction_type: extracted.transaction_type,
             payment_method: extracted.payment_method,
             description: extracted.description,
