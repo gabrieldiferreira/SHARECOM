@@ -9,6 +9,9 @@ import { useTransactionStore } from "../../store/useTransactionStore";
 import { TransactionEntity } from "../../lib/db";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { db } from "../../lib/firebase";
+import { doc, updateDoc, serverTimestamp, increment } from "firebase/firestore";
+import { useToast } from "../../components/ui/Toast";
 
 type ScanStep = "capture" | "preview" | "processing" | "result" | "error";
 
@@ -51,6 +54,8 @@ export default function ScannerPage() {
   const [savedId, setSavedId] = useState<number | null>(null);
   const [flashEnabled, setFlashEnabled] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarning | null>(null);
+  const [receiptHash, setReceiptHash] = useState<string | null>(null);
+  const { showToast } = useToast();
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -139,6 +144,7 @@ export default function ScannerPage() {
         setEditData({ ...extracted });
         setIdempotent(!!data.idempotent);
         setSavedId(data.database_id || null);
+        setReceiptHash(data.receipt_hash || null);
 
         // Always ensure the transaction exists locally in IndexedDB.
         // For duplicates: the backend returns the existing record's ai_data + database_id.
@@ -194,6 +200,35 @@ export default function ScannerPage() {
 
   const handleForceSubmit = () => {
     void processReceipt(true);
+  };
+
+  const handleConfirmScan = async () => {
+    setIsEditing(false);
+    if (!receiptHash || !extractedData || !editData) return;
+
+    try {
+      const hasCorrections = JSON.stringify(editData) !== JSON.stringify(extractedData);
+      
+      await updateDoc(doc(db, 'nejix_training_data', receiptHash), {
+        userVerified: true, 
+        verifiedAt: serverTimestamp(), 
+        userCorrections: hasCorrections ? editData : {}, 
+        geminiGroundTruth: editData
+      });
+      
+      await updateDoc(doc(db, 'nejix_stats', 'current'), {
+        verifiedSamples: increment(1), 
+        trainingReady: increment(hasCorrections ? 0 : 1)
+      });
+      
+      if (hasCorrections) {
+        showToast('Correções salvas! Você ajudou a treinar o Nejix 🧠', 'success');
+      } else {
+        showToast('Dados confirmados! Você ajudou a treinar o Nejix 🧠', 'success');
+      }
+    } catch (e) {
+      console.error("Failed to save Nejix feedback:", e);
+    }
   };
 
   const formatCurrency = (value: number) => {
@@ -670,7 +705,7 @@ export default function ScannerPage() {
                 Cancelar
               </button>
               <button
-                onClick={() => setIsEditing(false)}
+                onClick={handleConfirmScan}
                 className="flex-1 flex items-center justify-center gap-2 py-3.5 text-sm font-semibold text-white rounded-xl"
                 style={{ background: 'linear-gradient(135deg, #8B5CF6, #EC4899)' }}
               >

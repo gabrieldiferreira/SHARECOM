@@ -1,3 +1,6 @@
+from dotenv import load_dotenv
+load_dotenv()  # Load .env before anything else
+
 from fastapi import FastAPI, Depends, HTTPException, UploadFile, File, Form
 from starlette.responses import JSONResponse
 from fastapi.concurrency import run_in_threadpool
@@ -11,6 +14,22 @@ import hashlib
 import re
 import time
 from auth import verify_firebase_token
+
+import firebase_admin
+from firebase_admin import credentials, firestore, storage
+import json
+
+firebase_creds_str = os.getenv('FIREBASE_SERVICE_ACCOUNT_JSON')
+if firebase_creds_str:
+    cred = credentials.Certificate(json.loads(firebase_creds_str))
+else:
+    cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS_PATH", "unidoc-493609-firebase-adminsdk-fbsvc-1380bed8ff.json"))
+
+if not firebase_admin._apps:
+    firebase_admin.initialize_app(cred, {'storageBucket': 'unidoc-493609.firebasestorage.app'})
+
+fs = firestore.client()
+bucket = storage.bucket()
 
 from database import engine, get_db, Base, DATABASE_URL
 from export_routes import router as export_router
@@ -213,6 +232,100 @@ def archive_receipt(
     )
     db.add(archive)
     return archive
+
+
+# =============================================================================
+# NEJIX FIREBASE CACHE & TRAINING PIPELINE
+# =============================================================================
+from datetime import datetime
+
+async def upload_receipt_firebase(image_bytes: bytes, user_id: str, receipt_hash: str, bank: str) -> tuple[str, str]:
+    blob_original = bucket.blob(f"receipts/{user_id}/{receipt_hash}.jpg")
+    blob_original.upload_from_string(image_bytes, content_type="image/jpeg")
+    blob_original.make_public()
+    original_url = blob_original.public_url
+
+    blob_dataset = bucket.blob(f"nejix_dataset/{bank}/{receipt_hash}.jpg")
+    blob_dataset.upload_from_string(image_bytes, content_type="image/jpeg")
+    blob_dataset.make_public()
+    dataset_url = blob_dataset.public_url
+
+    print(f"FIREBASE STORAGE: Receipt uploaded -> {original_url}", flush=True)
+    return original_url, dataset_url
+
+async def check_receipt_cache(receipt_hash: str) -> dict:
+    cache_ref = fs.collection("receipt_cache").document(receipt_hash)
+    cache_doc = cache_ref.get()
+    if cache_doc.exists:
+        data = cache_doc.to_dict()
+        cache_ref.update({"timesAccessed": firestore.Increment(1)})
+        print(f"FIRESTORE CACHE HIT: {receipt_hash[:8]}... accessed {data.get('timesAccessed', 0) + 1}x", flush=True)
+        return {"hit": True, "data": data}
+    return {"hit": False}
+
+async def save_to_firebase(receipt_hash: str, user_id: str, image_url: str, dataset_url: str, gemini_data: dict, tesseract_raw: str, bank: str, quality: str):
+    cache_data = {
+        "receiptHash": receipt_hash,
+        "geminiExtracted": gemini_data,
+        "tesseractRawText": tesseract_raw,
+        "source": "gemini",
+        "createdAt": firestore.SERVER_TIMESTAMP,
+        "timesAccessed": 1,
+        "bank": bank,
+        "imageUrl": image_url,
+        "imageQuality": quality,
+        "userId": user_id
+    }
+    fs.collection("receipt_cache").document(receipt_hash).set(cache_data)
+
+    nejix_data = {
+        "receiptHash": receipt_hash,
+        "imageUrl": dataset_url,
+        "geminiGroundTruth": gemini_data,
+        "userVerified": False,
+        "userCorrections": {},
+        "bank": bank,
+        "imageQuality": quality,
+        "usedForTraining": False,
+        "nejixVersion": None,
+        "createdAt": firestore.SERVER_TIMESTAMP
+    }
+    fs.collection("nejix_training_data").document(receipt_hash).set(nejix_data)
+    await update_nejix_stats(bank)
+    print(f"FIREBASE FIRESTORE: Cache + Nejix dataset saved", flush=True)
+
+async def update_nejix_stats(bank: str):
+    stats_ref = fs.collection("nejix_stats").document("current")
+    stats_ref.set({
+        "totalSamples": firestore.Increment(1),
+        f"byBank.{bank}": firestore.Increment(1),
+        "lastUpdated": firestore.SERVER_TIMESTAMP
+    }, merge=True)
+    
+    total = stats_ref.get().to_dict().get("totalSamples", 0) if stats_ref.get().exists else 0
+    milestones = {500: "Nejix v0.1", 2000: "Nejix v1.0", 5000: "Nejix v2.0"}
+    next_milestone = next((f"{v} at {k} samples" for k, v in milestones.items() if total < k), "Nejix v3.0 - Production Ready")
+    stats_ref.update({"nextMilestone": next_milestone})
+
+async def track_gemini_usage(source: str):
+    today = datetime.utcnow().strftime("%Y-%m-%d")
+    usage_ref = fs.collection("gemini_usage").document(today)
+    if source == "gemini":
+        usage_ref.set({
+            "callsMade": firestore.Increment(1),
+            "estimatedCostUsd": firestore.Increment(0.001),
+            "estimatedCostBrl": firestore.Increment(0.006)
+        }, merge=True)
+    else:
+        usage_ref.set({"callsSavedByCache": firestore.Increment(1)}, merge=True)
+
+def detect_bank_from_bytes(image_bytes: bytes) -> str:
+    # Basic stub
+    return "Desconhecido"
+
+def assess_image_quality(image_bytes: bytes) -> str:
+    return "High" if len(image_bytes) > 50000 else "Low"
+
 
 app.include_router(export_router)
 
@@ -500,12 +613,31 @@ async def process_ata(
                 extracted_amount_candidate = 0
 
             if extracted_amount_candidate <= 0:
-                from ai_processor import analyze_receipt_with_ai
-                extracted_data_ai, ai_error = await analyze_receipt_with_ai(content, ext, ocr_text=raw_text)
-                if extracted_data_ai is not None:
-                    extracted_data = extracted_data_ai
-            if not extracted_data:
-                extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
+                bank = detect_bank_from_bytes(content)
+                quality = assess_image_quality(content)
+                source = 'gemini'
+                
+                cache_result = await check_receipt_cache(sha256_hash)
+                if cache_result['hit']:
+                    print('NEJIX HINT: Using Firebase cached Gemini data', flush=True)
+                    extracted_data = cache_result['data'].get('geminiExtracted', {})
+                    source = 'cache_enhanced'
+                else:
+                    from ai_processor import analyze_receipt_with_ai
+                    extracted_data_ai, ai_error = await analyze_receipt_with_ai(content, ext, ocr_text=raw_text)
+                    if extracted_data_ai is not None:
+                        extracted_data = extracted_data_ai
+                    if not extracted_data:
+                        extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
+
+                if not cache_result['hit']:
+                    try:
+                        image_url, dataset_url = await upload_receipt_firebase(content, uid, sha256_hash, bank)
+                        await save_to_firebase(sha256_hash, uid, image_url, dataset_url, extracted_data, raw_text, bank, quality)
+                    except Exception as fb_err:
+                        print(f"DEBUG: Firebase upload failed: {fb_err}", flush=True)
+                
+                await track_gemini_usage(source)
         finally:
             if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
 
@@ -853,3 +985,43 @@ def readiness_check():
 @app.get("/api/health/live")
 def liveness_check():
     return {"alive": True}, 200
+
+@app.get("/test-gemini")
+async def test_gemini():
+    import google.generativeai as genai
+    api_key = os.getenv("GEMINI_API_KEY")
+    if not api_key:
+        return {"status": "error", "message": "GEMINI_API_KEY not found in environment variables. Add GEMINI_API_KEY=your_key to backend/.env"}
+    try:
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("gemini-2.0-flash")
+        response = model.generate_content("Say hello in Portuguese")
+        return {"status": "ok", "api_key_prefix": api_key[:8] + "...", "response": response.text}
+    except Exception as e:
+        return {"status": "error", "api_key_prefix": api_key[:8] + "...", "message": str(e)}
+
+
+# =============================================================================
+# COST MONITORING AND NEJIX STATS ENDPOINT
+# =============================================================================
+
+@app.get("/nejix/stats")
+async def get_nejix_stats(
+    user: dict = Depends(verify_firebase_token),
+):
+    stats_doc = fs.collection('nejix_stats').document('current').get()
+    stats = stats_doc.to_dict() if stats_doc.exists else {}
+    
+    from datetime import datetime
+    today = datetime.utcnow().strftime('%Y-%m-%d')
+    usage_doc = fs.collection('gemini_usage').document(today).get()
+    usage = usage_doc.to_dict() if usage_doc.exists else {}
+    
+    return {
+        'nejix': stats,
+        'today_gemini_calls': usage.get('callsMade', 0),
+        'today_calls_saved': usage.get('callsSavedByCache', 0),
+        'today_cost_usd': usage.get('estimatedCostUsd', 0.0),
+        'today_cost_brl': usage.get('estimatedCostBrl', 0.0)
+    }
+

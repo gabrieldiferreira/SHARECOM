@@ -74,3 +74,4 @@ class Goal(Base):
     auto_transfer_day = Column(Integer, nullable=True) # Day of month
     
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
