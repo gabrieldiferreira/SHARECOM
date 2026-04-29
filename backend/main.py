@@ -680,17 +680,40 @@ async def process_ata(
         raise HTTPException(status_code=500, detail=error_msg)
 
 @app.delete("/expenses/{expense_id}")
-def delete_expense(expense_id: int, db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token)):
+def delete_expense(
+    expense_id: int,
+    permanent: bool = False,
+    db: Session = Depends(get_db),
+    user: dict = Depends(verify_firebase_token),
+):
     uid = user.get("uid", "anonymous")
     db_expense = db.query(models.Expense).filter(
         models.Expense.id == expense_id,
         models.Expense.user_id == uid
     ).first()
     if not db_expense: raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
-    db.delete(db_expense)
+    if permanent:
+        db.delete(db_expense)
+        status = "deleted"
+    else:
+        db_expense.deleted_at = schemas.datetime.utcnow()
+        status = "soft_deleted"
     db.commit()
     cache_invalidate_all()
-    return {"message": "Deletado"}
+    return {"status": status}
+
+@app.patch("/expenses/{expense_id}/restore")
+def restore_expense(expense_id: int, db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token)):
+    uid = user.get("uid", "anonymous")
+    db_expense = db.query(models.Expense).filter(
+        models.Expense.id == expense_id,
+        models.Expense.user_id == uid
+    ).first()
+    if not db_expense: raise HTTPException(status_code=404, detail="Gasto não encontrado ou acesso negado")
+    db_expense.deleted_at = None
+    db.commit()
+    cache_invalidate_all()
+    return {"status": "restored"}
 
 @app.post("/expenses/clear-all")
 def clear_all_expenses(db: Session = Depends(get_db), user: dict = Depends(verify_firebase_token), only_trash: bool = False):

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
-import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, Calendar, ArrowDownLeft, ArrowUpRight, Loader2, Copy, Check, Building2, CreditCard, Hash, Fingerprint, FileText, Tag, Clock, AlertTriangle, CheckCircle2, CloudOff } from "lucide-react";
+import { useState, useEffect, useMemo, useCallback, type TouchEvent } from "react";
+import { Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, Plus, Search, Calendar, ArrowDownLeft, ArrowUpRight, Loader2, Copy, Check, Building2, CreditCard, Hash, Fingerprint, FileText, Tag, Clock, AlertTriangle, CheckCircle2, CloudOff, Trash2, RotateCcw } from "lucide-react";
 import usePullToRefresh from "@/hooks/usePullToRefresh";
 import { useTransactionStore } from "../../store/useTransactionStore";
 import { TransactionEntity } from "../../lib/db";
@@ -39,6 +39,18 @@ const FILTER_CHIPS = [
   { id: 'boleto', label: 'Boleto' },
   { id: 'high_value', label: '+R$500' },
 ];
+
+const SWIPE_THRESHOLD = 80;
+const SWIPE_MAX = 120;
+const TRASH_RETENTION_DAYS = 30;
+
+function daysUntilPermanentDelete(deletedAt?: string) {
+  if (!deletedAt) return TRASH_RETENTION_DAYS;
+  const deletedTime = new Date(deletedAt).getTime();
+  if (!Number.isFinite(deletedTime)) return TRASH_RETENTION_DAYS;
+  const elapsedDays = Math.floor((Date.now() - deletedTime) / (24 * 60 * 60 * 1000));
+  return Math.max(TRASH_RETENTION_DAYS - elapsedDays, 0);
+}
 
 // ── Transaction Detail Bottom Sheet ──────────────────────────────────────────
 function TransactionDetailModal({ tx, onClose }: { tx: TransactionEntity; onClose: () => void }) {
@@ -181,13 +193,164 @@ function TransactionDetailModal({ tx, onClose }: { tx: TransactionEntity; onClos
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+function TransactionRow({
+  tx,
+  isTrash,
+  formatDate,
+  onOpen,
+  onDelete,
+  onRestore,
+}: {
+  tx: TransactionEntity;
+  isTrash: boolean;
+  formatDate: (dateStr: string) => string;
+  onOpen: (tx: TransactionEntity) => void;
+  onDelete: (tx: TransactionEntity) => void | Promise<void>;
+  onRestore: (tx: TransactionEntity) => void | Promise<void>;
+}) {
+  const [swipeStart, setSwipeStart] = useState<{ x: number; y: number } | null>(null);
+  const [swipeX, setSwipeX] = useState(0);
+  const [isSwiping, setIsSwiping] = useState(false);
+  const categoryColor = CATEGORY_COLORS[tx.category] || '#6B7280';
+  const daysLeft = daysUntilPermanentDelete(tx.deleted_at);
+
+  const handleTouchStart = (event: TouchEvent<HTMLDivElement>) => {
+    if (isTrash) return;
+    const touch = event.touches[0];
+    setSwipeStart({ x: touch.clientX, y: touch.clientY });
+    setIsSwiping(true);
+  };
+
+  const handleTouchMove = (event: TouchEvent<HTMLDivElement>) => {
+    if (!swipeStart || isTrash) return;
+    const touch = event.touches[0];
+    const deltaX = swipeStart.x - touch.clientX;
+    const deltaY = Math.abs(swipeStart.y - touch.clientY);
+
+    if (deltaX > 0 && deltaX > deltaY) {
+      event.preventDefault();
+      setSwipeX(Math.min(deltaX, SWIPE_MAX));
+    } else if (deltaX < 0) {
+      setSwipeX(0);
+    }
+  };
+
+  const handleTouchEnd = () => {
+    setIsSwiping(false);
+    setSwipeStart(null);
+
+    if (!isTrash && swipeX >= SWIPE_THRESHOLD) {
+      setSwipeX(0);
+      void onDelete(tx);
+      return;
+    }
+
+    setSwipeX(0);
+  };
+
+  const handleOpen = () => {
+    if (swipeX > 0) {
+      setSwipeX(0);
+      return;
+    }
+    onOpen(tx);
+  };
+
+  return (
+    <div className="relative overflow-hidden rounded-2xl mb-2 md:overflow-visible">
+      {!isTrash && (
+        <div
+          className="absolute inset-0 flex items-center justify-end rounded-2xl bg-red-500 pr-6 md:hidden"
+          style={{ opacity: Math.min(swipeX / SWIPE_THRESHOLD, 1) }}
+        >
+          <Trash2 className="text-white" size={24} />
+        </div>
+      )}
+
+      <div
+        onClick={handleOpen}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        onTouchCancel={handleTouchEnd}
+        className={`relative z-10 group flex items-center gap-3 p-4 rounded-2xl cursor-pointer bg-bg-secondary border border-border hover:border-purple-500/40 active:scale-[0.98] ${
+          isSwiping ? '' : 'transition-all'
+        } ${isTrash ? 'opacity-70 hover:opacity-100' : ''}`}
+        style={{ transform: `translateX(-${isTrash ? 0 : swipeX}px)` }}
+      >
+        <div
+          className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
+          style={{ backgroundColor: `${categoryColor}20`, color: categoryColor }}
+        >
+          {CATEGORY_ICONS[tx.category] || <Receipt size={24} />}
+        </div>
+
+        <div className="flex flex-col overflow-hidden flex-1 min-w-0">
+          <span className="text-sm font-medium truncate text-text-primary">{tx.merchant_name}</span>
+          <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+            <span className="text-xs text-text-secondary">{tx.category}</span>
+            <span className="text-text-tertiary text-xs">•</span>
+            <span className="text-xs text-text-secondary">{tx.payment_method}</span>
+            <span className="text-text-tertiary text-xs">•</span>
+            <span className="text-xs text-text-tertiary">{formatDate(tx.scanned_at || tx.transaction_date)}</span>
+          </div>
+          {isTrash ? (
+            <p className="text-xs mt-1 text-red-300 truncate">
+              Excluído • remoção permanente em {daysLeft} dia{daysLeft === 1 ? '' : 's'}
+            </p>
+          ) : tx.description ? (
+            <p className="text-xs mt-1 text-text-secondary truncate">{tx.description}</p>
+          ) : tx.destination_institution ? (
+            <p className="text-xs mt-1 text-text-tertiary truncate">Para: {tx.destination_institution}</p>
+          ) : null}
+          {!isTrash && tx.note && (
+            <p className="text-xs italic mt-1 text-purple-400 border-l-2 border-purple-500 pl-1.5 truncate">&ldquo;{tx.note}&rdquo;</p>
+          )}
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className={`text-base font-bold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-green-500' : 'text-red-500'}`}>
+            {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </p>
+          <span className="text-[10px] text-text-tertiary">{tx.transaction_type === 'Inflow' ? 'Entrada' : 'Saída'}</span>
+        </div>
+
+        {isTrash ? (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              void onRestore(tx);
+            }}
+            className="shrink-0 flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium text-emerald-400 hover:bg-emerald-500/10 transition-colors"
+          >
+            <RotateCcw size={14} />
+            <span className="hidden sm:inline">Restaurar</span>
+          </button>
+        ) : (
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              void onDelete(tx);
+            }}
+            className="hidden md:flex shrink-0 opacity-30 hover:opacity-100 p-2 rounded-xl text-text-muted hover:text-red-400 hover:bg-red-500/10 transition-all"
+            aria-label="Excluir comprovante"
+          >
+            <Trash2 size={15} />
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function TimelinePage() {
-  const { transactions, fetchTransactions } = useTransactionStore();
-  const { showToast } = useToast();
+  const { transactions, trashTransactions, fetchTransactions, moveToTrash, restoreFromTrash } = useTransactionStore();
+  const { showToast, showToastWithUndo } = useToast();
 
   const [mounted, setMounted] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("all");
+  const [activeTab, setActiveTab] = useState<'active' | 'trash'>('active');
   const [currentPage, setCurrentPage] = useState(1);
   const [isLoadingMore] = useState(false);
   const [selectedTx, setSelectedTx] = useState<TransactionEntity | null>(null);
@@ -208,6 +371,22 @@ export default function TimelinePage() {
 
   usePullToRefresh(handleRefresh);
 
+  const handleSoftDelete = useCallback(async (tx: TransactionEntity) => {
+    if (!tx.id) return;
+    await moveToTrash(tx.id);
+    showToastWithUndo('Comprovante deletado', async () => {
+      if (!tx.id) return;
+      await restoreFromTrash(tx.id);
+      showToast('Comprovante restaurado', 'success');
+    });
+  }, [moveToTrash, restoreFromTrash, showToast, showToastWithUndo]);
+
+  const handleRestore = useCallback(async (tx: TransactionEntity) => {
+    if (!tx.id) return;
+    await restoreFromTrash(tx.id);
+    showToast('Comprovante restaurado', 'success');
+  }, [restoreFromTrash, showToast]);
+
   const formatDate = (dateStr: string) => {
     const d = new Date(dateStr);
     return new Intl.DateTimeFormat('pt-BR', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }).format(d);
@@ -224,7 +403,8 @@ export default function TimelinePage() {
   };
 
   const filteredTransactions = useMemo(() => {
-    return transactions.filter(tx => {
+    const source = activeTab === 'trash' ? trashTransactions : transactions;
+    return source.filter(tx => {
       const merchant = tx.merchant_name || "Desconhecido";
       const matchesSearch =
         merchant.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -242,7 +422,7 @@ export default function TimelinePage() {
 
       return matchesSearch && matchesFilter;
     });
-  }, [transactions, searchQuery, activeFilter]);
+  }, [transactions, trashTransactions, activeTab, searchQuery, activeFilter]);
 
   const totalPages = Math.ceil(filteredTransactions.length / itemsPerPage);
   const paginatedTransactions = useMemo(() => {
@@ -288,8 +468,36 @@ export default function TimelinePage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-xl font-semibold text-text-primary">Histórico</h1>
-          <p className="text-xs text-text-tertiary mt-0.5">{summaryStats.count} transação(ões)</p>
+          <p className="text-xs text-text-tertiary mt-0.5">
+            {activeTab === 'trash' ? `${trashTransactions.length} item(ns) na lixeira` : `${summaryStats.count} transação(ões)`}
+          </p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 rounded-2xl bg-bg-secondary border border-border p-1">
+        {[
+          { id: 'active' as const, label: 'Ativos', count: transactions.length },
+          { id: 'trash' as const, label: 'Lixeira', count: trashTransactions.length },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => {
+              setActiveTab(tab.id);
+              setCurrentPage(1);
+            }}
+            className={`flex items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-semibold transition-all ${
+              activeTab === tab.id
+                ? tab.id === 'trash'
+                  ? 'bg-red-500/15 text-red-300'
+                  : 'bg-purple-500/15 text-purple-300'
+                : 'text-text-secondary hover:bg-bg-tertiary'
+            }`}
+          >
+            {tab.id === 'trash' ? <Trash2 size={14} /> : <Receipt size={14} />}
+            {tab.label}
+            <span className="rounded-full bg-black/20 px-2 py-0.5 text-[10px]">{tab.count}</span>
+          </button>
+        ))}
       </div>
 
       {/* Summary Cards */}
@@ -342,12 +550,19 @@ export default function TimelinePage() {
       {/* Empty State */}
       {groupedTransactions.length === 0 ? (
         <div className="p-12 text-center rounded-2xl bg-bg-secondary border border-border">
-          <div className="w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 bg-purple-500/10">
-            <Calendar size={32} className="text-purple-500" />
+          <div className={`w-20 h-20 rounded-2xl flex items-center justify-center mx-auto mb-4 ${activeTab === 'trash' ? 'bg-red-500/10' : 'bg-purple-500/10'}`}>
+            {activeTab === 'trash'
+              ? <Trash2 size={32} className="text-red-400" />
+              : <Calendar size={32} className="text-purple-500" />
+            }
           </div>
-          <p className="text-base font-semibold mb-1.5 text-text-primary">Nenhuma transação</p>
+          <p className="text-base font-semibold mb-1.5 text-text-primary">
+            {activeTab === 'trash' ? 'Lixeira vazia' : 'Nenhuma transação'}
+          </p>
           <p className="text-xs text-text-tertiary">
-            {searchQuery || activeFilter !== 'all' ? 'Tente ajustar seus filtros.' : 'Suas transações aparecerão aqui.'}
+            {activeTab === 'trash'
+              ? 'Comprovantes excluídos ficam disponíveis por 30 dias.'
+              : searchQuery || activeFilter !== 'all' ? 'Tente ajustar seus filtros.' : 'Suas transações aparecerão aqui.'}
           </p>
         </div>
       ) : (
@@ -371,48 +586,14 @@ export default function TimelinePage() {
                     transition={{ delay: idx * 0.02, duration: 0.25 }}
                     className="mb-2"
                   >
-                    {/* Clickable Row */}
-                    <div
-                      onClick={() => setSelectedTx(tx)}
-                      className="flex items-center gap-3 p-4 rounded-2xl cursor-pointer bg-bg-secondary border border-border hover:border-purple-500/40 active:scale-[0.98] transition-all"
-                    >
-                      {/* Category Icon Circle */}
-                      <div
-                        className="w-12 h-12 rounded-full flex items-center justify-center shrink-0"
-                        style={{ backgroundColor: `${CATEGORY_COLORS[tx.category] || '#6B7280'}20`, color: CATEGORY_COLORS[tx.category] || '#6B7280' }}
-                      >
-                        {CATEGORY_ICONS[tx.category] || <Receipt size={24} />}
-                      </div>
-
-                      {/* Details */}
-                      <div className="flex flex-col overflow-hidden flex-1 min-w-0">
-                        <span className="text-sm font-medium truncate text-text-primary">{tx.merchant_name}</span>
-                        <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
-                          <span className="text-xs text-text-secondary">{tx.category}</span>
-                          <span className="text-text-tertiary text-xs">•</span>
-                          <span className="text-xs text-text-secondary">{tx.payment_method}</span>
-                          <span className="text-text-tertiary text-xs">•</span>
-                          <span className="text-xs text-text-tertiary">{formatDate(tx.scanned_at || tx.transaction_date)}</span>
-                        </div>
-                        {tx.description && (
-                          <p className="text-xs mt-1 text-text-secondary truncate">{tx.description}</p>
-                        )}
-                        {!tx.description && tx.destination_institution && (
-                          <p className="text-xs mt-1 text-text-tertiary truncate">Para: {tx.destination_institution}</p>
-                        )}
-                        {tx.note && (
-                          <p className="text-xs italic mt-1 text-purple-400 border-l-2 border-purple-500 pl-1.5 truncate">&ldquo;{tx.note}&rdquo;</p>
-                        )}
-                      </div>
-
-                      {/* Amount */}
-                      <div className="shrink-0 text-right">
-                        <p className={`text-base font-bold tabular-nums ${tx.transaction_type === 'Inflow' ? 'text-green-500' : 'text-red-500'}`}>
-                          {tx.transaction_type === 'Inflow' ? '+' : '-'}R$ {tx.total_amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                        </p>
-                        <span className="text-[10px] text-text-tertiary">{tx.transaction_type === 'Inflow' ? 'Entrada' : 'Saída'}</span>
-                      </div>
-                    </div>
+                    <TransactionRow
+                      tx={tx}
+                      isTrash={activeTab === 'trash'}
+                      formatDate={formatDate}
+                      onOpen={setSelectedTx}
+                      onDelete={handleSoftDelete}
+                      onRestore={handleRestore}
+                    />
                   </motion.div>
                 ))}
               </AnimatePresence>

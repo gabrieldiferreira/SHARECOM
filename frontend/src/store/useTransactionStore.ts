@@ -49,9 +49,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       console.log(`📊 Found ${txs.length} transactions`);
       const sorted = txs.reverse();
       
-      // Purge logic: Remove items older than 15 days in trash
+      // Purge logic: Remove items older than 30 days in trash
       const now = new Date();
-      const fifteenDaysInMs = 15 * 24 * 60 * 60 * 1000;
+      const trashRetentionMs = 30 * 24 * 60 * 60 * 1000;
       
       const active: TransactionEntity[] = [];
       const trash: TransactionEntity[] = [];
@@ -60,7 +60,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
       for (const tx of sorted) {
         if (tx.deleted_at) {
           const deletedTime = new Date(tx.deleted_at).getTime();
-          if (now.getTime() - deletedTime > fifteenDaysInMs) {
+          if (now.getTime() - deletedTime > trashRetentionMs) {
             if (tx.id) toPurge.push(tx.id);
           } else {
             trash.push(tx);
@@ -169,11 +169,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
           await txSet.store.put(lTx);
           // Sync com o backend
           try {
-            await authenticatedFetch(getApiUrl(`/expenses/${lId}`), {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ deleted_at: deletedAt })
-            });
+            await authenticatedFetch(getApiUrl(`/expenses/${lId}`), { method: 'DELETE' });
           } catch (e) {}
         }
         await txSet.done;
@@ -181,11 +177,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         tx.deleted_at = deletedAt;
         await db.put('transactions', tx);
         try {
-          await authenticatedFetch(getApiUrl(`/expenses/${id}`), {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deleted_at: deletedAt })
-          });
+          await authenticatedFetch(getApiUrl(`/expenses/${id}`), { method: 'DELETE' });
         } catch (e) {}
       }
       
@@ -211,11 +203,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
           await txSet.store.put(lTx);
           // Sync com o backend (limpar deleted_at)
           try {
-            await authenticatedFetch(getApiUrl(`/expenses/${lId}`), {
-              method: 'PATCH',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ deleted_at: null })
-            });
+            await authenticatedFetch(getApiUrl(`/expenses/${lId}/restore`), { method: 'PATCH' });
           } catch (e) {}
         }
         await txSet.done;
@@ -223,11 +211,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         tx.deleted_at = undefined;
         await db.put('transactions', tx);
         try {
-          await authenticatedFetch(getApiUrl(`/expenses/${id}`), {
-            method: 'PATCH',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deleted_at: null })
-          });
+          await authenticatedFetch(getApiUrl(`/expenses/${id}/restore`), { method: 'PATCH' });
         } catch (e) {}
       }
       get().fetchTransactions();
@@ -246,11 +230,11 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
          .map(t => t.id as number);
 
        for (const lId of linkedIds) {
-          try { await authenticatedFetch(getApiUrl(`/expenses/${lId}`), { method: 'DELETE' }); } catch (e) {}
+          try { await authenticatedFetch(getApiUrl(`/expenses/${lId}?permanent=true`), { method: 'DELETE' }); } catch (e) {}
           await db.delete('transactions', lId);
        }
     } else {
-       try { await authenticatedFetch(getApiUrl(`/expenses/${id}`), { method: 'DELETE' }); } catch (e) {}
+       try { await authenticatedFetch(getApiUrl(`/expenses/${id}?permanent=true`), { method: 'DELETE' }); } catch (e) {}
        await db.delete('transactions', id);
     }
     
@@ -302,7 +286,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
   syncWithBackend: async () => {
     console.log('🔄 syncWithBackend called');
     try {
-      const res = await authenticatedFetch(getApiUrl(`/expenses?t=${Date.now()}`), { cache: "no-store" });
+      const res = await authenticatedFetch(getApiUrl(`/expenses?include_deleted=true&t=${Date.now()}`), { cache: "no-store" });
       console.log('🌐 Backend response status:', res.status);
       if (res.ok) {
         const remoteData = await res.json();
@@ -312,10 +296,6 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
           try {
             const txSet = db.transaction('transactions', 'readwrite');
             for (const item of remoteData) {
-              const existing = await txSet.store.get(item.id);
-              
-              // Se o item já existe localmente e está na lixeira, mantém o estado local
-              // a menos que o servidor também diga que está na lixeira (sincronismo).
               const merged: TransactionEntity = {
                 id: item.id,
                 total_amount: Number(item.amount) || 0,
@@ -332,7 +312,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
                 description: item.description || undefined,
                 is_synced: true,
                 note: item.note || undefined,
-                deleted_at: item.deleted_at || existing?.deleted_at || undefined,
+                deleted_at: item.deleted_at || undefined,
               };
 
               await txSet.store.delete(item.id);
