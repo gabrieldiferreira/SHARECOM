@@ -581,7 +581,6 @@ async def process_ata(
         )
         if extraction_failed:
             archive_receipt(
-                db,
                 uid,
                 sha256_hash,
                 filename,
@@ -608,7 +607,6 @@ async def process_ata(
             merchant_name = extracted_data["merchant_name"]
         else:
             archive_receipt(
-                db,
                 uid,
                 sha256_hash,
                 filename,
@@ -922,4 +920,3 @@ async def get_nejix_stats(
         'today_cost_usd': usage.get('estimatedCostUsd', 0.0),
         'today_cost_brl': usage.get('estimatedCostBrl', 0.0)
     }
-
