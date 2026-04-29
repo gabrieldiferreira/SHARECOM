@@ -23,6 +23,20 @@ type NavItem = {
   onClick?: () => void;
 };
 
+const hiddenFileInputClassName = "fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none";
+
+const extractUrlFromText = (text: string) => {
+  const trimmed = text.trim();
+  if (!trimmed) return "";
+
+  try {
+    return new URL(trimmed).toString();
+  } catch {
+    const match = trimmed.match(/https?:\/\/[^\s]+/i);
+    return match?.[0] ?? "";
+  }
+};
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname();
@@ -39,6 +53,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const galleryInputRef = useRef<HTMLInputElement>(null);
+  const documentsInputRef = useRef<HTMLInputElement>(null);
   const portalScrollRef = useRef<HTMLDivElement>(null);
 
   const [isExiting, setIsExiting] = useState(false);
@@ -82,38 +97,44 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
 
   const handlePasteLink = async () => {
-    try {
-      // 1. Tenta ler itens (imagens, arquivos) primeiro
-      const items = await navigator.clipboard.read();
-      for (const item of items) {
-        const imageType = item.types.find(type => type.startsWith('image/'));
-        if (imageType) {
-          const blob = await item.getType(imageType);
-          const extension = imageType.split('/')[1] || 'png';
-          const file = new File([blob], `pasted-image-${Date.now()}.${extension}`, { type: imageType });
+    setShowScanMenu(false);
 
-          setSelectedFile(file);
-          setPastedContent(""); // Limpa link se houver
-          setPendingNote("");
-          setShowModal(true);
-          setShowScanMenu(false);
-          return;
+    try {
+      if (navigator.clipboard?.read) {
+        const items = await navigator.clipboard.read();
+        for (const item of items) {
+          const imageType = item.types.find(type => type.startsWith('image/'));
+          if (imageType) {
+            const blob = await item.getType(imageType);
+            const extension = imageType.split('/')[1] || 'png';
+            const file = new File([blob], `pasted-image-${Date.now()}.${extension}`, { type: imageType });
+
+            setSelectedFile(file);
+            setPastedContent("");
+            setPastedAt(null);
+            setPendingNote("");
+            setShowModal(true);
+            return;
+          }
         }
       }
+    } catch (err) {
+      console.warn("Não foi possível ler imagem do clipboard, tentando texto.", err);
+    }
 
-      // 2. Fallback: Tenta ler como texto (Link)
+    try {
       const text = await navigator.clipboard.readText();
-      if (!text || text.trim() === "") {
+      const url = extractUrlFromText(text);
+      if (!url) {
         // setToast({ message: "Clipboard vazio ou formato não suportado", type: 'error' });
         return;
       }
 
-      setPastedContent(text);
+      setPastedContent(url);
       setSelectedFile(null); // Limpa arquivo se houver
       setPastedAt(Date.now());
       setPendingNote("");
       setShowModal(true);
-      setShowScanMenu(false);
     } catch (err) {
       // setToast({ message: "Permita o acesso à área de transferência", type: 'error' });
       console.error("Erro ao ler clipboard:", err);
@@ -291,7 +312,25 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       setSelectedFile(null);
       setPendingNote("");
       if (fileInputRef.current) fileInputRef.current.value = "";
+      if (documentsInputRef.current) documentsInputRef.current.value = "";
+      if (galleryInputRef.current) galleryInputRef.current.value = "";
+      if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
+  };
+
+  const openCameraPicker = () => {
+    cameraInputRef.current?.click();
+    setShowScanMenu(false);
+  };
+
+  const openGalleryPicker = () => {
+    galleryInputRef.current?.click();
+    setShowScanMenu(false);
+  };
+
+  const openDocumentPicker = () => {
+    documentsInputRef.current?.click();
+    setShowScanMenu(false);
   };
 
   const desktopNavItems: NavItem[] = [
@@ -470,21 +509,36 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         type="file"
         ref={fileInputRef}
         onChange={handleFileSelection}
-        className="hidden"
+        className={hiddenFileInputClassName}
+        tabIndex={-1}
+        aria-hidden="true"
         accept="image/*,application/pdf"
       />
       <input
         type="file"
         ref={galleryInputRef}
         onChange={handleFileSelection}
-        className="hidden"
+        className={hiddenFileInputClassName}
+        tabIndex={-1}
+        aria-hidden="true"
         accept="image/*"
+      />
+      <input
+        type="file"
+        ref={documentsInputRef}
+        onChange={handleFileSelection}
+        className={hiddenFileInputClassName}
+        tabIndex={-1}
+        aria-hidden="true"
+        accept="application/pdf"
       />
       <input
         type="file"
         ref={cameraInputRef}
         onChange={handleFileSelection}
-        className="hidden"
+        className={hiddenFileInputClassName}
+        tabIndex={-1}
+        aria-hidden="true"
         accept="image/*"
         capture="environment"
       />
@@ -507,7 +561,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
               <div className="p-2 space-y-1">
                 <button
-                  onClick={() => { setShowScanMenu(false); cameraInputRef.current?.click(); }}
+                  onClick={openCameraPicker}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
                   <div className="w-10 h-10 rounded-full bg-blue-500/10 text-blue-500 flex items-center justify-center">
@@ -520,7 +574,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </button>
 
                 <button
-                  onClick={() => { setShowScanMenu(false); galleryInputRef.current?.click(); }}
+                  onClick={openGalleryPicker}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
                   <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-500 flex items-center justify-center">
@@ -533,7 +587,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </button>
 
                 <button
-                  onClick={() => { setShowScanMenu(false); fileInputRef.current?.click(); }}
+                  onClick={openDocumentPicker}
                   className="w-full flex items-center gap-4 p-4 rounded-xl hover:bg-black/5 transition-colors"
                 >
                   <div className="w-10 h-10 rounded-full bg-purple-500/10 text-purple-500 flex items-center justify-center">
