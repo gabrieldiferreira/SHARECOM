@@ -5,7 +5,6 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { 
   signInWithPopup, 
-  signInWithRedirect,
   getRedirectResult,
   onAuthStateChanged,
   signInWithEmailAndPassword,
@@ -125,8 +124,7 @@ export default function LoginPage() {
       } catch (error: any) {
         if (!isMounted) return;
         console.error('❌ getRedirectResult error:', error);
-        // Não bloqueia o usuário se o erro for apenas 'no result'
-        if (error.code !== 'auth/no-recent-redirect-handled') {
+        if (error.code !== 'auth/no-recent-redirect-handled' && !error.message.includes("missing initial state")) {
           setErrorMessage(`Erro ao processar login mobile: ${error.message}`);
         }
         setIsCheckingSession(false);
@@ -167,9 +165,7 @@ export default function LoginPage() {
     setIsSigningIn(true);
     setErrorMessage("");
     try {
-      const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-      
-      // Tentar popup primeiro (funciona em muitos browsers mobile modernos)
+      // Popup é o método mais seguro e confiável contra bloqueios de cookies de terceiros
       try {
         const result = await signInWithPopup(auth as any, provider as any);
         console.log('✅ Auth OK (Popup), user:', result.user);
@@ -180,10 +176,8 @@ export default function LoginPage() {
           setIsSigningIn(false);
         }
       } catch (popupError: any) {
-        // Se falhar por bloqueio de popup ou se estivermos em mobile, tentamos redirect
-        if (popupError.code === 'auth/popup-blocked' || isMobile) {
-          console.log('↪️ Falling back to signInWithRedirect');
-          await signInWithRedirect(auth as any, provider as any);
+        if (popupError.code === 'auth/popup-blocked') {
+          setErrorMessage("O pop-up de login foi bloqueado pelo seu navegador. Por favor, permita pop-ups para este site.");
         } else {
           throw popupError;
         }
