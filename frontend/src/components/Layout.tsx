@@ -24,6 +24,7 @@ type NavItem = {
 };
 
 const hiddenFileInputClassName = "fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none";
+const imageFileAccept = "image/jpeg,image/png,image/webp,image/heic,image/heif";
 
 const extractUrlFromText = (text: string) => {
   const trimmed = text.trim();
@@ -512,7 +513,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         className={hiddenFileInputClassName}
         tabIndex={-1}
         aria-hidden="true"
-        accept="image/*,application/pdf"
+        accept={`${imageFileAccept},application/pdf`}
       />
       <input
         type="file"
@@ -521,7 +522,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         className={hiddenFileInputClassName}
         tabIndex={-1}
         aria-hidden="true"
-        accept="image/*"
+        accept={imageFileAccept}
       />
       <input
         type="file"
@@ -539,7 +540,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         className={hiddenFileInputClassName}
         tabIndex={-1}
         aria-hidden="true"
-        accept="image/*"
+        accept={imageFileAccept}
         capture="environment"
       />
 
