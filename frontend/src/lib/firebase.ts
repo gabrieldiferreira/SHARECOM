@@ -1,6 +1,12 @@
 import { initializeApp, getApps, getApp } from "firebase/app";
 import { Auth, getAuth, GoogleAuthProvider, setPersistence, browserLocalPersistence } from "firebase/auth";
-import { Firestore, enableIndexedDbPersistence, getFirestore } from "firebase/firestore";
+import {
+  Firestore,
+  getFirestore,
+  initializeFirestore,
+  persistentLocalCache,
+  persistentMultipleTabManager,
+} from "firebase/firestore";
 import { Analytics, getAnalytics } from "firebase/analytics";
 
 const normalizeAuthDomain = (authDomain?: string) => {
@@ -47,12 +53,20 @@ if (hasFirebaseConfig) {
   }
 
   provider = new GoogleAuthProvider();
-  db = getFirestore(app);
   if (typeof window !== "undefined") {
-    enableIndexedDbPersistence(db).catch((error) => {
-      console.log('Offline mode failed', error);
-    });
+    try {
+      db = initializeFirestore(app, {
+        localCache: persistentLocalCache({
+          tabManager: persistentMultipleTabManager(),
+        }),
+      });
+    } catch (error) {
+      console.log('Offline mode already initialized', error);
+      db = getFirestore(app);
+    }
     analytics = getAnalytics(app);
+  } else {
+    db = getFirestore(app);
   }
 }
 

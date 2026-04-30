@@ -12,81 +12,88 @@ const PUBLIC_ROUTES = new Set(["/login", "/auth/bridge", "/reset-password"]);
 export default function AuthGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
+  const normalizedPath = pathname.replace(/\/$/, "") || "/";
+  const isPublic = PUBLIC_ROUTES.has(normalizedPath);
   const [isInitializing, setIsInitializing] = useState(true);
   const [user, setUser] = useState<User | null>(null);
   const initialized = useRef(false);
+  const authResolved = useRef(false);
   const lastUserId = useRef<string | null>(null);
 
   useEffect(() => {
     if (!hasFirebaseConfig || !auth) {
       console.error("AuthGate: Firebase não configurado.");
+      authResolved.current = true;
       setIsInitializing(false);
       return;
     }
 
     if (initialized.current) return;
     initialized.current = true;
+    authResolved.current = false;
+    setIsInitializing(true);
 
-    const initAuth = async () => {
-      console.log("AuthGate: Iniciando verificação de sessão...");
+    console.log("AuthGate: Iniciando verificação de sessão...");
 
-      if (!auth) return;
-      const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-        console.log("AuthGate: onAuthStateChanged ->", currentUser ? currentUser.email : "null");
-        const nextUserId = currentUser?.uid ?? null;
-        let cachedOwnerId: string | null = null;
+    const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
+      console.log("AuthGate: onAuthStateChanged ->", currentUser ? currentUser.email : "null");
+      const nextUserId = currentUser?.uid ?? null;
+      let cachedOwnerId: string | null = null;
 
-        try {
-          cachedOwnerId = window.localStorage.getItem(TRANSACTION_CACHE_OWNER_KEY);
-        } catch {}
+      try {
+        cachedOwnerId = window.localStorage.getItem(TRANSACTION_CACHE_OWNER_KEY);
+      } catch {}
 
-        if (
-          !nextUserId ||
-          (lastUserId.current && lastUserId.current !== nextUserId) ||
-          (cachedOwnerId && cachedOwnerId !== nextUserId)
-        ) {
-          await clearLocalTransactionCache();
+      const shouldResetLocalCache =
+        !nextUserId ||
+        (lastUserId.current && lastUserId.current !== nextUserId) ||
+        (cachedOwnerId && cachedOwnerId !== nextUserId);
+
+      try {
+        if (shouldResetLocalCache) {
           useTransactionStore.getState().resetLocalState();
+          await clearLocalTransactionCache();
         }
-
+      } catch (error) {
+        console.error("AuthGate: Falha ao limpar cache local.", error);
+      } finally {
         lastUserId.current = nextUserId;
+        authResolved.current = true;
         setUser(currentUser);
-
-        // Pequeno delay para garantir que o estado do Next.js se estabilize
-        setTimeout(() => setIsInitializing(false), 300);
-      });
-
-      return unsubscribe;
-    };
-
-    let unsub: (() => void) | undefined;
-    initAuth().then(u => {
-      if (typeof u === 'function') unsub = u;
+        setIsInitializing(false);
+      }
     });
 
     return () => {
-      if (unsub) unsub();
+      unsubscribe();
+      initialized.current = false;
+      authResolved.current = false;
     };
   }, []);
 
   useEffect(() => {
-    // Não redireciona enquanto o Firebase estiver "pensando"
-    if (isInitializing) return;
-
-    const normalizedPath = pathname.replace(/\/$/, "") || "/";
-    const isPublic = PUBLIC_ROUTES.has(normalizedPath);
+    if (isPublic || isInitializing || !authResolved.current) return;
 
     console.log(`AuthGate: [CHECK] User: ${!!user} | Path: ${normalizedPath} | Public: ${isPublic}`);
 
-    if (!user && !isPublic) {
+    if (!user) {
       console.log("AuthGate: Acesso negado. Redirecionando para /login");
       router.replace("/login");
     }
-  }, [isInitializing, pathname, router, user]);
+  }, [isInitializing, isPublic, normalizedPath, router, user]);
 
-  if (isInitializing) {
+  if (isPublic) {
+    return <>{children}</>;
+  }
+
+  if (isInitializing || !authResolved.current) {
     return (
-      <div className="min-h-screen flex flex-col items-center justify-center space-y-6" style={{ backgroundColor: '#020617', color: '#94a3b8' }}>
+      <div
+        className="min-h-screen flex flex-col items-center justify-center space-y-6"
+        role="status"
+        aria-live="polite"
+        style={{ backgroundColor: '#020617', color: '#94a3b8' }}
+      >
         <div className="relative">
           <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin" />
           <div className="absolute inset-0 flex items-center justify-center">
@@ -94,18 +101,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           </div>
         </div>
         <div className="flex flex-col items-center gap-1">
-          <span className="text-sm font-bold tracking-widest uppercase opacity-80">SHARECOM GATEWAY</span>
-          <span className="text-[10px] font-mono opacity-40 uppercase tracking-tighter">Handshaking Session...</span>
+          <span className="text-sm font-bold tracking-widest uppercase opacity-80">Verificando sessão</span>
+          <span className="text-[10px] font-mono opacity-40 uppercase tracking-tighter">Preparando seu acesso...</span>
         </div>
       </div>
     );
   }
 
-  const normalizedPath = pathname.replace(/\/$/, "") || "/";
-  const isPublic = PUBLIC_ROUTES.has(normalizedPath);
-
-  // Evita o "flicker" de mostrar a página errada por 1 frame
-  if (!user && !isPublic) return null;
+  if (!user) return null;
 
   return <>{children}</>;
 }
