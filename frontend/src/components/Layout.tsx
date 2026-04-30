@@ -4,7 +4,7 @@ import React, { useState, useRef, useEffect } from "react";
 
 import NextImage from "next/image";
 import Link from "next/link";
-import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp, ArrowDownLeft, ArrowUpRight, Target, type LucideIcon } from "lucide-react";
+import { LayoutDashboard, History, PieChart, Settings, Plus, Loader2, CheckCircle2, LogOut, ScanLine, Camera, Image as LucideImage, FileText, X, ClipboardPaste, Link2, ArrowDown, ArrowUp, ArrowDownLeft, ArrowUpRight, Target, AlertTriangle, type LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
@@ -20,6 +20,29 @@ type NavItem = {
   href?: string;
   icon: LucideIcon;
   onClick?: () => void;
+};
+
+type DuplicateWarningPayload = {
+  existing?: Record<string, unknown>;
+  times_scanned?: number;
+  receipt_hash?: string;
+};
+
+const parseScannedAmount = (value: unknown): number => {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== "string") {
+    return 0;
+  }
+
+  const normalizedAmount = value.trim().replace(/[^\d,.\s-]/g, "");
+  const parsedAmount = /\d[\d,.]*\s+\d{2}$/.test(normalizedAmount)
+    ? parseFloat(normalizedAmount.replace(/\s+/g, "."))
+    : parseFloat(normalizedAmount.replace(/\./g, "").replace(",", "."));
+
+  return Number.isFinite(parsedAmount) ? parsedAmount : 0;
 };
 
 const hiddenFileInputClassName = "fixed left-0 top-0 h-px w-px opacity-0 pointer-events-none";
@@ -49,6 +72,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [lastAdded, setLastAdded] = useState<{ amount: number, merchant: string } | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarningPayload | null>(null);
   const [uploadType, setUploadType] = useState<"Inflow" | "Outflow">("Outflow");
   const [showScanMenu, setShowScanMenu] = useState(false);
   const [pastedContent, setPastedContent] = useState("");
@@ -211,11 +235,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     setShowModal(true);
   };
 
-  const executeUpload = async () => {
+  const executeUpload = async (force = false) => {
     if (!selectedFile && !pastedContent) return;
 
     setShowModal(false);
+    if (force) setDuplicateWarning(null);
     setIsUploading(true);
+    let keepSelectionForDuplicate = false;
     const formData = new FormData();
     if (selectedFile) {
       formData.append("received_file", selectedFile, selectedFile.name);
@@ -227,6 +253,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
     // Tipo de transação selecionado pelo usuário
     formData.append("transaction_type", uploadType);
+    if (force) {
+      formData.append("force", "true");
+    }
     // Nota/comentário do usuário (opcional)
     if (pendingNote.trim()) {
       formData.append("note", pendingNote.trim());
@@ -245,7 +274,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       if (response.ok) {
         const data = await response.json();
         if (data.status === "duplicate_warning") {
-          alert("Este comprovante já foi escaneado anteriormente. Use o scanner para adicionar mesmo assim.");
+          keepSelectionForDuplicate = true;
+          setDuplicateWarning(data);
           return;
         }
 
@@ -323,12 +353,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       alert("Erro de conexão com o servidor de IA. Verifique se o backend está ativo na URL configurada (NEXT_PUBLIC_API_BASE_URL).");
     } finally {
       setIsUploading(false);
-      setSelectedFile(null);
-      setPendingNote("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
-      if (documentsInputRef.current) documentsInputRef.current.value = "";
-      if (galleryInputRef.current) galleryInputRef.current.value = "";
-      if (cameraInputRef.current) cameraInputRef.current.value = "";
+      if (!keepSelectionForDuplicate) {
+        setSelectedFile(null);
+        setPendingNote("");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        if (documentsInputRef.current) documentsInputRef.current.value = "";
+        if (galleryInputRef.current) galleryInputRef.current.value = "";
+        if (cameraInputRef.current) cameraInputRef.current.value = "";
+      }
     }
   };
 
@@ -766,7 +798,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   Cancelar
                 </button>
                 <button
-                  onClick={executeUpload}
+                  onClick={() => executeUpload()}
                   className="px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-95"
                   style={{
                     background: uploadType === 'Outflow'
@@ -780,6 +812,72 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   Enviar Agora
                 </button>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {duplicateWarning && (
+        <div className="fixed inset-0 z-[610] flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm rounded-2xl p-6 space-y-4 shadow-2xl" style={{ backgroundColor: 'var(--bg-primary)', border: '0.5px solid var(--ds-border)' }}>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center bg-amber-500/15 text-amber-400">
+                <AlertTriangle size={20} />
+              </div>
+              <div>
+                <h3 className="text-base font-semibold" style={{ color: 'var(--text-primary)' }}>Comprovante já escaneado</h3>
+                <p className="text-xs" style={{ color: 'var(--text-tertiary)' }}>
+                  Escaneado {duplicateWarning.times_scanned || 1}x anteriormente
+                </p>
+              </div>
+            </div>
+
+            <div className="rounded-xl p-4 space-y-3" style={{ backgroundColor: 'var(--bg-secondary)', border: '0.5px solid var(--ds-border)' }}>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Valor escaneado</span>
+                <span className="text-sm font-bold tabular-nums text-emerald-500">
+                  {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(
+                    parseScannedAmount(duplicateWarning.existing?.total_amount ?? duplicateWarning.existing?.amount ?? duplicateWarning.existing?.value)
+                  )}
+                </span>
+              </div>
+              <div className="flex items-center justify-between gap-4">
+                <span className="text-xs" style={{ color: 'var(--text-tertiary)' }}>Estabelecimento</span>
+                <span className="text-sm font-medium truncate" style={{ color: 'var(--text-primary)' }}>
+                  {String(duplicateWarning.existing?.merchant_name || duplicateWarning.existing?.merchant || "Desconhecido")}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+              Deseja continuar e adicionar este comprovante mesmo assim?
+            </p>
+
+            <div className="grid grid-cols-2 gap-3">
+              <button
+                onClick={() => {
+                  setDuplicateWarning(null);
+                  setSelectedFile(null);
+                  setPastedContent("");
+                  setPastedAt(null);
+                  setPendingNote("");
+                  if (fileInputRef.current) fileInputRef.current.value = "";
+                  if (documentsInputRef.current) documentsInputRef.current.value = "";
+                  if (galleryInputRef.current) galleryInputRef.current.value = "";
+                  if (cameraInputRef.current) cameraInputRef.current.value = "";
+                }}
+                className="px-4 py-3 rounded-xl text-sm font-medium transition-all active:scale-95"
+                style={{ border: '0.5px solid var(--ds-border)', color: 'var(--text-secondary)' }}
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={() => executeUpload(true)}
+                disabled={isUploading}
+                className="px-4 py-3 rounded-xl text-sm font-semibold text-white bg-amber-500 transition-all active:scale-95 disabled:opacity-60"
+              >
+                {isUploading ? "Enviando..." : "Continuar"}
+              </button>
             </div>
           </div>
         </div>

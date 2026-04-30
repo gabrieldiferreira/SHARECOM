@@ -33,6 +33,92 @@ Se não conseguir extrair amount válido, retorne {"error": true}.
 """.strip()
 
 
+AMOUNT_CANDIDATE_PATTERN = re.compile(
+    r'(\d[\d\.,\s]*[\.,]\d{2}|\d[\d\.,]*\s+\d{2})(?!\d)'
+)
+
+
+def _clean_amount_value(value: str) -> float:
+    """Normaliza valores monetários OCR para float."""
+    value = value.strip()
+
+    if re.fullmatch(r'\d[\d\.,]*\s+\d{2}', value):
+        value = re.sub(r'\s+', '.', value)
+    else:
+        value = value.replace(" ", "")
+
+    # Handle both BR format (1.234,56) and US format (1,234.56)
+    value = re.sub(r'[^\d,.]', '', value)
+    if "," in value and "." in value:
+        if value.rfind(",") > value.rfind("."):  # BR: 1.234,56
+            value = value.replace(".", "").replace(",", ".")
+        else:  # US: 1,234.56
+            value = value.replace(",", "")
+    elif value.count(",") > 1:
+        parts = value.split(",")
+        value = "".join(parts[:-1]) + "." + parts[-1]
+    elif value.count(".") > 1:
+        parts = value.split(".")
+        value = "".join(parts[:-1]) + "." + parts[-1]
+    elif "," in value:
+        value = value.replace(",", ".")
+
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _extract_transaction_id(raw_text: str) -> str:
+    """Extrai o melhor identificador de transação disponível no comprovante."""
+    auth_patterns = [
+        r'(?:ID\s*da\s*transa[cç][aã]o|ID\s*datransacao|IDdatransacao|ID|E2E|ENDTOEND)[:\s-]*\n?\s*([A-Za-z0-9][A-Za-z0-9.\-]{14,79})',
+        r'(?:AUTENTICA[CÇ][AÃ]O|AUTENTICACAO|CONTROLE|SISBB)[:\s-]*\n?\s*([A-Za-z0-9][A-Za-z0-9.\-]{19,79})',
+        r'(?:DOCUMENTO|DOC)[:\s-]*\n?\s*([0-9]{5,30})',
+    ]
+
+    for pattern in auth_patterns:
+        auth_match = re.search(pattern, raw_text, re.IGNORECASE)
+        if auth_match:
+            return auth_match.group(1).strip()
+
+    return ""
+
+
+def _extract_merchant_name(raw_text: str) -> str:
+    merchant_match = re.search(
+        r'(?:NOME|CLIENTE|DESTINAT[AÁ]RIO|RECEBEDOR|FAVORECIDO|PARA|BENEFICI[AÁ]RIO)[:\s-]*\n?\s*'
+        r'([A-ZÀ-Úa-zà-ú0-9&.\-\' ]{5,80}?)(?=\s+(?:CPF|CNPJ|AG[ÊE]NCIA|CONTA|INSTITUI[CÇ][AÃ]O|TIPO\s+DE\s+CONTA|CHAVE\s+PIX|PAGADOR|DATA|VALOR)\b|\n|$)',
+        raw_text,
+        re.IGNORECASE,
+    )
+    if merchant_match:
+        candidate = merchant_match.group(1).strip()
+        if len(candidate) > 4 and not re.search(r'REALIZADA|COMPROVANTE', candidate, re.IGNORECASE):
+            return candidate
+
+    lines = [l.strip() for l in raw_text.split('\n') if len(l.strip()) > 5]
+    skip_words = r'SISBB|BANCO|COMPROVANTE|SISTEMA|EXTRATO|PAGAMENTO|DATA|VALOR|PIX|TED|DOC'
+    for line in lines:
+        if not re.search(skip_words, line, re.IGNORECASE):
+            return line
+
+    return ""
+
+
+def _extract_destination_institution(raw_text: str) -> str:
+    inst_match = re.search(
+        r'INSTITUI[CÇ][AÃ]O[:\s-]*\n?\s*'
+        r'([A-ZÀ-Úa-zà-ú0-9&.\- ]{3,80}?)(?=\s+(?:TIPO\s+DE\s+CONTA|CHAVE\s+PIX|PAGADOR|CPF|AG[ÊE]NCIA|CONTA)\b|\n|$)',
+        raw_text,
+        re.IGNORECASE,
+    )
+    if inst_match:
+        return inst_match.group(1).strip()
+
+    return ""
+
+
 # =============================================================================
 # IMAGE PREPROCESSING — OpenCV pipeline for maximum OCR accuracy
 # =============================================================================
@@ -277,11 +363,12 @@ def _map_gemini_result(payload: dict) -> dict | None:
 
     amount = payload.get("amount", payload.get("total_amount"))
     if isinstance(amount, str):
-        amount = amount.replace("R$", "").replace(" ", "").replace(".", "").replace(",", ".")
-    try:
-        amount = float(amount)
-    except (TypeError, ValueError):
-        return None
+        amount = _clean_amount_value(amount.replace("R$", ""))
+    else:
+        try:
+            amount = float(amount)
+        except (TypeError, ValueError):
+            return None
 
     if amount <= 0:
         return None
@@ -427,38 +514,17 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
 
         # 1. VALOR — multi-strategy extraction
         #    Strategy A: Keyword + number
-        def clean_val(v):
-            # Handle both BR format (1.234,56) and US format (1,234.56)
-            v = re.sub(r'[^\d,.]', '', v.strip().replace(" ", ""))
-            if "," in v and "." in v:
-                if v.rfind(",") > v.rfind("."):  # BR: 1.234,56
-                    v = v.replace(".", "").replace(",", ".")
-                else:  # US: 1,234.56
-                    v = v.replace(",", "")
-            elif v.count(",") > 1:
-                parts = v.split(",")
-                v = "".join(parts[:-1]) + "." + parts[-1]
-            elif v.count(".") > 1:
-                parts = v.split(".")
-                v = "".join(parts[:-1]) + "." + parts[-1]
-            elif "," in v:
-                v = v.replace(",", ".")
-            else:
-                v = v
-            try:
-                return float(v)
-            except:
-                return 0.0
+        clean_val = _clean_amount_value
 
-        all_amounts = re.findall(r'(\d[\d\.,\s]*[\.,]\d{2})(?!\d)', raw_text)
+        all_amounts = AMOUNT_CANDIDATE_PATTERN.findall(raw_text)
         print(f"DEBUG: Candidatos a valor encontrados: {all_amounts}", flush=True)
 
         val_match = re.search(
-            r'(?:R\$|RS|R\s*\$|Valor|TOTAL|DINHEIRO|PAGO|QUANTIA|PAGAMENTO|AMOUNT)[:\s]*([R$\s]*[\d\.,]{3,})',
+            r'(?:R\$|RS|R\s*\$|Valor|TOTAL|DINHEIRO|PAGO|QUANTIA|PAGAMENTO|AMOUNT)[:\s]*([R$\s]*\d[\d\.,\s]*?(?:[\.,]\d{2}|\s+\d{2})(?!\d))',
             raw_text, re.IGNORECASE
         )
         if val_match:
-            raw_val = re.sub(r'[R$\s]', '', val_match.group(1))
+            raw_val = re.sub(r'[R$]', '', val_match.group(1))
             fallback_data["total_amount"] = clean_val(raw_val)
             print(f"DEBUG: Valor extraído via Palavra-Chave: {fallback_data['total_amount']}", flush=True)
 
@@ -491,14 +557,21 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
                 break
 
         # 3. DATA E HORA
-        date_matches = re.finditer(r'(\d{2})[/\-\.](\d{2})[/\-\.](\d{2,4})', raw_text)
+        date_matches = re.finditer(
+            r'(\d{2})[/\-\.](\d{2})[/\-\.](\d{2,4})(?:\s*(?:às|as)?\s*(\d{1,2}):(\d{2})(?::(\d{2}))?)?',
+            raw_text,
+            re.IGNORECASE,
+        )
         found_date = False
         for dm in date_matches:
             day, month, year = dm.group(1), dm.group(2), dm.group(3)
             if len(year) == 2: year = "20" + year
             iy, im = int(year), int(month)
             if im <= 12 and 2000 <= iy <= 2030:
-                fallback_data["transaction_date"] = f"{year}-{month}-{day}T12:00:00"
+                hour = (dm.group(4) or "12").zfill(2)
+                minute = dm.group(5) or "00"
+                second = dm.group(6) or "00"
+                fallback_data["transaction_date"] = f"{year}-{month}-{day}T{hour}:{minute}:{second}"
                 print(f"DEBUG: RegEx Data encontrada: {fallback_data['transaction_date']}", flush=True)
                 found_date = True
                 break
@@ -540,37 +613,21 @@ def extract_transaction_data(file_bytes: bytes, extension: str, file_path: str =
                     print(f"DEBUG: RegEx Data encontrada (Extenso): {fallback_data['transaction_date']}", flush=True)
 
         # 4. NOME DO DESTINATÁRIO / MERCHANT
-        name_match = re.search(
-            r'(?:NOME|CLIENTE|DESTINAT[AÁ]RIO|RECEBEDOR|FAVORECIDO|PARA|BENEFICI[AÁ]RIO)[:\s-]*\n?([A-ZÀ-Úa-zà-ú\s]{5,50})(?:\n|$)',
-            raw_text, re.IGNORECASE
-        )
-        if name_match:
-            candidate = name_match.group(1).strip()
-            if len(candidate) > 4 and not re.search(r'REALIZADA|COMPROVANTE', candidate, re.IGNORECASE):
-                fallback_data["merchant_name"] = candidate
-                print(f"DEBUG: Nome extraído via Label: {fallback_data['merchant_name']}", flush=True)
+        merchant_name = _extract_merchant_name(raw_text)
+        if merchant_name:
+            fallback_data["merchant_name"] = merchant_name
+            print(f"DEBUG: Nome extraído via Label: {fallback_data['merchant_name']}", flush=True)
 
-        if fallback_data["merchant_name"] == "Erro na Leitura (OCR Falhou)" or "Banking" in fallback_data["merchant_name"]:
-            lines = [l.strip() for l in raw_text.split('\n') if len(l.strip()) > 5]
-            skip_words = r'SISBB|BANCO|COMPROVANTE|SISTEMA|EXTRATO|PAGAMENTO|DATA|VALOR|PIX|TED|DOC'
-            for line in lines:
-                if not re.search(skip_words, line, re.IGNORECASE):
-                    fallback_data["merchant_name"] = line
-                    print(f"DEBUG: Nome extraído via Heurística de Linha: {fallback_data['merchant_name']}", flush=True)
-                    break
+        destination_institution = _extract_destination_institution(raw_text)
+        if destination_institution:
+            fallback_data["destination_institution"] = destination_institution
+            print(f"DEBUG: Instituição destino encontrada: {fallback_data['destination_institution']}", flush=True)
 
         # 5. ID DE TRANSAÇÃO / AUTENTICAÇÃO
-        auth_patterns = [
-            r'(?:ID\s*da\s*transa[cç][aã]o|ID\s*datransacao|IDdatransacao|E2E|ENDTOEND)[:\s-]*\n?\s*([A-Za-z0-9]{15,80})',
-            r'(?:AUTENTICA[CÇ][AÃ]O|AUTENTICACAO|CONTROLE)[:\s-]*\n?\s*([A-Za-z0-9]{20,80})',
-            r'(?:DOCUMENTO|DOC)[:\s-]*\n?\s*([0-9]{5,30})',
-        ]
-        for pattern in auth_patterns:
-            auth_match = re.search(pattern, raw_text, re.IGNORECASE)
-            if auth_match:
-                fallback_data["transaction_id"] = auth_match.group(1).strip()
-                print(f"DEBUG: RegEx ID encontrado: {fallback_data['transaction_id']}", flush=True)
-                break
+        transaction_id = _extract_transaction_id(raw_text)
+        if transaction_id:
+            fallback_data["transaction_id"] = transaction_id
+            print(f"DEBUG: RegEx ID encontrado: {fallback_data['transaction_id']}", flush=True)
 
         # 6. CPF / CNPJ (inclusive mascarados)
         cpf_pattern = r'((?:\d{3}|\*{3})[\.\s]?(?:\d{3}|\*{3})[\.\s]?(?:\d{3}|\*{3})[\-\s]?(?:\d{2}|\*{2})|\d{2}[\.\s]?\d{3}[\.\s]?\d{3}[/\s]?\d{4}[\-\s]?\d{2})'

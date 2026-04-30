@@ -53,7 +53,12 @@ const parseAmount = (value: unknown): number => {
     return 0;
   }
 
-  let normalized = value.trim().replace(/[^\d,.-]/g, "");
+  let normalized = value.trim().replace(/[^\d,.\s-]/g, "");
+  if (/\d[\d,.]*\s+\d{2}$/.test(normalized)) {
+    normalized = normalized.replace(/\s+/g, ".");
+  } else {
+    normalized = normalized.replace(/\s+/g, "");
+  }
   const lastComma = normalized.lastIndexOf(",");
   const lastDot = normalized.lastIndexOf(".");
 
@@ -143,7 +148,7 @@ export default function ScannerPage() {
         }
 
         const ai = data.ai_data || {};
-        const parsedAmount = parseAmount(ai.total_amount);
+        const parsedAmount = parseAmount(ai.total_amount ?? ai.amount ?? ai.value);
         const merchantName = String(ai.merchant_name || "").trim();
         const ocrFailed = merchantName.includes("OCR Falhou") || merchantName.toLowerCase().startsWith("erro");
         if (parsedAmount <= 0 && ocrFailed) {

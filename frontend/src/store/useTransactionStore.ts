@@ -60,6 +60,18 @@ function setStoredOwnerUid(ownerUid: string) {
   } catch {}
 }
 
+function toTransactionAmount(source: Record<string, unknown>) {
+  for (const key of ['amount', 'total_amount', 'value']) {
+    const value = source[key];
+    const amount = typeof value === 'number' ? value : Number(value);
+    if (Number.isFinite(amount) && amount > 0) {
+      return amount;
+    }
+  }
+
+  return 0;
+}
+
 async function deleteLocalTransactionIds(db: TransactionDB, ids: number[]) {
   if (ids.length === 0) return;
 
@@ -422,7 +434,10 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
         return;
       }
 
-      const res = await authenticatedFetch(getApiUrl(`/expenses?include_deleted=true&t=${Date.now()}`), { cache: "no-store" });
+      const res = await authenticatedFetch(
+        getApiUrl(`/expenses?include_deleted=true&skip=0&limit=5000&t=${Date.now()}`),
+        { cache: "no-store" }
+      );
       console.log('🌐 Backend response status:', res.status);
       if (res.ok) {
         const remoteData = await res.json();
@@ -439,25 +454,9 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
             await ensureOwnerCache(db, ownerUid);
 
             const txSet = db.transaction('transactions', 'readwrite');
-            const remoteIds = new Set<number>();
-
-            for (const item of remoteData) {
-              const remoteId = Number(item.id);
-              if (Number.isFinite(remoteId)) {
-                remoteIds.add(remoteId);
-              }
-            }
-
-            const existingLocal = await txSet.store.index('by-owner').getAll(ownerUid);
-            for (const localTx of existingLocal) {
-              if (
-                localTx.id !== undefined &&
-                localTx.is_synced !== false &&
-                !remoteIds.has(localTx.id)
-              ) {
-                await txSet.store.delete(localTx.id);
-              }
-            }
+            // Do not prune local history based on a single API snapshot.
+            // Backend responses can be partial (limits/cache/network), and
+            // pruning here can wipe valid historical records.
 
             for (const item of remoteData) {
               const remoteId = Number(item.id);
@@ -466,7 +465,7 @@ export const useTransactionStore = create<TransactionState>((set, get) => ({
               const merged: TransactionEntity = {
                 id: remoteId,
                 owner_uid: ownerUid,
-                total_amount: Number(item.amount) || 0,
+                total_amount: toTransactionAmount(item),
                 currency: 'BRL',
                 transaction_date: item.date,
                 scanned_at: item.scanned_at || item.created_at || item.date,

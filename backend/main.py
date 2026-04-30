@@ -51,6 +51,128 @@ app = FastAPI(
     redirect_slashes=True
 )
 
+
+def coerce_amount(value) -> float:
+    try:
+        amount = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return amount if amount > 0 else 0.0
+
+
+def extract_amount_from_mapping(data: dict | None) -> float:
+    if not data:
+        return 0.0
+
+    for key in ("total_amount", "amount", "value"):
+        amount = coerce_amount(data.get(key))
+        if amount > 0:
+            return amount
+
+    return 0.0
+
+
+def with_amount_aliases(data: dict, amount: float) -> dict:
+    return {
+        **data,
+        "amount": amount,
+        "total_amount": amount,
+        "value": amount,
+    }
+
+
+REVIEW_MERCHANT = "Comprovante salvo para revisão"
+REVIEW_CATEGORY = "Revisão manual"
+
+
+def is_review_placeholder_mapping(data: dict | None) -> bool:
+    if not data:
+        return False
+
+    merchant = str(data.get("merchant_name") or data.get("merchant") or "").strip().lower()
+    category = str(data.get("smart_category") or data.get("category") or "").strip().lower()
+    return (
+        bool(data.get("needs_manual_review"))
+        or merchant == REVIEW_MERCHANT.lower()
+        or category == REVIEW_CATEGORY.lower()
+    )
+
+
+def expense_to_ai_data(expense: dict, fallback: dict | None = None) -> dict:
+    fallback = fallback or {}
+    prefer_fallback = is_review_placeholder_mapping(expense) and not is_review_placeholder_mapping(fallback)
+    primary = fallback if prefer_fallback else expense
+    secondary = expense if prefer_fallback else fallback
+    amount = extract_amount_from_mapping(primary) or extract_amount_from_mapping(secondary)
+    return {
+        **secondary,
+        "total_amount": amount,
+        "amount": amount,
+        "value": amount,
+        "merchant_name": primary.get("merchant") or primary.get("merchant_name") or secondary.get("merchant") or secondary.get("merchant_name") or "Desconhecido",
+        "smart_category": primary.get("category") or primary.get("smart_category") or secondary.get("category") or secondary.get("smart_category") or "Outros",
+        "transaction_date": primary.get("date") or primary.get("transaction_date") or secondary.get("date") or secondary.get("transaction_date") or schemas.datetime.now().isoformat(),
+        "transaction_type": primary.get("transaction_type") or secondary.get("transaction_type", "Outflow"),
+        "payment_method": primary.get("payment_method") or secondary.get("payment_method", "Desconhecido"),
+        "description": primary.get("description") or secondary.get("description"),
+        "destination_institution": primary.get("destination_institution") or secondary.get("destination_institution"),
+        "transaction_id": primary.get("transaction_id") or secondary.get("transaction_id"),
+        "masked_cpf": primary.get("masked_cpf") or secondary.get("masked_cpf"),
+        "needs_manual_review": primary.get("needs_manual_review", secondary.get("needs_manual_review", False)),
+    }
+
+
+def build_expense_refresh_updates(
+    extracted_data: dict,
+    amount: float,
+    date_obj,
+    category: str,
+    merchant: str,
+    transaction_type: str,
+    tx_id: str | None,
+) -> dict:
+    updates = {}
+
+    if amount > 0:
+        updates.update({
+            "amount": amount,
+            "total_amount": amount,
+            "value": amount,
+        })
+
+    if merchant and merchant != REVIEW_MERCHANT:
+        updates["merchant"] = merchant
+
+    if category and category != REVIEW_CATEGORY:
+        updates["category"] = category
+
+    if date_obj:
+        updates["date"] = date_obj if isinstance(date_obj, str) else date_obj.isoformat()
+
+    description = extracted_data.get("description")
+    if description and "arquivado automaticamente" not in str(description).lower():
+        updates["description"] = description
+    elif merchant and merchant != REVIEW_MERCHANT:
+        updates["description"] = "Processado"
+
+    updates["transaction_type"] = transaction_type
+    updates["payment_method"] = extracted_data.get("payment_method", "Desconhecido")
+    updates["destination_institution"] = extracted_data.get("destination_institution")
+    updates["masked_cpf"] = extracted_data.get("masked_cpf")
+    updates["transaction_id"] = tx_id
+    updates["needs_manual_review"] = bool(extracted_data.get("needs_manual_review", False))
+
+    return updates
+
+
+def resolve_transaction_type(form_value: str | None, extracted_data: dict, raw_text: str = "") -> str:
+    text = raw_text or ""
+    if re.search(r'\b(PIX\s+RECEBIDO|RECEBIMENTO|RECEBIDO|DEP[OÓ]SITO\s+RECEBIDO|CR[EÉ]DITO\s+EM\s+CONTA)\b', text, re.IGNORECASE):
+        return "Inflow"
+    if re.search(r'\b(PIX\s+ENVIADO|ENVIADO|PAGAMENTO|PAGO|PAGADOR)\b', text, re.IGNORECASE):
+        return "Outflow"
+    return extracted_data.get("transaction_type") or form_value or "Outflow"
+
 # Configure CORS - MOVED UP and expanded for better development stability
 frontend_url = os.getenv("FRONTEND_URL", "https://www.sharecom.com.br")
 origins = [
@@ -342,6 +464,8 @@ def read_expenses(
     for doc in docs:
         d = doc.to_dict()
         if "id" not in d: d["id"] = int(doc.id)
+        amount = extract_amount_from_mapping(d)
+        d = with_amount_aliases(d, amount)
         if not d.get("scanned_at"):
             d["scanned_at"] = doc.create_time.isoformat() if doc.create_time else d.get("date")
         if "date" in d and hasattr(d["date"], "isoformat"):
@@ -368,6 +492,7 @@ def create_expense(
     from datetime import datetime
     new_id = random.randint(100000000, 999999999)
     expense_data = expense.model_dump()
+    expense_data = with_amount_aliases(expense_data, coerce_amount(expense_data.get("amount")))
     expense_data["id"] = new_id
     expense_data["user_id"] = uid
     now = datetime.utcnow()
@@ -523,18 +648,21 @@ async def process_ata(
         cache_result = await check_receipt_cache(sha256_hash)
         if cache_result['hit'] and not force:
             cached_data = cache_result['data']
-            if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
-            return JSONResponse(
-                status_code=200, 
-                content={
-                    "status": "duplicate_warning",
-                    "message": f"Este comprovante já foi escaneado {cached_data.get('timesAccessed', 1)}x anteriormente. Os dados estão salvos no Firebase e serão usados para treinar o Nejix.",
-                    "existing": cached_data.get('geminiExtracted', {}),
-                    "times_scanned": cached_data.get('timesAccessed', 1),
-                    "receipt_hash": sha256_hash,
-                    "can_continue": True
-                }
-            )
+            cached_existing = cached_data.get('geminiExtracted', {})
+            if extract_amount_from_mapping(cached_existing) > 0 and not is_review_placeholder_mapping(cached_existing):
+                if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
+                return JSONResponse(
+                    status_code=200,
+                    content={
+                        "status": "duplicate_warning",
+                        "message": f"Este comprovante já foi escaneado {cached_data.get('timesAccessed', 1)}x anteriormente. Os dados estão salvos no Firebase e serão usados para treinar o Nejix.",
+                        "existing": cached_existing,
+                        "times_scanned": cached_data.get('timesAccessed', 1),
+                        "receipt_hash": sha256_hash,
+                        "can_continue": True
+                    }
+                )
+            print("DEBUG: Cache hit ignorado porque dados cached ainda exigem revisão; reprocessando OCR.", flush=True)
 
         raw_text = note or ""
         extracted_data = None
@@ -545,11 +673,7 @@ async def process_ata(
             ocr_fallback_data, raw_text = ocr_processor.extract_transaction_data(content, ext, file_path=tmp_file_path)
             extracted_data = ocr_fallback_data
 
-            extracted_amount_candidate = extracted_data.get("total_amount") if extracted_data else 0
-            try:
-                extracted_amount_candidate = float(extracted_amount_candidate or 0)
-            except (TypeError, ValueError):
-                extracted_amount_candidate = 0
+            extracted_amount_candidate = extract_amount_from_mapping(extracted_data)
 
             if extracted_amount_candidate <= 0:
                 bank = detect_bank_from_bytes(content)
@@ -592,13 +716,11 @@ async def process_ata(
             if tmp_file_path and os.path.exists(tmp_file_path): os.remove(tmp_file_path)
 
         is_receipt = extracted_data.get("is_financial_receipt", True)
-        extracted_amount = extracted_data.get("total_amount") if extracted_data.get("total_amount") is not None else 0.0
-        try:
-            extracted_amount = float(extracted_amount)
-        except (TypeError, ValueError):
-            extracted_amount = 0.0
+        extracted_amount = extract_amount_from_mapping(extracted_data)
 
         merchant_name = str(extracted_data.get("merchant_name") or "").strip()
+        resolved_transaction_type = resolve_transaction_type(transaction_type, extracted_data, raw_text)
+        extracted_data = {**extracted_data, "transaction_type": resolved_transaction_type}
         extraction_failed = is_receipt and (
             extracted_amount <= 0
             or extracted_data.get("needs_manual_review")
@@ -620,17 +742,18 @@ async def process_ata(
             
             extracted_data = {
                 **extracted_data,
-                "total_amount": 0.0,
+                "total_amount": extracted_amount,
+                "amount": extracted_amount,
+                "value": extracted_amount,
                 "merchant_name": "Comprovante salvo para revisão",
                 "smart_category": "Revisão manual",
                 "payment_method": extracted_data.get("payment_method") or "Desconhecido",
-                "transaction_type": transaction_type or extracted_data.get("transaction_type", "Outflow"),
+                "transaction_type": resolved_transaction_type,
                 "transaction_date": schemas.datetime.now().isoformat(),
                 "description": "Comprovante arquivado automaticamente. Revise e preencha os dados manualmente.",
                 "needs_manual_review": True,
             }
             is_receipt = True
-            extracted_amount = 0.0
             merchant_name = extracted_data["merchant_name"]
         else:
             archive_receipt(
@@ -664,10 +787,41 @@ async def process_ata(
             docs = fs.collection("expenses").where("user_id", "==", uid).where("transaction_id", "==", tx_id).limit(1).get()
             if docs:
                 existing = docs[0].to_dict()
+                existing_id = existing.get("id") or int(docs[0].id)
+                persisted_amount = extract_amount_from_mapping(existing)
+                updates = {}
+                if amount > 0 and persisted_amount != amount:
+                    existing = with_amount_aliases(existing, amount)
+                    updates.update({
+                        "amount": amount,
+                        "total_amount": amount,
+                        "value": amount,
+                    })
+                if is_review_placeholder_mapping(existing) and not is_review_placeholder_mapping(extracted_data):
+                    updates.update(build_expense_refresh_updates(
+                        extracted_data,
+                        amount,
+                        date_obj,
+                        category,
+                        merchant,
+                        resolved_transaction_type,
+                        tx_id,
+                    ))
                 if existing.get("deleted_at"):
-                    fs.collection("expenses").document(docs[0].id).update({"deleted_at": None})
+                    updates["deleted_at"] = None
+                if updates:
+                    fs.collection("expenses").document(docs[0].id).update(updates)
+                    existing.update(updates)
                     cache_invalidate_all()
-                return {"idempotent": True, "receipt_hash": existing.get("receipt"), "database_id": existing.get("id")}
+                cache_invalidate_all()
+                return {
+                    "idempotent": True,
+                    "receipt_hash": existing.get("receipt") or sha256_hash,
+                    "ai_data": expense_to_ai_data(existing, extracted_data),
+                    "database_id": existing_id,
+                    "scanned_at": existing.get("scanned_at"),
+                    "status": "processed",
+                }
         else:
             tx_id = None
 
@@ -676,13 +830,44 @@ async def process_ata(
             docs = fs.collection("expenses").where("user_id", "==", uid).where("transaction_id", "==", tx_id).limit(1).get()
             if docs:
                 existing_by_tx_id = docs[0].to_dict()
+                existing_id = existing_by_tx_id.get("id") or int(docs[0].id)
+                persisted_amount = extract_amount_from_mapping(existing_by_tx_id)
+                updates = {}
+                if amount > 0 and persisted_amount != amount:
+                    existing_by_tx_id = with_amount_aliases(existing_by_tx_id, amount)
+                    updates.update({
+                        "amount": amount,
+                        "total_amount": amount,
+                        "value": amount,
+                    })
+                if is_review_placeholder_mapping(existing_by_tx_id) and not is_review_placeholder_mapping(extracted_data):
+                    updates.update(build_expense_refresh_updates(
+                        extracted_data,
+                        amount,
+                        date_obj,
+                        category,
+                        merchant,
+                        resolved_transaction_type,
+                        tx_id,
+                    ))
+                if updates:
+                    fs.collection("expenses").document(docs[0].id).update(updates)
+                    existing_by_tx_id.update(updates)
+                    cache_invalidate_all()
+                cache_invalidate_all()
                 print(f"DEBUG: Duplicate transaction_id detected during pre-insert check: {tx_id} for user {uid}", flush=True)
                 return {
                     "status": "duplicate",
                     "message": "Transaction already exists",
-                    "expense_id": existing_by_tx_id.get("id"),
-                    "amount": existing_by_tx_id.get("amount"),
-                    "idempotent": True
+                    "expense_id": existing_id,
+                    "database_id": existing_id,
+                    "amount": extract_amount_from_mapping(existing_by_tx_id),
+                    "total_amount": extract_amount_from_mapping(existing_by_tx_id),
+                    "value": extract_amount_from_mapping(existing_by_tx_id),
+                    "ai_data": expense_to_ai_data(existing_by_tx_id, extracted_data),
+                    "receipt_hash": existing_by_tx_id.get("receipt") or sha256_hash,
+                    "scanned_at": existing_by_tx_id.get("scanned_at"),
+                    "idempotent": True,
                 }
         
         try:
@@ -700,13 +885,16 @@ async def process_ata(
                 "merchant": merchant,
                 "description": extracted_data.get("description") or "Processado",
                 "receipt": sha256_hash,
-                "transaction_type": transaction_type or extracted_data.get("transaction_type", "Outflow"),
+                "transaction_type": resolved_transaction_type,
                 "payment_method": extracted_data.get("payment_method", "Desconhecido"),
                 "destination_institution": extracted_data.get("destination_institution"),
                 "transaction_id": tx_id,
+                "masked_cpf": extracted_data.get("masked_cpf"),
+                "needs_manual_review": extracted_data.get("needs_manual_review", False),
                 "note": note,
                 "deleted_at": None
             }
+            db_expense = with_amount_aliases(db_expense, amount)
             fs.collection("expenses").document(str(new_id)).set(db_expense)
             cache_invalidate_all()
             print(f"DEBUG: New expense created successfully - ID: {new_id}, TX_ID: {tx_id}", flush=True)

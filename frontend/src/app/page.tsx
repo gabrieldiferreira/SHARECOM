@@ -9,7 +9,7 @@ import {
   Receipt, Coffee, ShoppingBag, Car, Home as HomeIcon, X, BarChart3, Plus, Loader2, CheckCircle2, 
   TrendingUp, TrendingDown, Landmark, Clock, Award, MessageSquare, Search, Filter, ChevronLeft, 
   ChevronRight, FileText, Info, Trash2, RotateCcw, CreditCard, Banknote, Smartphone, Users, 
-  ShieldCheck, Fingerprint, FileSearch, Scale, Zap, Bell, ShieldAlert, Calendar as CalendarIcon, History, Tag, 
+  ShieldCheck, Fingerprint, FileSearch, Scale, Zap, Bell, ShieldAlert, AlertTriangle, Calendar as CalendarIcon, History, Tag, 
   Target, Activity, Layers, Cpu, Database, Settings, PieChart as PieChartIcon, Globe,
   Pencil, Save, Mail, DollarSign
 } from "lucide-react";
@@ -73,6 +73,29 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   "education": <Receipt size={20} />,
 };
 
+type DuplicateWarningPayload = {
+  existing?: Record<string, unknown>;
+  times_scanned?: number;
+  receipt_hash?: string;
+};
+
+const parseScannedAmount = (value: unknown): number => {
+  if (typeof value === 'number') {
+    return Number.isFinite(value) ? value : 0;
+  }
+
+  if (typeof value !== 'string') {
+    return 0;
+  }
+
+  const normalizedAmount = value.trim().replace(/[^\d,.\s-]/g, '');
+  const parsedAmount = /\d[\d,.]*\s+\d{2}$/.test(normalizedAmount)
+    ? parseFloat(normalizedAmount.replace(/\s+/g, '.'))
+    : parseFloat(normalizedAmount.replace(/\./g, '').replace(',', '.'));
+
+  return Number.isFinite(parsedAmount) ? parsedAmount : 0;
+};
+
 function ExpenseTracker() {
   const { 
     transactions, 
@@ -108,6 +131,7 @@ function ExpenseTracker() {
   const [showTrash, setShowTrash] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [showModal, setShowModal] = useState(false);
+  const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarningPayload | null>(null);
   const [uploadType, setUploadType] = useState<"Inflow" | "Outflow">("Outflow");
   const [showManualModal, setShowManualModal] = useState(false);
   const [mounted, setMounted] = useState(false);
@@ -558,15 +582,18 @@ function ExpenseTracker() {
     setShowModal(true);
   };
 
-  const executeUpload = async () => {
+  const executeUpload = async (force = false) => {
     if (!selectedFile) return;
     haptics.mediumTap();
     setShowModal(false);
+    if (force) setDuplicateWarning(null);
     setIsUploading(true);
+    let keepSelectionForDuplicate = false;
     const formData = new FormData();
     formData.append("received_file", selectedFile);
     if (pendingNote) formData.append("note", pendingNote);
     formData.append("transaction_type", uploadType);
+    if (force) formData.append("force", "true");
     
     try {
       const response = await authenticatedFetch(getApiUrl("/receipts"), {
@@ -577,7 +604,8 @@ function ExpenseTracker() {
       if (response.ok) {
         const data = await response.json();
         if (data.status === "duplicate_warning") {
-          showToast("Este comprovante já foi escaneado anteriormente. Use o scanner para adicionar mesmo assim.", "info");
+          keepSelectionForDuplicate = true;
+          setDuplicateWarning(data);
           setIsUploading(false);
           return;
         }
@@ -596,12 +624,8 @@ function ExpenseTracker() {
         }
 
         // Parse amount safely
-        let parsedAmount = 0;
-        if (typeof ai.total_amount === 'string') {
-           parsedAmount = parseFloat(ai.total_amount.replace(/[^\d.,]/g, '').replace(',', '.'));
-        } else if (typeof ai.total_amount === 'number') {
-           parsedAmount = ai.total_amount;
-        }
+        const rawAmount = ai.total_amount ?? ai.amount ?? ai.value;
+        let parsedAmount = parseScannedAmount(rawAmount);
 
         const merchantName = String(ai.merchant_name || '').trim();
         const ocrFailed = merchantName.includes("OCR Falhou") || merchantName.toLowerCase().startsWith("erro");
@@ -665,9 +689,11 @@ function ExpenseTracker() {
       }
     } finally {
       setIsUploading(false);
-      setSelectedFile(null);
-      setPendingNote("");
-      if (fileInputRef.current) fileInputRef.current.value = "";
+      if (!keepSelectionForDuplicate) {
+        setSelectedFile(null);
+        setPendingNote("");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
     }
   };
 
@@ -1670,7 +1696,80 @@ function ExpenseTracker() {
 
               <div className="flex gap-3">
                 <button onClick={() => setShowModal(false)} className="flex-1 px-4 py-3 rounded-xl border-thin border-ds-border text-ds-text-secondary font-bold hover:bg-ds-bg-secondary">{t('common.cancel').toUpperCase()}</button>
-                <button onClick={executeUpload} className="flex-1 px-4 py-3 rounded-xl bg-fn-balance text-white font-bold shadow-lg hover:scale-105 transition-all">{t('upload.process')}</button>
+                <button onClick={() => executeUpload()} className="flex-1 px-4 py-3 rounded-xl bg-fn-balance text-white font-bold shadow-lg hover:scale-105 transition-all">{t('upload.process')}</button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* DUPLICATE RECEIPT ALERT */}
+      <AnimatePresence>
+        {duplicateWarning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-[450] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+          >
+            <motion.div
+              initial={{ y: 16, opacity: 0, scale: 0.98 }}
+              animate={{ y: 0, opacity: 1, scale: 1 }}
+              exit={{ y: 16, opacity: 0, scale: 0.98 }}
+              transition={{ duration: 0.2, ease: "easeOut" }}
+              className="w-full max-w-sm bg-ds-bg-primary border-thin border-ds-border rounded-2xl p-6 shadow-2xl"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-amber-500/15 text-amber-400 flex items-center justify-center">
+                  <AlertTriangle size={20} />
+                </div>
+                <div>
+                  <h3 className="text-[16px] font-bold text-ds-text-primary">Comprovante já escaneado</h3>
+                  <p className="text-[12px] text-ds-text-tertiary">
+                    Escaneado {duplicateWarning.times_scanned || 1}x anteriormente
+                  </p>
+                </div>
+              </div>
+
+              <div className="rounded-xl bg-ds-bg-secondary border-thin border-ds-border p-4 space-y-3 mb-4">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[12px] text-ds-text-tertiary">Valor escaneado</span>
+                  <span className="text-[14px] font-bold text-fn-income tabular-nums">
+                    {formatCurrency(parseScannedAmount(duplicateWarning.existing?.total_amount ?? duplicateWarning.existing?.amount ?? duplicateWarning.existing?.value))}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-[12px] text-ds-text-tertiary">Estabelecimento</span>
+                  <span className="text-[13px] font-medium text-ds-text-primary truncate">
+                    {String(duplicateWarning.existing?.merchant_name || duplicateWarning.existing?.merchant || "Desconhecido")}
+                  </span>
+                </div>
+              </div>
+
+              <p className="text-[13px] text-ds-text-secondary mb-6">
+                Deseja continuar e adicionar este comprovante mesmo assim?
+              </p>
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    haptics.lightTap();
+                    setDuplicateWarning(null);
+                    setSelectedFile(null);
+                    setPendingNote("");
+                    if (fileInputRef.current) fileInputRef.current.value = "";
+                  }}
+                  className="flex-1 px-4 py-3 rounded-xl border-thin border-ds-border text-ds-text-secondary font-bold hover:bg-ds-bg-secondary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => executeUpload(true)}
+                  disabled={isUploading}
+                  className="flex-1 px-4 py-3 rounded-xl bg-amber-500 text-white font-bold shadow-lg hover:scale-105 transition-all disabled:opacity-60 disabled:hover:scale-100"
+                >
+                  {isUploading ? "Enviando..." : "Continuar"}
+                </button>
               </div>
             </motion.div>
           </motion.div>

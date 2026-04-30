@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from datetime import datetime
 
 class ExpenseBase(BaseModel):
@@ -17,6 +17,17 @@ class ExpenseBase(BaseModel):
     note: str | None = None
     scanned_at: datetime | None = None
     deleted_at: datetime | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def map_amount_aliases(cls, data):
+        if isinstance(data, dict) and data.get("amount") in (None, ""):
+            for alias in ("total_amount", "value"):
+                alias_value = data.get(alias)
+                if alias_value not in (None, ""):
+                    data = {**data, "amount": alias_value}
+                    break
+        return data
 
 class ExpenseCreate(ExpenseBase):
     date: datetime | None = None # Allow passing extracted timestamp
