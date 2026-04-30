@@ -13,7 +13,7 @@ PDF_MAX_PAGES = int(os.environ.get("PDF_MAX_PAGES", "2"))
 PDF_MAX_CHARS = int(os.environ.get("PDF_MAX_CHARS", "4000"))
 TESSERACT_CONFIG = os.environ.get("TESSERACT_CONFIG", "--oem 3 --psm 6")
 TESSERACT_LANG = os.environ.get("TESSERACT_LANG", "por+eng")
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
 
 GEMINI_EXTRACTION_PROMPT = """
 Você é um extrator de dados financeiros.

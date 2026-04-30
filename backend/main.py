@@ -25,11 +25,21 @@ if firebase_creds_str:
 else:
     cred = credentials.Certificate(os.getenv("FIREBASE_CREDENTIALS_PATH", "unidoc-493609-firebase-adminsdk-fbsvc-1380bed8ff.json"))
 
+firebase_project_id = os.getenv("FIREBASE_PROJECT_ID") or getattr(cred, "project_id", None)
+firebase_storage_bucket = os.getenv("FIREBASE_STORAGE_BUCKET") or (
+    f"{firebase_project_id}.appspot.com" if firebase_project_id else ""
+)
+firebase_options = {}
+if firebase_project_id:
+    firebase_options["projectId"] = firebase_project_id
+if firebase_storage_bucket:
+    firebase_options["storageBucket"] = firebase_storage_bucket
+
 if not firebase_admin._apps:
-    firebase_admin.initialize_app(cred, {'storageBucket': 'unidoc-493609.firebasestorage.app'})
+    firebase_admin.initialize_app(cred, firebase_options or None)
 
 fs = firestore.client()
-bucket = storage.bucket()
+bucket = storage.bucket() if firebase_storage_bucket else None
 
 from export_routes import router as export_router
 import schemas
@@ -171,6 +181,10 @@ def archive_receipt(
 from datetime import datetime
 
 async def upload_receipt_firebase(image_bytes: bytes, user_id: str, receipt_hash: str, bank: str) -> tuple[str, str]:
+    if bucket is None:
+        print("FIREBASE STORAGE: Bucket não configurado; pulando upload da imagem.", flush=True)
+        return "", ""
+
     blob_original = bucket.blob(f"receipts/{user_id}/{receipt_hash}.jpg")
     blob_original.upload_from_string(image_bytes, content_type="image/jpeg")
     blob_original.make_public()
@@ -561,11 +575,17 @@ async def process_ata(
                         extracted_data = {"merchant_name": f"Erro: {ai_error or 'Desconhecido'}"}
 
                 if not cache_result['hit']:
+                    image_url = ""
+                    dataset_url = ""
                     try:
                         image_url, dataset_url = await upload_receipt_firebase(content, uid, sha256_hash, bank)
-                        await save_to_firebase(sha256_hash, uid, image_url, dataset_url, extracted_data, raw_text, bank, quality)
                     except Exception as fb_err:
                         print(f"DEBUG: Firebase upload failed: {fb_err}", flush=True)
+
+                    try:
+                        await save_to_firebase(sha256_hash, uid, image_url, dataset_url, extracted_data, raw_text, bank, quality)
+                    except Exception as fb_err:
+                        print(f"DEBUG: Firebase cache save failed: {fb_err}", flush=True)
                 
                 await track_gemini_usage(source)
         finally:
