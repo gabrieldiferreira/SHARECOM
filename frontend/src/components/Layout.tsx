@@ -9,7 +9,7 @@ import { usePathname } from "next/navigation";
 import { getApiUrl } from "../lib/api";
 import { authenticatedFetch } from "../lib/auth";
 import { useTransactionStore } from "../store/useTransactionStore";
-import { TransactionEntity, clearLocalTransactionCache } from "../lib/db";
+import { TransactionEntity } from "../lib/db";
 import { auth } from "@/lib/firebase";
 import { signOut, onAuthStateChanged, User as FirebaseUser } from "firebase/auth";
 
@@ -66,7 +66,7 @@ const extractUrlFromText = (text: string) => {
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname();
-  const { addTransaction, syncWithBackend, pendingNote, setPendingNote } = useTransactionStore();
+  const { addTransaction, syncWithBackend, pendingNote, setPendingNote, resetLocalState } = useTransactionStore();
   const [isUploading, setIsUploading] = useState(false);
   const [uploadSuccess, setUploadSuccess] = useState(false);
   const [lastAdded, setLastAdded] = useState<{ amount: number, merchant: string } | null>(null);
@@ -401,7 +401,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      await clearLocalTransactionCache();
+      resetLocalState();
       await signOut(auth);
       // Forçar redirecionamento manual após logout
       window.location.href = "/login";

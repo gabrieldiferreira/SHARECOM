@@ -1,6 +1,5 @@
 import { auth } from "./firebase";
 import { onAuthStateChanged, User } from "firebase/auth";
-import { clearLocalTransactionCache } from "./db";
 
 async function waitForUser(timeoutMs = 10000): Promise<User | null> {
   if (!auth) return null;
@@ -89,7 +88,6 @@ export async function authenticatedFetch(
 export async function logout() {
   if (!auth) return;
   try {
-    await clearLocalTransactionCache();
     await auth.signOut();
     window.location.href = "/login";
   } catch (error) {

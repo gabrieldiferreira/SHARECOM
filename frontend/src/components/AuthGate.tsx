@@ -44,13 +44,16 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         cachedOwnerId = window.localStorage.getItem(TRANSACTION_CACHE_OWNER_KEY);
       } catch {}
 
-      const shouldResetLocalCache =
-        !nextUserId ||
-        (lastUserId.current && lastUserId.current !== nextUserId) ||
-        (cachedOwnerId && cachedOwnerId !== nextUserId);
+      // Preserve IndexedDB across logout; clear it only when another UID takes ownership.
+      const shouldClearLocalCache =
+        !!nextUserId &&
+        ((lastUserId.current && lastUserId.current !== nextUserId) ||
+          (cachedOwnerId && cachedOwnerId !== nextUserId));
 
       try {
-        if (shouldResetLocalCache) {
+        if (!nextUserId) {
+          useTransactionStore.getState().resetLocalState();
+        } else if (shouldClearLocalCache) {
           useTransactionStore.getState().resetLocalState();
           await clearLocalTransactionCache();
         }
