@@ -74,6 +74,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showModal, setShowModal] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarningPayload | null>(null);
   const [uploadType, setUploadType] = useState<"Inflow" | "Outflow">("Outflow");
+  const [receiptCategory, setReceiptCategory] = useState("");
   const [showScanMenu, setShowScanMenu] = useState(false);
   const [pastedContent, setPastedContent] = useState("");
   const [pastedAt, setPastedAt] = useState<number | null>(null);
@@ -115,6 +116,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           setShowModal(false);
           setPastedContent("");
           setPastedAt(null);
+          setReceiptCategory("");
           // setToast({ message: "Link expirado (limite de 1 minuto)", type: 'error' });
         }
       }, 1000);
@@ -133,6 +135,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     setSelectedFile(null);
     setPastedAt(Date.now());
     setPendingNote("");
+    setReceiptCategory("");
     setShowModal(true);
     return true;
   };
@@ -154,6 +157,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             setPastedContent("");
             setPastedAt(null);
             setPendingNote("");
+            setReceiptCategory("");
             setShowModal(true);
             return;
           }
@@ -209,6 +213,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             // Define o arquivo e mostra o modal
             setSelectedFile(file);
+            setReceiptCategory("");
             setShowModal(true);
 
             // Limpa o cache
@@ -232,6 +237,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (!file) return;
     setSelectedFile(file);
     setUploadType("Outflow");
+    setReceiptCategory("");
     setShowModal(true);
   };
 
@@ -242,6 +248,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     if (force) setDuplicateWarning(null);
     setIsUploading(true);
     let keepSelectionForDuplicate = false;
+    const categoryOverride = receiptCategory.trim().replace(/\s+/g, " ");
     const formData = new FormData();
     if (selectedFile) {
       formData.append("received_file", selectedFile, selectedFile.name);
@@ -285,6 +292,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           : Number(ai.total_amount) || 0;
         const parsedAmount = Number.isFinite(rawAmount) ? rawAmount : 0;
         const merchantName = String(ai.merchant_name || "").trim();
+        const finalCategory = categoryOverride || ai.smart_category || 'Outros';
 
         if (merchantName.includes("Check API Key")) {
           alert("O backend está rodando, mas a GEMINI_API_KEY está ausente ou inválida. Por favor, configure o arquivo backend/.env");
@@ -300,11 +308,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           return;
         }
 
+        if (categoryOverride && data.database_id) {
+          const categoryResponse = await authenticatedFetch(getApiUrl(`/expenses/${data.database_id}`), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: categoryOverride }),
+          });
+
+          if (!categoryResponse.ok) {
+            console.warn("SHARECOM: Não foi possível salvar a categoria manual.", await categoryResponse.text());
+          }
+        }
+
         const newTx: TransactionEntity = {
           id: data.database_id,
           total_amount: parsedAmount,
           merchant_name: merchantName || 'Desconhecido',
-          category: ai.smart_category || 'Outros',
+          category: finalCategory,
           currency: 'BRL',
           transaction_date: ai.transaction_date || new Date().toISOString(),
           scanned_at: data.scanned_at || new Date().toISOString(),
@@ -356,6 +376,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       if (!keepSelectionForDuplicate) {
         setSelectedFile(null);
         setPendingNote("");
+        setReceiptCategory("");
         if (fileInputRef.current) fileInputRef.current.value = "";
         if (documentsInputRef.current) documentsInputRef.current.value = "";
         if (galleryInputRef.current) galleryInputRef.current.value = "";
@@ -772,6 +793,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                 </div>
               </div>
 
+              {/* Category input */}
+              <div>
+                <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Categoria (opcional)</label>
+                <input
+                  type="text"
+                  value={receiptCategory}
+                  onChange={(e) => setReceiptCategory(e.target.value)}
+                  placeholder="Ex: Alimentação, Transporte, Aluguel..."
+                  className="w-full rounded-xl p-3 text-sm focus:outline-none transition-colors"
+                  style={{
+                    backgroundColor: 'rgba(255,255,255,0.06)',
+                    border: '0.5px solid var(--ds-border)',
+                    color: 'var(--text-primary)',
+                  }}
+                />
+              </div>
+
               {/* Comment textarea */}
               <div>
                 <label className="text-[11px] font-semibold uppercase tracking-wider block mb-1.5" style={{ color: 'var(--text-tertiary)' }}>Comentário (opcional)</label>
@@ -861,6 +899,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   setPastedContent("");
                   setPastedAt(null);
                   setPendingNote("");
+                  setReceiptCategory("");
                   if (fileInputRef.current) fileInputRef.current.value = "";
                   if (documentsInputRef.current) documentsInputRef.current.value = "";
                   if (galleryInputRef.current) galleryInputRef.current.value = "";

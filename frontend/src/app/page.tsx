@@ -133,6 +133,7 @@ function ExpenseTracker() {
   const [showModal, setShowModal] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState<DuplicateWarningPayload | null>(null);
   const [uploadType, setUploadType] = useState<"Inflow" | "Outflow">("Outflow");
+  const [receiptCategory, setReceiptCategory] = useState("");
   const [showManualModal, setShowManualModal] = useState(false);
   const [mounted, setMounted] = useState(false);
   const [isLoadingData, setIsLoadingData] = useState(false);
@@ -579,6 +580,7 @@ function ExpenseTracker() {
     if (!file) return;
     setSelectedFile(file);
     setUploadType("Outflow");
+    setReceiptCategory("");
     setShowModal(true);
   };
 
@@ -589,6 +591,7 @@ function ExpenseTracker() {
     if (force) setDuplicateWarning(null);
     setIsUploading(true);
     let keepSelectionForDuplicate = false;
+    const categoryOverride = receiptCategory.trim().replace(/\s+/g, " ");
     const formData = new FormData();
     formData.append("received_file", selectedFile);
     if (pendingNote) formData.append("note", pendingNote);
@@ -628,6 +631,7 @@ function ExpenseTracker() {
         let parsedAmount = parseScannedAmount(rawAmount);
 
         const merchantName = String(ai.merchant_name || '').trim();
+        const finalCategory = categoryOverride || ai.smart_category || 'Outros';
         const ocrFailed = merchantName.includes("OCR Falhou") || merchantName.toLowerCase().startsWith("erro");
         if ((isNaN(parsedAmount) || parsedAmount <= 0) && ocrFailed) {
           showToast("Não foi possível ler o comprovante. Envie uma imagem mais nítida ou cadastre manualmente.", "error");
@@ -643,11 +647,23 @@ function ExpenseTracker() {
            if (!isNaN(d.getTime())) parsedDate = d.toISOString();
         }
 
+        if (categoryOverride && data.database_id) {
+          const categoryResponse = await authenticatedFetch(getApiUrl(`/expenses/${data.database_id}`), {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ category: categoryOverride }),
+          });
+
+          if (!categoryResponse.ok) {
+            console.warn("Não foi possível salvar a categoria manual.", await categoryResponse.text());
+          }
+        }
+
         const newTx: TransactionEntity = {
           id: data.database_id, 
           total_amount: isNaN(parsedAmount) ? 0 : parsedAmount,
           merchant_name: merchantName || 'Desconhecido',
-          category: ai.smart_category || 'Outros',
+          category: finalCategory,
           currency: 'BRL',
           transaction_date: parsedDate,
           scanned_at: data.scanned_at || new Date().toISOString(),
@@ -692,6 +708,7 @@ function ExpenseTracker() {
       if (!keepSelectionForDuplicate) {
         setSelectedFile(null);
         setPendingNote("");
+        setReceiptCategory("");
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     }
@@ -1692,6 +1709,17 @@ function ExpenseTracker() {
                   </div>
                   {uploadType === "Inflow" && <CheckCircle2 size={18} className="text-fn-income" />}
                 </button>
+
+                <div>
+                  <label className="text-[11px] font-black text-ds-text-tertiary uppercase tracking-widest block mb-1.5">Categoria (opcional)</label>
+                  <input
+                    type="text"
+                    value={receiptCategory}
+                    onChange={(e) => setReceiptCategory(e.target.value)}
+                    className="w-full p-3 bg-ds-bg-secondary border-thin border-ds-border rounded-xl text-ds-text-primary focus:border-fn-balance outline-none transition-all"
+                    placeholder="Ex: Alimentação, Transporte, Aluguel..."
+                  />
+                </div>
               </div>
 
               <div className="flex gap-3">
@@ -1757,6 +1785,7 @@ function ExpenseTracker() {
                     setDuplicateWarning(null);
                     setSelectedFile(null);
                     setPendingNote("");
+                    setReceiptCategory("");
                     if (fileInputRef.current) fileInputRef.current.value = "";
                   }}
                   className="flex-1 px-4 py-3 rounded-xl border-thin border-ds-border text-ds-text-secondary font-bold hover:bg-ds-bg-secondary"
